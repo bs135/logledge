@@ -51,14 +51,17 @@ jobs:
           - name: windows-amd64
             target: windows/amd64
             os: windows-latest
+            output_file: logledge.exe
             build_args: -nsis -webview2 download
           - name: darwin-universal
             target: darwin/universal
             os: macos-latest
+            output_file: logledge
             build_args: ""
           - name: linux-amd64
             target: linux/amd64
             os: ubuntu-latest
+            output_file: logledge
             build_args: -tags webkit2_41
     steps:
       - name: Checkout repository
@@ -103,13 +106,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
+      - name: Install NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v makensis &> /dev/null; then
+            echo "Installing NSIS via Chocolatey..."
+            choco install nsis -y --no-progress
+            echo "C:\Program Files (x86)\NSIS" >> $GITHUB_PATH
+            echo "C:\Program Files\NSIS" >> $GITHUB_PATH
+          fi
+
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
       - name: Build Wails App
         shell: bash
         run: |
-          wails build -platform ${{ matrix.platform.target }} -trimpath -o logledge ${{ matrix.platform.build_args }}
+          wails build -platform ${{ matrix.platform.target }} -trimpath -o ${{ matrix.platform.output_file }} ${{ matrix.platform.build_args }}
 
       - name: Package Release Assets
         shell: bash
@@ -120,6 +134,8 @@ jobs:
           if [ "${RUNNER_OS}" = "Windows" ]; then
             if [ -f "build/bin/logledge.exe" ]; then
               cp "build/bin/logledge.exe" "${RELEASE_DIR}/logledge-windows-amd64-${RELEASE_TAG}.exe"
+            elif [ -f "build/bin/logledge" ]; then
+              cp "build/bin/logledge" "${RELEASE_DIR}/logledge-windows-amd64-${RELEASE_TAG}.exe"
             fi
             if [ -f "build/bin/logledge-amd64-installer.exe" ]; then
               cp "build/bin/logledge-amd64-installer.exe" "${RELEASE_DIR}/logledge-windows-amd64-installer-${RELEASE_TAG}.exe"
@@ -146,6 +162,14 @@ jobs:
             fi
           done
           cd ..
+
+          # Verify packaged assets exist
+          ASSET_COUNT=$(find "${RELEASE_DIR}" -maxdepth 1 -type f | wc -l)
+          if [ "${ASSET_COUNT}" -eq 0 ]; then
+            echo "Error: No release assets packaged in ${RELEASE_DIR}" >&2
+            ls -la build/bin || true
+            exit 1
+          fi
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4
