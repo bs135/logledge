@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/Bios-Marcel/wastebasket/v2 v2.0.3
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/sahilm/fuzzy v0.1.3
 	github.com/wailsapp/wails/v2 v2.16.0
 	modernc.org/sqlite v1.59.0
 )

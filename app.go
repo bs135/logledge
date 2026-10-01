@@ -6,6 +6,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"logledge/internal/config"
+	"logledge/internal/search"
 	"logledge/internal/vault"
 )
 
@@ -15,14 +16,16 @@ const vaultChangedEvent = "vault:changed"
 
 // App struct
 type App struct {
-	ctx   context.Context
-	vault *vault.Service
+	ctx    context.Context
+	vault  *vault.Service
+	search *search.Service
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	a := &App{}
 	a.vault = vault.New(a.emitVaultChanged)
+	a.search = search.New()
 	return a
 }
 
@@ -33,10 +36,27 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// emitVaultChanged được gọi (debounced) mỗi khi cây Vault thay đổi trên đĩa:
+// báo frontend refetch cây, đồng thời reindex lại search trong nền (không
+// chặn UI).
 func (a *App) emitVaultChanged() {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, vaultChangedEvent)
 	}
+	go a.search.Reindex()
+}
+
+// openVault mở đồng thời VaultService và SearchService cho cùng một thư mục,
+// rồi kích hoạt index nền (không chặn cold-start).
+func (a *App) openVault(path string) error {
+	if err := a.vault.Open(path); err != nil {
+		return err
+	}
+	if err := a.search.Open(path); err != nil {
+		return err
+	}
+	go a.search.Reindex()
+	return nil
 }
 
 // InitVault mở lại Vault đã cấu hình từ lần chạy trước (nếu có) và trả về
@@ -46,7 +66,7 @@ func (a *App) InitVault() (string, error) {
 	if err != nil || cfg.VaultPath == "" {
 		return "", err
 	}
-	if err := a.vault.Open(cfg.VaultPath); err != nil {
+	if err := a.openVault(cfg.VaultPath); err != nil {
 		return "", err
 	}
 	return cfg.VaultPath, nil
@@ -61,7 +81,7 @@ func (a *App) SelectVaultFolder() (string, error) {
 	if err != nil || dir == "" {
 		return "", err
 	}
-	if err := a.vault.Open(dir); err != nil {
+	if err := a.openVault(dir); err != nil {
 		return "", err
 	}
 	if err := config.Save(config.Config{VaultPath: dir}); err != nil {
@@ -114,4 +134,15 @@ func (a *App) WriteFile(relPath, content string) error {
 // .attachments/ và trả về link Markdown tương đối để chèn vào note.
 func (a *App) SaveAttachment(noteRelPath, filename, base64Data string) (string, error) {
 	return a.vault.SaveAttachment(noteRelPath, filename, base64Data)
+}
+
+// SearchNotes tìm kiếm toàn văn (Ctrl+Shift+F) xuyên suốt Vault, trả về kèm
+// snippet ngữ cảnh đã highlight từ khoá.
+func (a *App) SearchNotes(query string) ([]search.Result, error) {
+	return a.search.Search(query, 30)
+}
+
+// QuickSwitch tìm nhanh theo tên file (Ctrl+P), fuzzy match.
+func (a *App) QuickSwitch(query string) ([]string, error) {
+	return a.search.QuickSwitch(query, 30)
 }

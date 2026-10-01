@@ -1,13 +1,17 @@
-import {useState} from 'react'
+import {useEffect, useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {FileTree} from './components/FileTree'
 import {Editor} from './components/Editor'
+import {QuickSwitcher} from './components/QuickSwitcher'
+import {GlobalSearch} from './components/GlobalSearch'
 import {ReadFile, WriteFile} from '../wailsjs/go/main/App'
 
 function App() {
     const vault = useVault()
     const [selectedPath, setSelectedPath] = useState<string | null>(null)
     const [initialContent, setInitialContent] = useState('')
+    const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
+    const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
 
     async function openFile(path: string) {
         try {
@@ -18,7 +22,29 @@ function App() {
             setInitialContent('')
             setSelectedPath(path)
         }
+        setQuickSwitcherOpen(false)
+        setGlobalSearchOpen(false)
     }
+
+    // Ctrl+P: Quick Switcher (fuzzy theo tên file). Ctrl+Shift+F: Global Search
+    // (toàn văn). Chặn hành vi mặc định của trình duyệt (in trang / tìm trang).
+    useEffect(() => {
+        function onKeyDown(e: globalThis.KeyboardEvent) {
+            if (!vault.vaultPath) return
+            const ctrlOrCmd = e.ctrlKey || e.metaKey
+            if (ctrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'p') {
+                e.preventDefault()
+                setGlobalSearchOpen(false)
+                setQuickSwitcherOpen(true)
+            } else if (ctrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'f') {
+                e.preventDefault()
+                setQuickSwitcherOpen(false)
+                setGlobalSearchOpen(true)
+            }
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+    }, [vault.vaultPath])
 
     if (vault.loading) {
         return (
@@ -85,6 +111,12 @@ function App() {
                     </div>
                 )}
             </main>
+            {quickSwitcherOpen && (
+                <QuickSwitcher onOpen={openFile} onClose={() => setQuickSwitcherOpen(false)} />
+            )}
+            {globalSearchOpen && (
+                <GlobalSearch onOpen={openFile} onClose={() => setGlobalSearchOpen(false)} />
+            )}
         </div>
     )
 }

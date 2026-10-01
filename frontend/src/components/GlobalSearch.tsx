@@ -1,0 +1,111 @@
+import {useEffect, useRef, useState} from 'react'
+import type {KeyboardEvent} from 'react'
+import {SearchNotes} from '../../wailsjs/go/main/App'
+import type {search} from '../../wailsjs/go/models'
+
+interface GlobalSearchProps {
+    onOpen: (path: string) => void
+    onClose: () => void
+}
+
+// GlobalSearch là hộp thoại tìm kiếm toàn văn (Ctrl+Shift+F): tìm xuyên suốt
+// nội dung mọi ghi chú trong Vault, hiển thị trích dẫn ngữ cảnh có highlight.
+export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
+    const [query, setQuery] = useState('')
+    const [results, setResults] = useState<search.Result[]>([])
+    const [activeIndex, setActiveIndex] = useState(0)
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+        inputRef.current?.focus()
+    }, [])
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!query.trim()) {
+                setResults([])
+                return
+            }
+            SearchNotes(query)
+                .then((r) => {
+                    setResults(r || [])
+                    setActiveIndex(0)
+                })
+                .catch(() => setResults([]))
+        }, 150)
+        return () => clearTimeout(timer)
+    }, [query])
+
+    function openAt(index: number) {
+        const r = results[index]
+        if (r) onOpen(r.path)
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Escape') {
+            onClose()
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setActiveIndex((i) => Math.min(i + 1, results.length - 1))
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setActiveIndex((i) => Math.max(i - 1, 0))
+        } else if (e.key === 'Enter') {
+            e.preventDefault()
+            openAt(activeIndex)
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
+            <div
+                className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <input
+                    ref={inputRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Tìm kiếm toàn văn trong Vault…"
+                    className="w-full border-b border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-100 outline-none"
+                />
+                <ul className="max-h-96 overflow-y-auto py-1">
+                    {results.map((r, i) => (
+                        <li key={r.path}>
+                            <button
+                                className={`block w-full px-4 py-2 text-left text-sm ${
+                                    i === activeIndex ? 'bg-blue-600 text-white' : 'text-neutral-200 hover:bg-neutral-700'
+                                }`}
+                                onMouseEnter={() => setActiveIndex(i)}
+                                onClick={() => openAt(i)}
+                            >
+                                <div className="truncate font-medium">{r.title}</div>
+                                <div className="mt-0.5 truncate text-xs opacity-80">{highlightSnippet(r.snippet)}</div>
+                                <div className="mt-0.5 truncate text-xs opacity-50">{r.path}</div>
+                            </button>
+                        </li>
+                    ))}
+                    {query.trim() && results.length === 0 && (
+                        <li className="px-4 py-3 text-sm text-neutral-500">Không tìm thấy kết quả nào</li>
+                    )}
+                </ul>
+            </div>
+        </div>
+    )
+}
+
+// highlightSnippet chuyển các đoạn được bọc bởi "**...**" (do FTS5 snippet()
+// sinh ra) thành <mark> để tô sáng từ khoá khớp.
+function highlightSnippet(snippet: string) {
+    const parts = snippet.split('**')
+    return parts.map((part, i) =>
+        i % 2 === 1 ? (
+            <mark key={i} className="rounded bg-yellow-500/40 px-0.5 text-yellow-100">
+                {part}
+            </mark>
+        ) : (
+            <span key={i}>{part}</span>
+        ),
+    )
+}

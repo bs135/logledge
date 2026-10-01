@@ -26,6 +26,10 @@ export function MoveEntry(arg1, arg2) {
   return window['go']['main']['App']['MoveEntry'](arg1, arg2);
 }
 
+export function QuickSwitch(arg1) {
+  return window['go']['main']['App']['QuickSwitch'](arg1);
+}
+
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
@@ -36,6 +40,10 @@ export function RenameEntry(arg1, arg2) {
 
 export function SaveAttachment(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveAttachment'](arg1, arg2, arg3);
+}
+
+export function SearchNotes(arg1) {
+  return window['go']['main']['App']['SearchNotes'](arg1);
 }
 
 export function SelectVaultFolder() {
