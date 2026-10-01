@@ -1,10 +1,5 @@
 name: Release
 
-# Build đóng gói cho cả 3 nền tảng (Windows/macOS/Linux) khi tag dạng v* được
-# push. Chạy trên GitHub Actions (có đủ quyền admin + toolchain cần thiết cho
-# NSIS/dmg/AppImage) — không thể build/test đầy đủ trên máy dev sandbox hiện
-# tại vì thiếu quyền admin để cài NSIS cục bộ (xem ghi chú trong plan.md).
-
 on:
   push:
     tags:
