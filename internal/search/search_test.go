@@ -11,8 +11,8 @@ import (
 func newTestSearch(t *testing.T) (*Service, string) {
 	t.Helper()
 	root := t.TempDir()
-	// Index lưu theo user cache dir thật của máy test; cô lập bằng biến môi
-	// trường để không đụng tới cache thật và để mỗi test có index riêng.
+	// Index is stored in the system cache directory; isolate via environment
+	// variables so tests do not touch actual cache and have isolated indexes.
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 
@@ -66,7 +66,7 @@ func TestReindexPicksUpChangesAndDeletions(t *testing.T) {
 		t.Fatalf("expected to find 'apples' before edit, got %+v", results)
 	}
 
-	// Sửa nội dung: cần bảo đảm mtime khác đi để Reindex phát hiện thay đổi.
+	// Modify content: sleep briefly to ensure mtime changes so Reindex detects the update.
 	time.Sleep(10 * time.Millisecond)
 	writeNote(t, root, "note.md", "updated content about oranges")
 	if err := svc.Reindex(); err != nil {

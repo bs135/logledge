@@ -1,7 +1,7 @@
-// Package search triển khai SearchService: index toàn văn các file .md trong
-// Vault bằng SQLite FTS5 (modernc.org/sqlite, pure Go, không cần CGO), phục
-// vụ Quick Switcher (fuzzy theo tên file) và Global Search (toàn văn có
-// snippet + highlight).
+// Package search implements SearchService: full-text indexing of .md files in the
+// Vault using SQLite FTS5 (modernc.org/sqlite, pure Go, no CGO required), powering
+// Quick Switcher (fuzzy filename search) and Global Search (full-text with snippet
+// extraction and keyword highlighting).
 package search
 
 import (
@@ -18,15 +18,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Result là một kết quả tìm kiếm toàn văn, kèm trích dẫn ngữ cảnh đã highlight.
+// Result represents a full-text search match, including a highlighted contextual snippet.
 type Result struct {
 	Path    string `json:"path"`
 	Title   string `json:"title"`
 	Snippet string `json:"snippet"`
 }
 
-// Service quản lý index FTS5 của một Vault. Index được lưu ngoài Vault (trong
-// user cache dir), tránh làm phình/kẹt kho Git đồng bộ ở Phase 4.
+// Service manages the SQLite FTS5 index for a Vault. The index database is stored
+// outside the Vault (in the user cache directory) to avoid bloating or polluting Git sync in Phase 4.
 type Service struct {
 	root string
 	db   *sql.DB
@@ -35,13 +35,13 @@ type Service struct {
 	indexing bool
 }
 
-// New tạo Service chưa mở index nào.
+// New creates a Service with no index open.
 func New() *Service {
 	return &Service{}
 }
 
-// indexFilePath tính đường dẫn file SQLite index cho một Vault, dựa trên hash
-// của đường dẫn Vault để mỗi Vault có index riêng biệt, ổn định giữa các lần chạy.
+// indexFilePath calculates the SQLite index file path for a Vault based on a hash
+// of the Vault root path, ensuring isolated and persistent indexes across runs.
 func indexFilePath(vaultRoot string) (string, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -55,7 +55,7 @@ func indexFilePath(vaultRoot string) (string, error) {
 	return filepath.Join(dir, hex.EncodeToString(sum[:8])+".sqlite"), nil
 }
 
-// Open mở (tạo mới nếu chưa có) index SQLite cho Vault tại root.
+// Open opens (or creates if missing) the SQLite index for the Vault at root.
 func (s *Service) Open(root string) error {
 	if s.db != nil {
 		_ = s.db.Close()
@@ -70,8 +70,8 @@ func (s *Service) Open(root string) error {
 	if err != nil {
 		return err
 	}
-	// SQLite chỉ cho phép 1 writer tại 1 thời điểm; giới hạn 1 connection để
-	// tránh lỗi "database is locked" khi nhiều goroutine cùng ghi.
+	// SQLite allows only 1 writer at a time; restrict to 1 connection to
+	// prevent "database is locked" errors when concurrent goroutines write.
 	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec(`
@@ -91,7 +91,7 @@ func (s *Service) Open(root string) error {
 	return nil
 }
 
-// Close đóng kết nối SQLite của index hiện tại.
+// Close terminates the SQLite connection for the current index.
 func (s *Service) Close() error {
 	if s.db == nil {
 		return nil
@@ -101,9 +101,9 @@ func (s *Service) Close() error {
 	return err
 }
 
-// Reindex quét toàn bộ Vault, chỉ index lại (ghi) các file .md có mtime thay
-// đổi so với lần index trước, và gỡ khỏi index các file không còn tồn tại.
-// An toàn để gọi nhiều lần / đồng thời (lượt gọi trùng sẽ bị bỏ qua).
+// Reindex traverses the Vault, re-indexing only .md files whose mtime has
+// changed since the last index run, and purging files that no longer exist on disk.
+// Safe for concurrent/repeated invocations (redundant calls are skipped).
 func (s *Service) Reindex() error {
 	s.mu.Lock()
 	if s.indexing {
@@ -125,7 +125,7 @@ func (s *Service) Reindex() error {
 	seen := make(map[string]bool)
 	err := filepath.WalkDir(s.root, func(abs string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // bỏ qua entry lỗi, không fail cả lượt quét
+			return nil // skip erroneous entries without failing entire crawl
 		}
 		name := d.Name()
 		if d.IsDir() {
@@ -155,7 +155,7 @@ func (s *Service) Reindex() error {
 		row := s.db.QueryRow(`SELECT id, mtime FROM files WHERE path = ?`, rel)
 		scanErr := row.Scan(&id, &existingMtime)
 		if scanErr == nil && existingMtime == mtime {
-			return nil // không đổi kể từ lần index trước
+			return nil // unchanged since previous index run
 		}
 
 		data, err := os.ReadFile(abs)
@@ -166,9 +166,9 @@ func (s *Service) Reindex() error {
 		body := string(data)
 
 		if scanErr == nil {
-			// File đã có trong index, cập nhật lại (giữ nguyên rowid).
+			// File exists in index; update contents while preserving rowid.
 			if _, err := s.db.Exec(`INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body); err != nil {
-				// Có thể do đã tồn tại rowid (index cũ), xoá rồi ghi lại.
+				// In case of rowid collision in legacy index, delete and re-insert.
 				s.db.Exec(`DELETE FROM notes_fts WHERE rowid = ?`, id)
 				s.db.Exec(`INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body)
 			}
@@ -193,8 +193,8 @@ func (s *Service) Reindex() error {
 	return s.removeStale(seen)
 }
 
-// removeStale gỡ khỏi index các file đã bị xoá/đổi tên trên đĩa (không còn
-// xuất hiện trong lượt quét `seen` vừa rồi).
+// removeStale removes files from the index that were deleted or renamed on disk
+// (no longer present in the `seen` set from the latest crawl).
 func (s *Service) removeStale(seen map[string]bool) error {
 	rows, err := s.db.Query(`SELECT id, path FROM files`)
 	if err != nil {
@@ -223,8 +223,8 @@ func (s *Service) removeStale(seen map[string]bool) error {
 	return nil
 }
 
-// Search thực hiện tìm kiếm toàn văn (FTS5 MATCH) trên toàn bộ Vault, trả về
-// tối đa `limit` kết quả kèm snippet đã highlight từ khoá bằng cặp ** **.
+// Search executes a full-text query (FTS5 MATCH) across the Vault, returning up
+// to `limit` results with contextual snippets highlighted with ** ** delimiters.
 func (s *Service) Search(query string, limit int) ([]Result, error) {
 	if s.db == nil {
 		return nil, errors.New("search chưa mở index nào")
@@ -260,8 +260,8 @@ func (s *Service) Search(query string, limit int) ([]Result, error) {
 	return results, rows.Err()
 }
 
-// ftsQuery bọc mỗi từ bằng dấu "" và nối bằng AND ngầm định của FTS5, đồng
-// thời cho phép match theo tiền tố (prefix) để tìm kiếm "gõ tới đâu ra tới đó".
+// ftsQuery quotes each token with double quotes and joins them using FTS5's implicit AND,
+// while appending prefix wildcards to support search-as-you-type.
 func ftsQuery(query string) string {
 	fields := strings.Fields(query)
 	for i, f := range fields {
@@ -271,8 +271,8 @@ func ftsQuery(query string) string {
 	return strings.Join(fields, " ")
 }
 
-// QuickSwitch tìm fuzzy theo tên file (Ctrl+P), trả về tối đa `limit` đường
-// dẫn tương đối được sắp xếp theo độ khớp giảm dần.
+// QuickSwitch performs fuzzy filename matching (Ctrl+P), returning up to `limit`
+// relative paths sorted by match quality descending.
 func (s *Service) QuickSwitch(query string, limit int) ([]string, error) {
 	if s.db == nil {
 		return nil, errors.New("search chưa mở index nào")

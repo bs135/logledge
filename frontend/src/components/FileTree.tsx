@@ -13,8 +13,8 @@ interface FileTreeProps {
     onMove: (srcRelPath: string, destParentRelPath: string) => void
 }
 
-// FileTree hiển thị cây thư mục/file dạng lồng nhau vô hạn cấp, hỗ trợ
-// thu/mở thư mục, menu ngữ cảnh (chuột phải) và kéo-thả để di chuyển file.
+// FileTree renders an arbitrarily nested file and folder tree, supporting
+// folder collapse/expand, context menu (right-click), and drag-and-drop movement.
 export function FileTree(props: FileTreeProps) {
     return (
         <div className="select-none text-sm">

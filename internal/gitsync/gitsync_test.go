@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// runGit chạy git trong dir, fail test ngay nếu lỗi. Dùng cho phần thiết lập
-// test (không phải code sản phẩm).
+// runGit executes git in dir and fails the test immediately on error.
+// Used for test fixture setup (not production code).
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -45,8 +45,8 @@ func readFile(t *testing.T, dir, rel string) string {
 	return string(data)
 }
 
-// newBareRemoteWithSeed tạo 1 bare repo đóng vai trò GitHub remote, đã có sẵn
-// 1 commit chứa các file seed, trên nhánh `branch`.
+// newBareRemoteWithSeed creates a bare repo acting as a GitHub remote,
+// initialized with a seed commit on branch `branch`.
 func newBareRemoteWithSeed(t *testing.T, branch string, seedFiles map[string]string) string {
 	t.Helper()
 	bareDir := filepath.Join(t.TempDir(), "remote.git")
@@ -64,8 +64,8 @@ func newBareRemoteWithSeed(t *testing.T, branch string, seedFiles map[string]str
 	return bareDir
 }
 
-// pushRemoteChange giả lập một máy khác chỉnh sửa & push lên remote: clone
-// bareDir vào 1 thư mục tạm, áp dụng `mutate`, rồi push ngược lại.
+// pushRemoteChange simulates another machine editing and pushing to remote:
+// clones bareDir into a temp directory, applies `mutate`, then pushes back.
 func pushRemoteChange(t *testing.T, bareDir, branch string, mutate func(dir string)) {
 	t.Helper()
 	cloneDir := t.TempDir()
@@ -125,7 +125,7 @@ func TestSync_MergesNonConflictingDivergentChanges(t *testing.T) {
 		t.Fatalf("initial Sync: %v", err)
 	}
 
-	// Local sửa 1 file, "máy khác" push 1 file khác — không đụng nhau.
+	// Local modifies 1 file, another machine pushes a different file — non-overlapping changes.
 	writeFile(t, root, "local-only.md", "written locally")
 	pushRemoteChange(t, bareDir, "main", func(dir string) {
 		writeFile(t, dir, "remote-only.md", "written remotely")
@@ -152,7 +152,7 @@ func TestSync_RenamesLocalOnTrueConflict(t *testing.T) {
 		t.Fatalf("initial Sync: %v", err)
 	}
 
-	// Cả local và "máy khác" cùng sửa shared.md khác nhau -> xung đột thật.
+	// Both local and remote edit shared.md differently -> genuine conflict.
 	writeFile(t, root, "shared.md", "edited locally")
 	pushRemoteChange(t, bareDir, "main", func(dir string) {
 		writeFile(t, dir, "shared.md", "edited remotely")
@@ -183,14 +183,14 @@ func TestSync_RenamesLocalOnTrueConflict(t *testing.T) {
 		t.Fatalf("expected conflict file to contain local version, got %q", got)
 	}
 
-	// Không được có ký tự conflict marker ở bất kỳ file nào.
+	// Ensure no conflict markers exist in any file.
 	for _, name := range []string{"shared.md", conflictFile} {
 		if strings.Contains(readFile(t, root, name), "<<<<<<<") {
 			t.Fatalf("file %q should not contain conflict markers", name)
 		}
 	}
 
-	// Sync phải push commit merge lên remote thành công (không còn phân kỳ).
+	// Sync should successfully push merge commit to remote (no longer diverged).
 	if err := svc.Sync(); err != nil {
 		t.Fatalf("follow-up Sync should be a no-op: %v", err)
 	}

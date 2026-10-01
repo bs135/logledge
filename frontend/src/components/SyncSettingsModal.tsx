@@ -5,9 +5,9 @@ interface SyncSettingsModalProps {
     onClose: () => void
 }
 
-// SyncSettingsModal cho phép người dùng nhập GitHub Repository (private),
-// nhánh, phương thức xác thực (PAT hoặc SSH) và Personal Access Token.
-// PAT không bao giờ được đọc/hiển thị lại — chỉ có thể ghi mới hoặc thay thế.
+// SyncSettingsModal allows users to configure GitHub Repository (private),
+// branch, authentication method (PAT or SSH), and Personal Access Token.
+// PAT is never read back or displayed — it can only be newly set or replaced.
 export function SyncSettingsModal({onClose}: SyncSettingsModalProps) {
     const [repoURL, setRepoURL] = useState('')
     const [branch, setBranch] = useState('main')

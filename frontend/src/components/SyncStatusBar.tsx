@@ -25,8 +25,8 @@ const STATE_ICON: Record<string, string> = {
     error: '❌',
 }
 
-// SyncStatusBar hiển thị trạng thái đồng bộ GitHub (Phase 4) ở cuối màn hình,
-// cho phép bấm để đồng bộ ngay hoặc mở cấu hình.
+// SyncStatusBar displays GitHub sync status (Phase 4) at the bottom of the screen,
+// allowing users to click to sync immediately or open settings.
 export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
     const [status, setStatus] = useState<gitsync.Status>({state: 'not_configured', message: ''})
     const [syncing, setSyncing] = useState(false)
@@ -46,7 +46,7 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
         try {
             await SyncNow()
         } catch {
-            // trạng thái lỗi đã được phát qua sự kiện sync:status
+            // Error status is already emitted via the sync:status event
         } finally {
             setSyncing(false)
         }

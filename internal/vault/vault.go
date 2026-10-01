@@ -1,6 +1,6 @@
-// Package vault triển khai VaultService: quản lý cây thư mục/file của một
-// Vault Logledge trên đĩa (liệt kê, tạo, đổi tên, di chuyển, xoá-vào-thùng-rác),
-// đồng thời wiring với watcher package để phát sự kiện thay đổi tới frontend.
+// Package vault implements VaultService: manages the file/folder tree of a
+// Logledge Vault on disk (listing, creating, renaming, moving, trash-to-recycle-bin),
+// and wires with the watcher package to emit change events to the frontend.
 package vault
 
 import (
@@ -19,39 +19,39 @@ import (
 	"logledge/internal/watcher"
 )
 
-// suppressWindow là khoảng thời gian sau một thao tác ghi của chính app mà
-// watcher sẽ bỏ qua sự kiện fsnotify tương ứng (tránh watcher tự phản ứng lại).
+// suppressWindow is the duration following an app write during which the
+// watcher ignores corresponding fsnotify events (preventing self-trigger loops).
 const suppressWindow = 2 * time.Second
 
-// debounceInterval gộp nhiều sự kiện thay đổi liên tiếp (vd: git pull, copy
-// hàng loạt file) thành một lần thông báo duy nhất cho frontend.
+// debounceInterval aggregates consecutive change events (e.g., git pull, bulk
+// file copy) into a single notification event for the frontend.
 const debounceInterval = 300 * time.Millisecond
 
-// Node đại diện một file hoặc thư mục trong cây Vault, dùng để serialize
-// sang JSON cho frontend.
+// Node represents a file or directory in the Vault tree, serialized
+// to JSON for the frontend.
 type Node struct {
 	Name     string  `json:"name"`
-	Path     string  `json:"path"` // đường dẫn tương đối, phân tách bằng "/"
+	Path     string  `json:"path"` // relative path, separated by "/"
 	IsDir    bool    `json:"isDir"`
 	Children []*Node `json:"children,omitempty"`
 }
 
-// Service là VaultService: điểm truy cập duy nhất backend dùng để thao tác
-// với Vault hiện đang mở.
+// Service represents VaultService: the backend single entry point for
+// operating on the currently open Vault.
 type Service struct {
 	root    string
 	watch   *watcher.Watcher
-	onEvent func() // gọi khi cây thay đổi (debounced), dùng để bắn Wails event
+	onEvent func() // called on debounced file tree changes, used to emit Wails events
 }
 
-// New tạo Service chưa mở Vault nào. onEvent được gọi (debounced) mỗi khi
-// nội dung Vault thay đổi trên đĩa (kể cả do bên ngoài sửa) sau khi Open.
+// New creates a Service with no Vault currently open. onEvent is called
+// (debounced) whenever Vault contents change on disk after Open.
 func New(onEvent func()) *Service {
 	return &Service{onEvent: onEvent}
 }
 
-// Open thiết lập root làm Vault hiện tại và khởi động file watcher.
-// Gọi lại Open sẽ đóng watcher cũ (nếu có) trước khi mở watcher mới.
+// Open sets root as the current Vault and initializes the file watcher.
+// Re-calling Open closes the previous watcher (if any) before opening a new one.
 func (s *Service) Open(root string) error {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -77,18 +77,18 @@ func (s *Service) Open(root string) error {
 	return nil
 }
 
-// Root trả về đường dẫn tuyệt đối của Vault đang mở, hoặc "" nếu chưa mở.
+// Root returns the absolute path of the open Vault, or "" if none is open.
 func (s *Service) Root() string {
 	return s.root
 }
 
-// isOpen kiểm tra Vault đã được mở chưa.
+// isOpen checks whether a Vault has been opened.
 func (s *Service) isOpen() bool {
 	return s.root != ""
 }
 
-// resolve chuyển một đường dẫn tương đối (dùng dấu "/") thành đường dẫn tuyệt
-// đối trên đĩa, đồng thời chống path traversal (vd: "../../etc").
+// resolve converts a "/"-separated relative path into an absolute path on disk,
+// guarding against path traversal attacks (e.g., "../../etc").
 func (s *Service) resolve(relPath string) (string, error) {
 	clean := filepath.Clean(filepath.FromSlash(relPath))
 	if clean == "." {
@@ -102,7 +102,7 @@ func (s *Service) resolve(relPath string) (string, error) {
 	return abs, nil
 }
 
-// relFromAbs chuyển đường dẫn tuyệt đối trên đĩa về dạng tương đối "/"-separated.
+// relFromAbs converts an absolute disk path to a "/"-separated relative path.
 func (s *Service) relFromAbs(abs string) string {
 	rel, err := filepath.Rel(s.root, abs)
 	if err != nil {
@@ -111,13 +111,13 @@ func (s *Service) relFromAbs(abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// isHidden xác định các entry không hiển thị trong cây (quản lý nội bộ):
-// .git (Phase 4 sync) và các file/thư mục dotfile khác.
+// isHidden determines whether an entry should be hidden from the tree (internal management):
+// .git (Phase 4 sync) and other dotfiles/dotfolders.
 func isHidden(name string) bool {
 	return strings.HasPrefix(name, ".")
 }
 
-// Tree liệt kê toàn bộ cây thư mục Vault, sắp xếp thư mục trước, tên A-Z.
+// Tree lists the entire Vault folder hierarchy, sorting directories first, alphabetically A-Z.
 func (s *Service) Tree() (*Node, error) {
 	if !s.isOpen() {
 		return nil, errors.New("chưa mở vault nào")
@@ -146,7 +146,7 @@ func (s *Service) buildNode(abs, name string) (*Node, error) {
 		if e.IsDir() {
 			childNode, err := s.buildNode(childAbs, e.Name())
 			if err != nil {
-				continue // bỏ qua thư mục lỗi (permission...), không fail cả cây
+				continue // skip inaccessible directories (permissions...), do not fail whole tree
 			}
 			children = append(children, childNode)
 		} else {
@@ -160,7 +160,7 @@ func (s *Service) buildNode(abs, name string) (*Node, error) {
 
 	sort.Slice(children, func(i, j int) bool {
 		if children[i].IsDir != children[j].IsDir {
-			return children[i].IsDir // thư mục trước file
+			return children[i].IsDir // directories first
 		}
 		return strings.ToLower(children[i].Name) < strings.ToLower(children[j].Name)
 	})
@@ -169,16 +169,16 @@ func (s *Service) buildNode(abs, name string) (*Node, error) {
 	return node, nil
 }
 
-// suppress đánh dấu path để watcher bỏ qua sự kiện fsnotify kế tiếp do chính
-// thao tác này gây ra.
+// suppress marks a path so the watcher ignores the next fsnotify event
+// triggered by this operation.
 func (s *Service) suppress(abs string) {
 	if s.watch != nil {
 		s.watch.Suppress(abs, suppressWindow)
 	}
 }
 
-// CreateFile tạo file .md rỗng mới tại parentRelPath/name. Nếu name không có
-// phần mở rộng, ".md" sẽ được thêm tự động.
+// CreateFile creates a new empty .md file at parentRelPath/name. If name lacks
+// an extension, ".md" is appended automatically.
 func (s *Service) CreateFile(parentRelPath, name string) (string, error) {
 	if !strings.Contains(filepath.Base(name), ".") {
 		name += ".md"
@@ -198,7 +198,7 @@ func (s *Service) CreateFile(parentRelPath, name string) (string, error) {
 	return s.relFromAbs(abs), nil
 }
 
-// CreateFolder tạo thư mục con mới tại parentRelPath/name.
+// CreateFolder creates a new subdirectory at parentRelPath/name.
 func (s *Service) CreateFolder(parentRelPath, name string) (string, error) {
 	parentAbs, err := s.resolve(parentRelPath)
 	if err != nil {
@@ -215,7 +215,7 @@ func (s *Service) CreateFolder(parentRelPath, name string) (string, error) {
 	return s.relFromAbs(abs), nil
 }
 
-// Rename đổi tên file/thư mục tại relPath thành newName (giữ nguyên thư mục cha).
+// Rename renames a file or directory at relPath to newName within the same parent folder.
 func (s *Service) Rename(relPath, newName string) (string, error) {
 	abs, err := s.resolve(relPath)
 	if err != nil {
@@ -233,8 +233,8 @@ func (s *Service) Rename(relPath, newName string) (string, error) {
 	return s.relFromAbs(newAbs), nil
 }
 
-// Move di chuyển file/thư mục tại srcRelPath vào bên trong destParentRelPath
-// (dùng cho thao tác kéo-thả trên cây thư mục).
+// Move relocates a file/folder at srcRelPath into destParentRelPath
+// (used for drag-and-drop operations in the file tree).
 func (s *Service) Move(srcRelPath, destParentRelPath string) (string, error) {
 	srcAbs, err := s.resolve(srcRelPath)
 	if err != nil {
@@ -259,9 +259,9 @@ func (s *Service) Move(srcRelPath, destParentRelPath string) (string, error) {
 	return s.relFromAbs(destAbs), nil
 }
 
-// Delete chuyển file/thư mục tại relPath vào thùng rác hệ điều hành (không
-// xoá vĩnh viễn), qua thư viện wastebasket (Windows Shell32 / FreeDesktop
-// Trash spec trên Linux / Finder trên macOS).
+// Delete moves the file/folder at relPath to the OS recycle bin (non-permanent
+// deletion) using the wastebasket library (Windows Shell32 / FreeDesktop Trash
+// spec on Linux / Finder on macOS).
 func (s *Service) Delete(relPath string) error {
 	abs, err := s.resolve(relPath)
 	if err != nil {
@@ -271,7 +271,7 @@ func (s *Service) Delete(relPath string) error {
 	return wastebasket.Trash(abs)
 }
 
-// ReadFile đọc nội dung file tại relPath (dùng cho editor ở Phase 2).
+// ReadFile reads the file contents at relPath (used by editor in Phase 2).
 func (s *Service) ReadFile(relPath string) (string, error) {
 	abs, err := s.resolve(relPath)
 	if err != nil {
@@ -284,7 +284,7 @@ func (s *Service) ReadFile(relPath string) (string, error) {
 	return string(data), nil
 }
 
-// WriteFile ghi đè nội dung file tại relPath (dùng cho auto-save ở Phase 2).
+// WriteFile overwrites file contents at relPath (used for auto-save in Phase 2).
 func (s *Service) WriteFile(relPath, content string) error {
 	abs, err := s.resolve(relPath)
 	if err != nil {
@@ -294,8 +294,8 @@ func (s *Service) WriteFile(relPath, content string) error {
 	return os.WriteFile(abs, []byte(content), 0o644)
 }
 
-// unsafeFilenameChars khớp mọi ký tự không nên xuất hiện trong tên file trên
-// Windows/macOS/Linux (giữ chữ, số, khoảng trắng, gạch ngang/gạch dưới).
+// unsafeFilenameChars matches characters that should not appear in filenames on
+// Windows/macOS/Linux (preserves alphanumeric, spaces, hyphens, and underscores).
 var unsafeFilenameChars = regexp.MustCompile(`[^\w\s.-]`)
 
 func sanitizeFilename(name string) string {
@@ -306,9 +306,9 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-// SaveAttachment lưu ảnh dán từ clipboard (hoặc kéo-thả) vào thư mục
-// `.attachments/` ở gốc Vault (base64-encoded từ frontend), và trả về link
-// Markdown tương đối tính từ thư mục chứa note đang mở tới file ảnh đó.
+// SaveAttachment saves an image pasted from clipboard (or drag-and-dropped) into
+// `.attachments/` at the Vault root (base64-encoded from frontend), returning a
+// relative Markdown link from the active note's directory to the image file.
 func (s *Service) SaveAttachment(noteRelPath, filename, base64Data string) (string, error) {
 	if !s.isOpen() {
 		return "", errors.New("chưa mở vault nào")

@@ -29,8 +29,8 @@ function App() {
         setGlobalSearchOpen(false)
     }
 
-    // Ctrl+P: Quick Switcher (fuzzy theo tên file). Ctrl+Shift+F: Global Search
-    // (toàn văn). Chặn hành vi mặc định của trình duyệt (in trang / tìm trang).
+    // Ctrl+P: Quick Switcher (fuzzy filename search). Ctrl+Shift+F: Global Search
+    // (full-text). Suppresses default browser shortcuts (print / in-page search).
     useEffect(() => {
         function onKeyDown(e: globalThis.KeyboardEvent) {
             if (!vault.vaultPath) return

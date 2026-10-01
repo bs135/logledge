@@ -1,6 +1,6 @@
-// Package config quản lý cấu hình cấp ứng dụng của Logledge (ví dụ: đường
-// dẫn Vault đang được chọn), lưu dưới dạng JSON trong thư mục config chuẩn
-// của hệ điều hành (os.UserConfigDir()/logledge/config.json).
+// Package config manages Logledge application-level configuration (e.g., the
+// currently selected Vault path), stored as JSON in the OS standard config
+// directory (os.UserConfigDir()/logledge/config.json).
 package config
 
 import (
@@ -9,19 +9,19 @@ import (
 	"path/filepath"
 )
 
-// Config là toàn bộ cấu hình được lưu bền vững giữa các lần chạy app.
+// Config represents the application settings persisted across sessions.
 type Config struct {
-	// VaultPath là đường dẫn tuyệt đối tới thư mục gốc Vault do người dùng chọn.
+	// VaultPath is the absolute path to the Vault root directory selected by the user.
 	VaultPath string `json:"vaultPath"`
 
-	// Các trường cấu hình đồng bộ GitHub (Phase 4). Personal Access Token
-	// KHÔNG được lưu ở đây — nó được lưu riêng trong OS Keychain qua go-keyring.
+	// GitHub synchronization configuration fields (Phase 4). The Personal Access Token
+	// is NOT stored here — it is kept securely in the OS Keychain via go-keyring.
 	GitRepoURL    string `json:"gitRepoUrl,omitempty"`
 	GitBranch     string `json:"gitBranch,omitempty"`
 	GitAuthMethod string `json:"gitAuthMethod,omitempty"` // "none" | "pat" | "ssh"
 }
 
-// path trả về đường dẫn tới file config.json trên đĩa.
+// path returns the on-disk path to config.json.
 func path() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -34,7 +34,7 @@ func path() (string, error) {
 	return filepath.Join(appDir, "config.json"), nil
 }
 
-// Load đọc config từ đĩa. Nếu file chưa tồn tại, trả về Config rỗng (không lỗi).
+// Load reads configuration from disk. If the file does not exist, it returns an empty Config without error.
 func Load() (Config, error) {
 	p, err := path()
 	if err != nil {
@@ -54,7 +54,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// Save ghi config xuống đĩa dạng JSON.
+// Save writes the configuration to disk as formatted JSON.
 func Save(cfg Config) error {
 	p, err := path()
 	if err != nil {

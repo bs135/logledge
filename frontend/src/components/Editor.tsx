@@ -5,17 +5,17 @@ import '@milkdown/crepe/theme/frame-dark.css'
 import {SaveAttachment} from '../../wailsjs/go/main/App'
 
 interface EditorProps {
-    /** Đường dẫn tương đối (dùng "/") của note đang mở, dùng để tính link ảnh tương đối. */
+    /** Relative path (using "/") of the active note, used to compute relative image links. */
     path: string
-    /** Nội dung Markdown ban đầu đọc từ đĩa. */
+    /** Initial Markdown content read from disk. */
     initialContent: string
-    /** Gọi (debounced 600ms bên trong) mỗi khi nội dung thay đổi, để auto-save. */
+    /** Called (internally debounced at 600ms) whenever content changes, for auto-save. */
     onChange: (markdown: string) => void
 }
 
-// Editor bọc Milkdown Crepe — trình soạn thảo WYSIWYG Live Preview kiểu
-// Obsidian, hỗ trợ sẵn CommonMark+GFM (bảng, task list, strikethrough),
-// syntax highlight code block (CodeMirror) và dán/kéo-thả ảnh vào .attachments/.
+// Editor wraps Milkdown Crepe — an Obsidian-style WYSIWYG Live Preview editor,
+// with out-of-the-box CommonMark+GFM support (tables, task lists, strikethrough),
+// code block syntax highlighting (CodeMirror), and image paste/drag-and-drop into .attachments/.
 export function Editor({path, initialContent, onChange}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const crepeRef = useRef<Crepe | null>(null)
@@ -73,7 +73,7 @@ function fileToBase64(file: File): Promise<string> {
         const reader = new FileReader()
         reader.onload = () => {
             const result = reader.result as string
-            // result là data URL "data:<mime>;base64,<data>" — chỉ lấy phần base64.
+            // result is a data URL "data:<mime>;base64,<data>" — extract only the base64 portion.
             resolve(result.substring(result.indexOf(',') + 1))
         }
         reader.onerror = () => reject(reader.error)
