@@ -4,3 +4,4 @@ frontend/dist
 *.exe
 .DS_Store
 Thumbs.db
+.tmp/
