@@ -25,9 +25,9 @@ export interface UseVaultResult {
     remove: (relPath: string) => Promise<void>
 }
 
-// useVault quản lý toàn bộ state của Vault hiện tại: đường dẫn, cây thư mục,
-// và các thao tác CRUD. Không chặn cold-start — GetTree được gọi bất đồng bộ
-// sau khi component mount, UI cha có thể hiển thị ngay trong lúc chờ.
+// useVault manages all state for the active Vault: directory path, file tree,
+// and CRUD operations. Does not block cold start — GetTree is invoked asynchronously
+// after the component mounts, allowing parent UI to render immediately while waiting.
 export function useVault(): UseVaultResult {
     const [vaultPath, setVaultPath] = useState<string | null>(null)
     const [tree, setTree] = useState<vault.Node | null>(null)

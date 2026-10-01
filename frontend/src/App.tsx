@@ -29,8 +29,8 @@ function App() {
         setGlobalSearchOpen(false)
     }
 
-    // Ctrl+P: Quick Switcher (fuzzy theo tên file). Ctrl+Shift+F: Global Search
-    // (toàn văn). Chặn hành vi mặc định của trình duyệt (in trang / tìm trang).
+    // Ctrl+P: Quick Switcher (fuzzy filename search). Ctrl+Shift+F: Global Search
+    // (full-text). Suppresses default browser shortcuts (print / in-page search).
     useEffect(() => {
         function onKeyDown(e: globalThis.KeyboardEvent) {
             if (!vault.vaultPath) return
@@ -60,6 +60,7 @@ function App() {
     if (!vault.vaultPath) {
         return (
             <div className="flex h-full flex-col items-center justify-center gap-4 bg-neutral-900 text-neutral-100">
+                <img src="/icon.svg" alt="Logledge" className="h-16 w-16" />
                 <h1 className="text-2xl font-semibold">Logledge</h1>
                 <p className="text-neutral-400">Chọn một thư mục để làm Vault</p>
                 <button

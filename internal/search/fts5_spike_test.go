@@ -1,8 +1,8 @@
 package search
 
-// Spike: xác nhận modernc.org/sqlite (pure Go, no CGO) hỗ trợ FTS5.
-// Đây là giả định rủi ro cao được nêu trong plan.md (Phase 0) — nếu test này
-// pass, SearchService ở Phase 3 có thể dựa vào FTS5 mà không cần CGO.
+// Spike: verifies that modernc.org/sqlite (pure Go, no CGO) supports FTS5.
+// This validates a high-risk assumption identified in PLAN.md (Phase 0) —
+// if this test passes, SearchService in Phase 3 can rely on FTS5 without CGO.
 
 import (
 	"database/sql"
@@ -19,8 +19,8 @@ func TestFTS5Available(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Nếu FTS5 không được build vào modernc.org/sqlite, câu lệnh CREATE VIRTUAL
-	// TABLE ... USING fts5 sẽ trả lỗi "no such module: fts5".
+	// If FTS5 is not compiled into modernc.org/sqlite, CREATE VIRTUAL TABLE ...
+	// USING fts5 will fail with "no such module: fts5".
 	_, err = db.Exec(`CREATE VIRTUAL TABLE notes_fts USING fts5(path, title, body)`)
 	if err != nil {
 		t.Fatalf("FTS5 not available in modernc.org/sqlite: %v", err)

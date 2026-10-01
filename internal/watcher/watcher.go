@@ -1,8 +1,8 @@
-// Package watcher bọc fsnotify để theo dõi toàn bộ cây thư mục của một Vault,
-// tự thêm/bỏ watch khi thư mục con được tạo/xoá, gộp (debounce) nhiều sự kiện
-// liên tiếp thành một callback duy nhất, và cho phép "tạm nén" (suppress) các
-// sự kiện do chính ứng dụng gây ra (ví dụ: khi VaultService tự ghi file) để
-// tránh vòng lặp watcher tự phản ứng với thao tác của chính mình.
+// Package watcher wraps fsnotify to monitor an entire Vault directory tree,
+// dynamically managing watches as subdirectories are created or deleted,
+// debouncing bursts of events into a single notification callback, and
+// suppressing self-inflicted filesystem events (e.g., when VaultService writes
+// a file) to prevent infinite event feedback loops.
 package watcher
 
 import (
@@ -14,8 +14,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Watcher theo dõi một cây thư mục và gọi OnChange (debounced) khi có thay đổi
-// không bị suppress.
+// Watcher monitors a directory tree and triggers OnChange (debounced) for
+// unsuppressed filesystem changes.
 type Watcher struct {
 	root       string
 	fsw        *fsnotify.Watcher
@@ -29,8 +29,8 @@ type Watcher struct {
 	done chan struct{}
 }
 
-// New tạo watcher cho cây thư mục root. onEvent được gọi (trên goroutine riêng)
-// tối đa 1 lần mỗi `debounce` khoảng thời gian, sau khi tổng hợp các thay đổi.
+// New creates a watcher for the directory tree at root. onEvent is called
+// (in a separate goroutine) at most once per debounce window after changes settle.
 func New(root string, debounce time.Duration, onEvent func()) (*Watcher, error) {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -51,9 +51,9 @@ func New(root string, debounce time.Duration, onEvent func()) (*Watcher, error) 
 	return w, nil
 }
 
-// Suppress đánh dấu path (và các sự kiện tới trong `window`) là do chính app
-// gây ra, để watcher bỏ qua không phát sinh onEvent cho chúng. Dùng ngay trước
-// khi VaultService tự ghi/tạo/xoá/đổi tên file.
+// Suppress marks a path (and events within window) as initiated by the app itself,
+// so the watcher ignores them and does not emit onEvent. Called immediately
+// before VaultService writes, creates, deletes, or renames a file.
 func (w *Watcher) Suppress(path string, window time.Duration) {
 	w.suppressed.Store(filepath.Clean(path), time.Now().Add(window))
 }
@@ -71,7 +71,7 @@ func (w *Watcher) isSuppressed(path string) bool {
 	return true
 }
 
-// Close dừng watcher và giải phóng tài nguyên fsnotify.
+// Close stops the watcher and releases fsnotify resources.
 func (w *Watcher) Close() error {
 	close(w.done)
 	return w.fsw.Close()
@@ -80,7 +80,7 @@ func (w *Watcher) Close() error {
 func (w *Watcher) addRecursive(dir string) error {
 	return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			// Bỏ qua các thư mục không truy cập được thay vì fail toàn bộ.
+			// Skip inaccessible directories instead of failing the entire tree.
 			return nil
 		}
 		if d.IsDir() {
@@ -93,8 +93,8 @@ func (w *Watcher) addRecursive(dir string) error {
 	})
 }
 
-// isIgnored xác định các thư mục không cần watch/hiển thị: metadata nội bộ
-// (.git dùng cho Phase 4 sync) và các thư mục ẩn hệ thống.
+// isIgnored determines folders that should not be watched: internal metadata
+// (.git for Phase 4 sync) and system hidden directories.
 func isIgnored(name string) bool {
 	switch name {
 	case ".git":
@@ -118,7 +118,7 @@ func (w *Watcher) loop() {
 			if !ok {
 				return
 			}
-			// Lỗi watcher không nên làm crash app; bỏ qua và tiếp tục.
+			// Watcher errors should not crash the app; ignore and continue.
 		}
 	}
 }
@@ -128,8 +128,8 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 		return
 	}
 
-	// Nếu một thư mục mới được tạo, thêm watch đệ quy cho nó để theo dõi
-	// các file bên trong (fsnotify không tự theo dõi đệ quy).
+	// When a new directory is created, watch it recursively to monitor
+	// files inside (fsnotify is not recursively automatic on all platforms).
 	if ev.Op&fsnotify.Create == fsnotify.Create {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 			_ = w.addRecursive(ev.Name)

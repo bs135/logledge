@@ -1,54 +1,50 @@
 # Logledge
 
-Ứng dụng ghi chú desktop, local-first, dựa trên file `.md` thuần — đồng bộ đa
-thiết bị qua GitHub. Xây bằng [Wails v2](https://wails.io) (backend Go +
-frontend React/TypeScript).
+A desktop, local-first note-taking application based on plain `.md` files — synchronized across devices via GitHub. Built with [Wails v2](https://wails.io) (Go backend + React/TypeScript frontend).
 
-## Mục tiêu
+## Objectives
 
-- **Chủ quyền dữ liệu**: mọi ghi chú là file `.md` độc lập trên đĩa, không phụ
-  thuộc định dạng đóng hay server.
-- **Tối ưu cho lập trình viên**: khởi động nhanh, gọn nhẹ, phím tắt sâu,
-  Markdown WYSIWYG kiểu Obsidian.
-- **Đồng bộ tự động qua Git**: không cần thao tác dòng lệnh thủ công.
+- **Data Sovereignty**: Every note is an independent `.md` file on disk, free from proprietary formats or server lock-in.
+- **Developer-Focused**: Fast startup, lightweight footprint, keyboard shortcuts, and Obsidian-style Markdown WYSIWYG editing.
+- **Automated Git Sync**: Effortless synchronization without requiring manual CLI operations.
 
-## Tính năng (theo phase phát triển)
+## Features (by Development Phase)
 
-| Phase | Nội dung |
+| Phase | Description |
 |---|---|
-| 0 | Scaffold Wails + TailwindCSS, CI cơ bản |
-| 1 | Vault & File Tree: chọn thư mục Vault, cây thư mục lồng nhau, tạo/đổi tên/xoá (vào thùng rác OS)/kéo-thả, live sync với thay đổi ngoài app (fsnotify) |
-| 2 | Markdown Editor: WYSIWYG Live Preview (Milkdown/Crepe) — CommonMark+GFM, code block syntax highlight, LaTeX; auto-save debounce 600ms; dán ảnh clipboard vào `.attachments/` |
-| 3 | Full-Text Search: SQLite FTS5, Quick Switcher (`Ctrl+P`, fuzzy theo tên file), Global Search (`Ctrl+Shift+F`, toàn văn có snippet highlight) |
-| 4 | GitHub Sync Engine: đồng bộ tự động (mở app / định kỳ 5 phút / khi thoát / thủ công), PAT lưu qua OS Keychain, xử lý xung đột bằng rename thay vì chèn conflict marker |
+| 0 | Scaffold Wails + TailwindCSS, basic CI |
+| 1 | Vault & File Tree: Vault folder selection, nested file tree, create/rename/delete (OS recycle bin)/drag-and-drop, live sync with external filesystem changes (fsnotify) |
+| 2 | Markdown Editor: WYSIWYG Live Preview (Milkdown/Crepe) — CommonMark+GFM, code block syntax highlighting, LaTeX; 600ms debounce auto-save; clipboard image paste into `.attachments/` |
+| 3 | Full-Text Search: SQLite FTS5, Quick Switcher (`Ctrl+P`, fuzzy filename matching), Global Search (`Ctrl+Shift+F`, full-text with highlighted snippets) |
+| 4 | GitHub Sync Engine: Automated synchronization (on app launch / every 5 minutes / on exit / manual), PAT securely stored in OS Keychain, conflict resolution via file renaming instead of conflict markers |
 
-## Phím tắt
+## Keyboard Shortcuts
 
-| Phím tắt | Chức năng |
+| Shortcut | Action |
 |---|---|
-| `Ctrl+P` | Quick Switcher — tìm nhanh file theo tên (fuzzy) |
-| `Ctrl+Shift+F` | Global Search — tìm toàn văn trong Vault |
-| Chuột phải trên cây thư mục | New note / New folder / Rename / Delete |
-| Kéo-thả trên cây thư mục | Di chuyển file/thư mục |
+| `Ctrl+P` | Quick Switcher — fast fuzzy search by filename |
+| `Ctrl+Shift+F` | Global Search — full-text search across the Vault |
+| Right-click on File Tree | New note / New folder / Rename / Delete |
+| Drag-and-drop on File Tree | Move file/folder |
 
-Không có phím tắt lưu (`Ctrl+S`) — mọi thay đổi được tự động lưu (debounce ~600ms).
+There is no save shortcut (`Ctrl+S`) — all changes are automatically saved (debounced ~600ms).
 
-## Phát triển
+## Development
 
-Yêu cầu: Go 1.25+, Node 20+, [Wails CLI v2](https://wails.io/docs/gettingstarted/installation).
+Requirements: Go 1.25+, Node 20+, [Wails CLI v2](https://wails.io/docs/gettingstarted/installation).
 
 ```bash
-# chạy chế độ dev (hot-reload frontend qua Vite)
+# Run in development mode (hot-reloads frontend via Vite)
 wails dev
 
-# build production
+# Build production binary
 wails build
 
-# build kèm installer NSIS (Windows)
+# Build with NSIS installer (Windows)
 wails build -nsis
 ```
 
-Kiểm thử backend:
+Backend testing:
 
 ```bash
 go build ./...
@@ -56,7 +52,7 @@ go vet ./...
 go test ./...
 ```
 
-Kiểm thử frontend:
+Frontend verification:
 
 ```bash
 cd frontend
@@ -64,50 +60,37 @@ npx tsc --noEmit
 npm run build
 ```
 
-## Đóng gói đa nền tảng
+## Cross-Platform Packaging
 
-`.github/workflows/release.yml` build & đóng gói cho Windows (NSIS),
-macOS (universal, dmg) và Linux (AppImage) khi push tag `v*`, dùng
-[`dAppServer/wails-build-action`](https://github.com/dAppServer/wails-build-action).
-Việc build/test macOS và Linux, cũng như tạo installer NSIS trên Windows, cần
-chạy trên CI (hoặc máy có quyền admin) — môi trường phát triển sandbox hiện
-tại không có quyền cài đặt NSIS cục bộ nên chỉ portable `.exe` được build và
-xác minh thủ công tại đây.
+`.github/workflows/release.yml` builds and packages artifacts for Windows (NSIS), macOS (universal, dmg), and Linux (AppImage) when pushing tags matching `v*`, using [`dAppServer/wails-build-action`](https://github.com/dAppServer/wails-build-action).
+Building and testing for macOS and Linux, as well as creating the Windows NSIS installer, requires running on CI (or a machine with administrative privileges) — the local sandbox environment lacks permissions to install NSIS locally, so only the portable `.exe` is built and verified locally.
 
-## Chỉ số phi chức năng đã đo (Windows, máy dev)
+## Measured Non-Functional Requirements (Windows Dev Machine)
 
-| Chỉ số | Mục tiêu | Đo được |
+| Metric | Target | Measured |
 |---|---|---|
 | Cold-start | < 1s | ~1.0s |
-| RAM nền (idle) | < 80MB | ~35–67MB |
+| Idle RAM | < 80MB | ~35–67MB |
 | Binary size (portable exe) | < 30MB | ~19.3MB |
 
-## Đồng bộ GitHub — lưu ý triển khai
+## GitHub Sync — Implementation Notes
 
-- Đồng bộ dùng `git` CLI hệ thống qua `os/exec` (không dùng go-git) — yêu cầu
-  máy người dùng đã cài Git.
-- Thay vì `git pull --rebase` theo đúng nghĩa đen, engine dùng
-  `git fetch` + `git merge --no-commit --no-ff -X ours`, sau đó áp dụng chính
-  sách đổi tên file xung đột (`Tên.conflict.<timestamp>.md`) chỉ cho đúng
-  những file bị sửa ở cả 2 phía. Cách này tránh được việc chèn ký tự
-  `<<<<<<<` vào file đồng thời vẫn giữ lịch sử merge đúng đắn giữa 2 nhánh —
-  xem chi tiết lý do điều chỉnh trong lịch sử commit Phase 4.
-- Personal Access Token không bao giờ được ghi ra đĩa dạng plaintext — chỉ
-  lưu trong OS Keychain (Windows Credential Manager / macOS Keychain / Linux
-  Secret Service qua `go-keyring`).
+- Synchronization uses the system `git` CLI via `os/exec` (instead of go-git) — requires Git installed on the user's system.
+- Instead of a literal `git pull --rebase`, the engine uses `git fetch` + `git merge --no-commit --no-ff -X ours`, then applies a conflict renaming strategy (`Name.conflict.<timestamp>.md`) exclusively to files modified on both sides. This avoids inserting `<<<<<<<` conflict markers into notes while maintaining proper branch merge history — see Phase 4 commit history for rationale.
+- Personal Access Tokens (PAT) are never written to disk in plaintext — they are stored securely in the OS Keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service via `go-keyring`).
 
-## Cấu trúc thư mục
+## Directory Structure
 
 ```
-app.go                  # Wails App: điểm nối các service với frontend
-main.go                 # Entry point, khai báo Wails options
+app.go                  # Wails App: bridge between backend services and frontend
+main.go                 # Entry point, configures Wails options
 internal/
-  config/               # Cấu hình ứng dụng (đường dẫn Vault, cấu hình sync)
-  vault/                 # VaultService: CRUD cây thư mục/file, attachments
+  config/               # Application configuration (Vault path, sync settings)
+  vault/                 # VaultService: file/folder CRUD, attachments
   watcher/               # fsnotify wrapper (debounce + self-write suppression)
   search/                # SearchService: SQLite FTS5, Quick Switcher, Global Search
-  gitsync/               # SyncService: đồng bộ GitHub qua git CLI + go-keyring
+  gitsync/               # SyncService: GitHub sync via git CLI + go-keyring
 frontend/
   src/components/        # FileTree, Editor, QuickSwitcher, GlobalSearch, Sync UI
-  src/hooks/              # useVault
+  src/hooks/              # useVault hook
 ```
