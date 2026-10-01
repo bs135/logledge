@@ -2,29 +2,190 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  build:
+  release-please:
+    name: Release Automation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run Release-Please
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-release:
+    name: Build Release (${{ matrix.platform.name }})
+    needs: [release-please]
+    if: |
+      always() &&
+      (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+        (needs.release-please.outputs.releases_created == 'true') ||
+        (github.event_name == 'workflow_dispatch')
+      )
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: linux/amd64
-            os: ubuntu-latest
-          - platform: windows/amd64
+        platform:
+          - name: windows-amd64
+            target: windows/amd64
             os: windows-latest
-          - platform: darwin/universal
+            output_file: logledge.exe
+            build_args: -nsis -webview2 download
+          - name: darwin-universal
+            target: darwin/universal
             os: macos-latest
-    runs-on: ${{ matrix.os }}
+            output_file: logledge
+            build_args: ""
+          - name: linux-amd64
+            target: linux/amd64
+            os: ubuntu-latest
+            output_file: logledge
+            build_args: -tags webkit2_41
     steps:
-      - uses: actions/checkout@v4
-      - uses: dAppServer/wails-build-action@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          build-name: logledge
-          build-platform: ${{ matrix.platform }}
+          fetch-depth: 0
+
+      - name: Determine Release Version
+        shell: bash
+        run: |
+          if [ -n "${{ needs.release-please.outputs.tag_name }}" ]; then
+            RELEASE_TAG="${{ needs.release-please.outputs.tag_name }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            RELEASE_TAG="${GITHUB_REF#refs/tags/}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+            RELEASE_TAG="${LATEST_TAG}"
+          fi
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "Resolved release tag: ${RELEASE_TAG}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
           go-version: "1.25"
-          node-version: "24.x"
-          nsis: true
+          cache: true
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v makensis &> /dev/null; then
+            echo "Installing NSIS via Chocolatey..."
+            choco install nsis -y --no-progress
+            echo "C:\Program Files (x86)\NSIS" >> $GITHUB_PATH
+            echo "C:\Program Files\NSIS" >> $GITHUB_PATH
+          fi
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: Build Wails App
+        shell: bash
+        run: |
+          wails build -platform ${{ matrix.platform.target }} -trimpath -o ${{ matrix.platform.output_file }} ${{ matrix.platform.build_args }}
+
+      - name: Package Release Assets
+        shell: bash
+        run: |
+          RELEASE_DIR="release-assets"
+          mkdir -p "${RELEASE_DIR}"
+
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            if [ -f "build/bin/logledge.exe" ]; then
+              cp "build/bin/logledge.exe" "${RELEASE_DIR}/logledge-windows-amd64-${RELEASE_TAG}.exe"
+            elif [ -f "build/bin/logledge" ]; then
+              cp "build/bin/logledge" "${RELEASE_DIR}/logledge-windows-amd64-${RELEASE_TAG}.exe"
+            fi
+            if [ -f "build/bin/logledge-amd64-installer.exe" ]; then
+              cp "build/bin/logledge-amd64-installer.exe" "${RELEASE_DIR}/logledge-windows-amd64-installer-${RELEASE_TAG}.exe"
+            fi
+          elif [ "${RUNNER_OS}" = "macOS" ]; then
+            if [ -d "build/bin/logledge.app" ]; then
+              cd build/bin
+              zip -r -y "../../${RELEASE_DIR}/logledge-darwin-universal-${RELEASE_TAG}.zip" logledge.app
+              cd ../..
+            fi
+          elif [ "${RUNNER_OS}" = "Linux" ]; then
+            if [ -f "build/bin/logledge" ]; then
+              chmod +x build/bin/logledge
+              tar -czvf "${RELEASE_DIR}/logledge-linux-amd64-${RELEASE_TAG}.tar.gz" -C build/bin logledge
+              cp "build/bin/logledge" "${RELEASE_DIR}/logledge-linux-amd64-${RELEASE_TAG}"
+            fi
+          fi
+
+          # Generate SHA256 checksums
+          cd "${RELEASE_DIR}"
+          for item in *; do
+            if [ -f "$item" ]; then
+              (sha256sum "$item" > "$item.sha256") 2>/dev/null || (shasum -a 256 "$item" > "$item.sha256")
+            fi
+          done
+          cd ..
+
+          # Verify packaged assets exist
+          ASSET_COUNT=$(find "${RELEASE_DIR}" -maxdepth 1 -type f | wc -l)
+          if [ "${ASSET_COUNT}" -eq 0 ]; then
+            echo "Error: No release assets packaged in ${RELEASE_DIR}" >&2
+            ls -la build/bin || true
+            exit 1
+          fi
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ matrix.platform.name }}-${{ env.RELEASE_TAG }}
+          path: release-assets/*
+          retention-days: 14
+
+      - name: Publish to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release if it does not exist yet (e.g. manual tag push without release-please)
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --generate-notes || true
+          fi
+          # Upload all bundles and checksums to GitHub Release
+          gh release upload "${RELEASE_TAG}" release-assets/* --clobber
