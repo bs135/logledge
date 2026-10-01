@@ -2,23 +2,23 @@ package gitsync
 
 import "github.com/zalando/go-keyring"
 
-// keyringService/keyringUser xác định mục nhập trong OS Keychain
-// (Windows Credential Manager / macOS Keychain / Linux Secret Service) dùng
-// để lưu GitHub Personal Access Token. Chỉ hỗ trợ 1 PAT toàn cục cho mỗi máy
-// người dùng (đơn giản hoá cho MVP — đủ dùng vì thường chỉ có 1 Vault/1 tài
-// khoản GitHub trên mỗi máy).
+// keyringService and keyringUser identify the entry in the OS Keychain
+// (Windows Credential Manager / macOS Keychain / Linux Secret Service) used
+// to store the GitHub Personal Access Token. Only 1 global PAT per user machine
+// is supported (simplified for MVP — sufficient for the common use case of
+// 1 Vault / 1 GitHub account per machine).
 const (
 	keyringService = "logledge"
 	keyringUser    = "github-pat"
 )
 
-// SetPAT lưu Personal Access Token vào OS Keychain, không bao giờ ghi ra đĩa
-// dạng plaintext.
+// SetPAT stores the Personal Access Token in the OS Keychain, never writing
+// it to disk in plaintext.
 func SetPAT(pat string) error {
 	return keyring.Set(keyringService, keyringUser, pat)
 }
 
-// GetPAT đọc PAT từ OS Keychain. ok=false nếu chưa từng lưu.
+// GetPAT retrieves the PAT from the OS Keychain. Returns ok=false if not found.
 func GetPAT() (pat string, ok bool, err error) {
 	pat, err = keyring.Get(keyringService, keyringUser)
 	if err == keyring.ErrNotFound {
@@ -30,7 +30,7 @@ func GetPAT() (pat string, ok bool, err error) {
 	return pat, true, nil
 }
 
-// ClearPAT xoá PAT khỏi OS Keychain (dùng khi người dùng đổi/xoá cấu hình đồng bộ).
+// ClearPAT removes the PAT from the OS Keychain (used when changing or resetting sync settings).
 func ClearPAT() error {
 	err := keyring.Delete(keyringService, keyringUser)
 	if err == keyring.ErrNotFound {

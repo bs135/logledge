@@ -7,8 +7,8 @@ interface QuickSwitcherProps {
     onClose: () => void
 }
 
-// QuickSwitcher là Command Palette (Ctrl+P): tìm nhanh file theo tên bằng
-// fuzzy search, mở ngay khi Enter hoặc click vào kết quả.
+// QuickSwitcher is the Command Palette (Ctrl+P): quickly finds files by name
+// using fuzzy search, opening immediately on Enter or result click.
 export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<string[]>([])

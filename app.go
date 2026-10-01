@@ -12,15 +12,15 @@ import (
 	"logledge/internal/vault"
 )
 
-// vaultChangedEvent là tên sự kiện Wails phát tới frontend mỗi khi cây Vault
-// thay đổi trên đĩa (do app hoặc bên ngoài), để frontend gọi lại GetTree.
+// vaultChangedEvent is the Wails event emitted to the frontend whenever the Vault
+// tree changes on disk (externally or by the app), triggering frontend to refetch GetTree.
 const vaultChangedEvent = "vault:changed"
 
-// syncStatusEvent là tên sự kiện Wails phát tới frontend mỗi khi trạng thái
-// đồng bộ GitHub thay đổi (Synced/Syncing/Conflict/Offline/...).
+// syncStatusEvent is the Wails event emitted to the frontend whenever GitHub
+// sync status changes (Synced/Syncing/Conflict/Offline/...).
 const syncStatusEvent = "sync:status"
 
-// syncInterval là chu kỳ tự động đồng bộ định kỳ trong lúc app đang chạy.
+// syncInterval is the cadence for automatic periodic sync while the app is running.
 const syncInterval = 5 * time.Minute
 
 // App struct
@@ -41,15 +41,15 @@ func NewApp() *App {
 }
 
 // startup is called when the app starts. The context is saved
-// so we can call the runtime methods. Không mở Vault ở đây để không chặn
-// cold-start; frontend sẽ chủ động gọi InitVault() sau khi mount.
+// so we can call the runtime methods. Vault is not opened here to avoid blocking
+// cold-start; frontend triggers InitVault() after mounting.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// shutdown được main.go gọi (qua OnShutdown) trước khi app đóng: cố gắng
-// đồng bộ lần cuối, giới hạn thời gian chờ để không treo việc thoát app nếu
-// mạng chậm/mất kết nối.
+// shutdown is invoked by main.go (via OnShutdown) before the app closes:
+// attempts a final synchronization with a timeout to avoid hanging app exit
+// on slow or severed network connections.
 func (a *App) shutdown(ctx context.Context) {
 	a.sync.Stop()
 	if !a.sync.IsConfigured() {
@@ -66,9 +66,8 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
-// emitVaultChanged được gọi (debounced) mỗi khi cây Vault thay đổi trên đĩa:
-// báo frontend refetch cây, đồng thời reindex lại search trong nền (không
-// chặn UI).
+// emitVaultChanged is called (debounced) whenever the Vault tree changes on disk:
+// prompts frontend to refetch the tree and triggers background search reindexing (non-blocking).
 func (a *App) emitVaultChanged() {
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, vaultChangedEvent)
@@ -82,9 +81,9 @@ func (a *App) emitSyncStatus(status gitsync.Status) {
 	}
 }
 
-// openVault mở đồng thời VaultService, SearchService và (nếu đã cấu hình)
-// GitSync cho cùng một thư mục, rồi kích hoạt index + đồng bộ nền (không
-// chặn cold-start).
+// openVault opens VaultService, SearchService, and (if configured) GitSync
+// for the same root directory, initiating background indexing and synchronization
+// without blocking cold-start.
 func (a *App) openVault(path string) error {
 	if err := a.vault.Open(path); err != nil {
 		return err
@@ -100,8 +99,8 @@ func (a *App) openVault(path string) error {
 		auth = gitsync.AuthNone
 	}
 	if err := a.sync.Configure(path, cfg.GitRepoURL, cfg.GitBranch, auth); err != nil {
-		// Lỗi cấu hình đồng bộ không nên chặn việc mở Vault; trạng thái lỗi
-		// đã được phát qua sync:status để frontend hiển thị.
+		// Sync configuration error should not block opening the Vault;
+		// the error status is emitted via sync:status for frontend display.
 	}
 	if a.sync.IsConfigured() {
 		go a.sync.Sync()
@@ -110,8 +109,8 @@ func (a *App) openVault(path string) error {
 	return nil
 }
 
-// InitVault mở lại Vault đã cấu hình từ lần chạy trước (nếu có) và trả về
-// đường dẫn của nó, hoặc "" nếu người dùng chưa chọn Vault nào.
+// InitVault reopens the previously configured Vault (if any) and returns its
+// path, or "" if no Vault has been configured yet.
 func (a *App) InitVault() (string, error) {
 	cfg, err := config.Load()
 	if err != nil || cfg.VaultPath == "" {
@@ -123,8 +122,8 @@ func (a *App) InitVault() (string, error) {
 	return cfg.VaultPath, nil
 }
 
-// SelectVaultFolder mở hộp thoại chọn thư mục hệ điều hành, mở thư mục đó
-// làm Vault mới và lưu lại lựa chọn. Trả về "" nếu người dùng huỷ.
+// SelectVaultFolder opens the native OS directory picker, initializes that directory
+// as the active Vault, and persists the selection. Returns "" if cancelled by the user.
 func (a *App) SelectVaultFolder() (string, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Chọn thư mục làm Vault",
@@ -141,66 +140,66 @@ func (a *App) SelectVaultFolder() (string, error) {
 	return dir, nil
 }
 
-// GetTree trả về toàn bộ cây thư mục/file của Vault đang mở.
+// GetTree returns the entire directory and file tree of the active Vault.
 func (a *App) GetTree() (*vault.Node, error) {
 	return a.vault.Tree()
 }
 
-// CreateFile tạo file .md mới bên trong parentRelPath.
+// CreateFile creates a new .md file inside parentRelPath.
 func (a *App) CreateFile(parentRelPath, name string) (string, error) {
 	return a.vault.CreateFile(parentRelPath, name)
 }
 
-// CreateFolder tạo thư mục mới bên trong parentRelPath.
+// CreateFolder creates a new folder inside parentRelPath.
 func (a *App) CreateFolder(parentRelPath, name string) (string, error) {
 	return a.vault.CreateFolder(parentRelPath, name)
 }
 
-// RenameEntry đổi tên file/thư mục tại relPath.
+// RenameEntry renames the file or directory at relPath.
 func (a *App) RenameEntry(relPath, newName string) (string, error) {
 	return a.vault.Rename(relPath, newName)
 }
 
-// MoveEntry di chuyển file/thư mục vào một thư mục cha khác (kéo-thả).
+// MoveEntry relocates a file or directory into a new parent folder (drag-and-drop).
 func (a *App) MoveEntry(srcRelPath, destParentRelPath string) (string, error) {
 	return a.vault.Move(srcRelPath, destParentRelPath)
 }
 
-// DeleteEntry chuyển file/thư mục vào thùng rác hệ điều hành.
+// DeleteEntry moves the file or folder to the OS recycle bin.
 func (a *App) DeleteEntry(relPath string) error {
 	return a.vault.Delete(relPath)
 }
 
-// ReadFile đọc nội dung file (Phase 2 dùng cho editor).
+// ReadFile reads the file content (used by the editor in Phase 2).
 func (a *App) ReadFile(relPath string) (string, error) {
 	return a.vault.ReadFile(relPath)
 }
 
-// WriteFile ghi nội dung file (Phase 2 dùng cho auto-save).
+// WriteFile writes file content (used for auto-save in Phase 2).
 func (a *App) WriteFile(relPath, content string) error {
 	return a.vault.WriteFile(relPath, content)
 }
 
-// SaveAttachment lưu ảnh (dán từ clipboard / kéo-thả trong editor) vào
-// .attachments/ và trả về link Markdown tương đối để chèn vào note.
+// SaveAttachment saves an image (clipboard paste / drag-and-drop in editor) into
+// .attachments/ and returns a relative Markdown link to insert into the note.
 func (a *App) SaveAttachment(noteRelPath, filename, base64Data string) (string, error) {
 	return a.vault.SaveAttachment(noteRelPath, filename, base64Data)
 }
 
-// SearchNotes tìm kiếm toàn văn (Ctrl+Shift+F) xuyên suốt Vault, trả về kèm
-// snippet ngữ cảnh đã highlight từ khoá.
+// SearchNotes executes a full-text search (Ctrl+Shift+F) across the Vault,
+// returning highlighted contextual snippets.
 func (a *App) SearchNotes(query string) ([]search.Result, error) {
 	return a.search.Search(query, 30)
 }
 
-// QuickSwitch tìm nhanh theo tên file (Ctrl+P), fuzzy match.
+// QuickSwitch performs fast fuzzy filename lookup (Ctrl+P).
 func (a *App) QuickSwitch(query string) ([]string, error) {
 	return a.search.QuickSwitch(query, 30)
 }
 
-// SyncSettings là cấu hình đồng bộ GitHub hiển thị/chỉnh sửa được ở frontend
-// (không bao gồm Personal Access Token — token được quản lý riêng qua
-// SetGitHubPAT/HasGitHubPAT, không bao giờ hiển thị lại dạng plaintext).
+// SyncSettings represents GitHub synchronization configuration exposed to frontend
+// (excluding the Personal Access Token — managed securely via SetGitHubPAT/HasGitHubPAT,
+// never exposed in plaintext).
 type SyncSettings struct {
 	RepoURL    string `json:"repoURL"`
 	Branch     string `json:"branch"`
@@ -208,7 +207,7 @@ type SyncSettings struct {
 	HasPAT     bool   `json:"hasPAT"`
 }
 
-// GetSyncSettings trả về cấu hình đồng bộ hiện tại (đọc từ config.json).
+// GetSyncSettings returns the current sync settings (loaded from config.json).
 func (a *App) GetSyncSettings() (SyncSettings, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -227,8 +226,8 @@ func (a *App) GetSyncSettings() (SyncSettings, error) {
 	}, nil
 }
 
-// ConfigureSync lưu cấu hình đồng bộ GitHub, áp dụng ngay cho Vault đang mở
-// (git init/remote nếu cần) và bắt đầu đồng bộ định kỳ.
+// ConfigureSync saves GitHub sync settings, applies them to the active Vault
+// (running git init/remote if needed), and starts periodic synchronization.
 func (a *App) ConfigureSync(repoURL, branch, authMethod string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -243,7 +242,7 @@ func (a *App) ConfigureSync(repoURL, branch, authMethod string) error {
 
 	root := a.vault.Root()
 	if root == "" {
-		return nil // chưa mở Vault nào, cấu hình sẽ được áp dụng khi mở Vault
+		return nil // No Vault opened yet; settings will take effect when a Vault is opened
 	}
 	if err := a.sync.Configure(root, repoURL, branch, gitsync.AuthMethod(authMethod)); err != nil {
 		return err
@@ -257,17 +256,17 @@ func (a *App) ConfigureSync(repoURL, branch, authMethod string) error {
 	return nil
 }
 
-// SetGitHubPAT lưu Personal Access Token vào OS Keychain (không lưu ra file).
+// SetGitHubPAT saves the Personal Access Token to the OS Keychain (never written to disk).
 func (a *App) SetGitHubPAT(pat string) error {
 	return gitsync.SetPAT(pat)
 }
 
-// SyncNow kích hoạt một lượt đồng bộ ngay lập tức (nút bấm thủ công).
+// SyncNow triggers an immediate synchronization cycle (manual trigger).
 func (a *App) SyncNow() error {
 	return a.sync.Sync()
 }
 
-// GetSyncStatus trả về trạng thái đồng bộ hiện tại cho status bar.
+// GetSyncStatus returns the current sync status for the status bar.
 func (a *App) GetSyncStatus() gitsync.Status {
 	return a.sync.Status()
 }

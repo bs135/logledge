@@ -1,10 +1,9 @@
-// Package gitsync triển khai SyncService: đồng bộ Vault với một GitHub
-// repository bằng cách gọi trực tiếp `git` CLI của hệ thống qua os/exec
-// (không dùng go-git để tự viết lại rebase/merge — xem plan.md phần đánh giá
-// độ khả thi). Personal Access Token không bao giờ được ghi vào .git/config
-// hay bất kỳ file nào trên đĩa: nó chỉ được đọc từ OS Keychain (qua
-// internal/gitsync/credentials.go) và chèn tạm thời vào URL truyền cho từng
-// lệnh git fetch/push.
+// Package gitsync implements SyncService: synchronizing the Vault with a GitHub
+// repository by directly invoking the system `git` CLI via os/exec (avoiding
+// go-git to reimplement rebase/merge — see PLAN.md feasibility assessment).
+// The Personal Access Token is never stored in .git/config or any file on disk:
+// it is read exclusively from the OS Keychain (via internal/gitsync/credentials.go)
+// and temporarily injected into the URL passed to each git fetch/push command.
 package gitsync
 
 import (
@@ -19,7 +18,7 @@ import (
 	"time"
 )
 
-// AuthMethod xác định cách xác thực với GitHub.
+// AuthMethod specifies the authentication mechanism used with GitHub.
 type AuthMethod string
 
 const (
@@ -28,13 +27,13 @@ const (
 	AuthSSH  AuthMethod = "ssh"
 )
 
-// Status là trạng thái đồng bộ hiện tại, phát ra cho status bar của frontend.
+// Status represents the current synchronization state emitted to the frontend status bar.
 type Status struct {
 	State   string `json:"state"` // not_configured | idle | syncing | conflict | offline | error
 	Message string `json:"message"`
 }
 
-// Service quản lý việc đồng bộ Git cho Vault đang mở.
+// Service manages Git synchronization for the active Vault.
 type Service struct {
 	mu         sync.Mutex
 	root       string
@@ -49,7 +48,7 @@ type Service struct {
 	stopPeriodic func()
 }
 
-// New tạo Service; onStatus được gọi mỗi khi trạng thái đồng bộ thay đổi.
+// New creates a Service; onStatus is invoked whenever sync status changes.
 func New(onStatus func(Status)) *Service {
 	return &Service{
 		onStatus: onStatus,
@@ -57,8 +56,8 @@ func New(onStatus func(Status)) *Service {
 	}
 }
 
-// Configure thiết lập Vault root, repo GitHub, nhánh và phương thức xác thực,
-// rồi đảm bảo repo Git cục bộ đã sẵn sàng (git init + remote origin nếu cần).
+// Configure sets up the Vault root, GitHub repo, branch, and auth method,
+// then ensures the local Git repository is initialized (git init + remote origin if needed).
 func (s *Service) Configure(root, repoURL, branch string, auth AuthMethod) error {
 	if branch == "" {
 		branch = "main"
@@ -83,14 +82,14 @@ func (s *Service) Configure(root, repoURL, branch string, auth AuthMethod) error
 	return nil
 }
 
-// IsConfigured cho biết Vault hiện tại đã cấu hình đồng bộ GitHub hay chưa.
+// IsConfigured reports whether the active Vault has GitHub sync configured.
 func (s *Service) IsConfigured() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.configured
 }
 
-// Status trả về trạng thái đồng bộ hiện tại.
+// Status returns the current synchronization status.
 func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,8 +107,8 @@ func (s *Service) setStatus(state, message string) {
 	}
 }
 
-// StartPeriodic chạy Sync() định kỳ mỗi `interval` trong nền, cho tới khi
-// Stop() được gọi. Lỗi đồng bộ định kỳ không làm crash app.
+// StartPeriodic runs Sync() periodically every interval in the background until
+// Stop() is called. Periodic synchronization errors do not crash the application.
 func (s *Service) StartPeriodic(interval time.Duration) {
 	s.Stop()
 	ticker := time.NewTicker(interval)
@@ -130,7 +129,7 @@ func (s *Service) StartPeriodic(interval time.Duration) {
 	s.mu.Unlock()
 }
 
-// Stop dừng vòng lặp đồng bộ định kỳ (nếu có).
+// Stop halts the periodic synchronization loop (if running).
 func (s *Service) Stop() {
 	s.mu.Lock()
 	stop := s.stopPeriodic
@@ -151,8 +150,8 @@ func (s *Service) run(args ...string) (string, error) {
 	return string(out), nil
 }
 
-// authedURL trả về URL remote đã chèn Personal Access Token (nếu dùng auth
-// PAT) để truyền trực tiếp cho fetch/push — không bao giờ ghi vào .git/config.
+// authedURL returns the remote URL with the Personal Access Token injected (if using
+// PAT authentication) to pass directly to fetch/push — never written to .git/config.
 func (s *Service) authedURL() (string, error) {
 	if s.authMethod != AuthPAT {
 		return s.repoURL, nil
@@ -172,8 +171,8 @@ func (s *Service) authedURL() (string, error) {
 	return u.String(), nil
 }
 
-// ensureRepo khởi tạo repo Git cục bộ (nếu Vault chưa có .git) và đảm bảo có
-// remote "origin" trỏ tới repoURL (không kèm credential).
+// ensureRepo initializes the local Git repo (if the Vault lacks .git) and ensures
+// remote "origin" points to repoURL (without credentials).
 func (s *Service) ensureRepo() error {
 	if _, err := os.Stat(filepath.Join(s.root, ".git")); os.IsNotExist(err) {
 		if _, err := s.run("init"); err != nil {
@@ -203,7 +202,7 @@ func (s *Service) hasLocalChanges() (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
-// autoCommit gom mọi thay đổi chưa commit thành một commit "Auto-sync".
+// autoCommit stages and commits all uncommitted changes into an "Auto-sync" commit.
 func (s *Service) autoCommit() error {
 	changed, err := s.hasLocalChanges()
 	if err != nil {
@@ -224,8 +223,8 @@ func (s *Service) remoteRef() string {
 	return "refs/remotes/origin/" + s.branch
 }
 
-// fetchRemote lấy về lịch sử của nhánh remote vào ref theo dõi cục bộ, không
-// đụng tới working tree.
+// fetchRemote fetches the remote branch history into the local tracking ref
+// without touching the working tree.
 func (s *Service) fetchRemote() error {
 	authed, err := s.authedURL()
 	if err != nil {
@@ -261,10 +260,10 @@ func (s *Service) refExists(ref string) bool {
 	return err == nil
 }
 
-// Sync là điểm vào chính: auto-commit thay đổi cục bộ, fetch remote, hợp
-// nhất (fast-forward nếu có thể, hoặc merge với chính sách rename-on-conflict
-// nếu 2 bên đã phân kỳ), rồi push. Chạy được ở startup, định kỳ, khi thoát
-// app, hoặc do người dùng bấm nút "Sync now".
+// Sync is the primary entry point: auto-commits local changes, fetches remote,
+// reconciles (fast-forward if possible, or merge with rename-on-conflict policy
+// if diverged), and pushes. Callable on startup, periodically, on exit, or via
+// manual "Sync now" trigger.
 func (s *Service) Sync() error {
 	s.mu.Lock()
 	configured := s.configured
@@ -290,8 +289,8 @@ func (s *Service) Sync() error {
 
 	remoteRef := s.remoteRef()
 	if !s.refExists(remoteRef) {
-		// Remote chưa có nhánh này (repo mới). Nếu local cũng chưa có commit
-		// nào (Vault trống, chưa từng ghi note) thì không có gì để đồng bộ.
+		// Remote does not have this branch yet (new repo). If local also has no
+		// commits (empty Vault, no notes written yet), there is nothing to sync.
 		if !s.refExists("HEAD") {
 			s.setStatus("idle", "Chưa có nội dung để đồng bộ")
 			return nil
@@ -305,8 +304,8 @@ func (s *Service) Sync() error {
 	}
 
 	if !s.refExists("HEAD") {
-		// Vault local chưa có commit nào (vừa git init) — không thể có xung
-		// đột, chỉ cần lấy toàn bộ nội dung remote về.
+		// Local Vault has no commits (fresh git init) — conflict is impossible,
+		// simply reset working tree to the full remote content.
 		if _, err := s.run("reset", "--hard", remoteRef); err != nil {
 			s.setStatus("error", "Không thể lấy nội dung remote: "+err.Error())
 			return err
@@ -320,9 +319,9 @@ func (s *Service) Sync() error {
 
 	switch {
 	case behind == 0:
-		// Remote không có gì mới; chỉ cần push nếu local có commit mới.
+		// Remote has no new commits; only push if local has new commits.
 	case ahead == 0:
-		// Chỉ remote có commit mới -> fast-forward an toàn, không thể có conflict.
+		// Only remote has new commits -> safe fast-forward, conflict is impossible.
 		if _, err := s.run("merge", "--ff-only", remoteRef); err != nil {
 			s.setStatus("error", "Fast-forward thất bại: "+err.Error())
 			return err
@@ -342,12 +341,11 @@ func (s *Service) Sync() error {
 	return nil
 }
 
-// mergeWithConflictRename hợp nhất remoteRef vào HEAD khi 2 bên đã phân kỳ.
-// Dùng `git merge -X ours` để tự động hoá việc hợp nhất ở tầng Git mà không
-// bao giờ để lại ký tự xung đột (<<<<<<<) trong bất kỳ file nào; sau đó, với
-// đúng những file mà CẢ HAI bên cùng sửa (xung đột thật sự), đổi tên bản local
-// thành "Tên.conflict.<timestamp>.md" và lấy bản remote về, theo đúng chính
-// sách xử lý xung đột đã đặt ra trong spec.
+// mergeWithConflictRename merges remoteRef into HEAD when branches have diverged.
+// It uses `git merge -X ours` to automate merging at the Git level without leaving
+// conflict markers (<<<<<<<) in any file. Then, for files modified on BOTH sides
+// (genuine conflicts), it renames the local version to "Name.conflict.<timestamp>.md"
+// and checks out the remote version, in accordance with the conflict policy.
 func (s *Service) mergeWithConflictRename(remoteRef string) error {
 	base, err := s.run("merge-base", "HEAD", remoteRef)
 	if err != nil {
@@ -372,7 +370,7 @@ func (s *Service) mergeWithConflictRename(remoteRef string) error {
 	ts := time.Now().Format("2006-01-02T15-04-05")
 	for path := range remoteChanged {
 		if !localChanged[path] {
-			continue // remote-only change: git merge đã tự đưa vào working tree rồi
+			continue // remote-only change: git merge already applied it to working tree
 		}
 
 		absPath := filepath.Join(s.root, filepath.FromSlash(path))
