@@ -109,3 +109,9 @@ func (a *App) ReadFile(relPath string) (string, error) {
 func (a *App) WriteFile(relPath, content string) error {
 	return a.vault.WriteFile(relPath, content)
 }
+
+// SaveAttachment lưu ảnh (dán từ clipboard / kéo-thả trong editor) vào
+// .attachments/ và trả về link Markdown tương đối để chèn vào note.
+func (a *App) SaveAttachment(noteRelPath, filename, base64Data string) (string, error) {
+	return a.vault.SaveAttachment(noteRelPath, filename, base64Data)
+}

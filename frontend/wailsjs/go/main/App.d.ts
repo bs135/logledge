@@ -18,6 +18,8 @@ export function ReadFile(arg1:string):Promise<string>;
 
 export function RenameEntry(arg1:string,arg2:string):Promise<string>;
 
+export function SaveAttachment(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function SelectVaultFolder():Promise<string>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

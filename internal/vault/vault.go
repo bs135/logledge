@@ -4,10 +4,12 @@
 package vault
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -290,4 +292,54 @@ func (s *Service) WriteFile(relPath, content string) error {
 	}
 	s.suppress(abs)
 	return os.WriteFile(abs, []byte(content), 0o644)
+}
+
+// unsafeFilenameChars khớp mọi ký tự không nên xuất hiện trong tên file trên
+// Windows/macOS/Linux (giữ chữ, số, khoảng trắng, gạch ngang/gạch dưới).
+var unsafeFilenameChars = regexp.MustCompile(`[^\w\s.-]`)
+
+func sanitizeFilename(name string) string {
+	name = unsafeFilenameChars.ReplaceAllString(name, "_")
+	if name == "" {
+		return "image"
+	}
+	return name
+}
+
+// SaveAttachment lưu ảnh dán từ clipboard (hoặc kéo-thả) vào thư mục
+// `.attachments/` ở gốc Vault (base64-encoded từ frontend), và trả về link
+// Markdown tương đối tính từ thư mục chứa note đang mở tới file ảnh đó.
+func (s *Service) SaveAttachment(noteRelPath, filename, base64Data string) (string, error) {
+	if !s.isOpen() {
+		return "", errors.New("chưa mở vault nào")
+	}
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("dữ liệu ảnh không hợp lệ: %w", err)
+	}
+
+	attachDir := filepath.Join(s.root, ".attachments")
+	if err := os.MkdirAll(attachDir, 0o755); err != nil {
+		return "", err
+	}
+
+	ext := filepath.Ext(filename)
+	base := sanitizeFilename(strings.TrimSuffix(filepath.Base(filename), ext))
+	unique := fmt.Sprintf("%s-%d%s", base, time.Now().UnixNano(), ext)
+	abs := filepath.Join(attachDir, unique)
+
+	s.suppress(abs)
+	if err := os.WriteFile(abs, data, 0o644); err != nil {
+		return "", err
+	}
+
+	noteParentAbs, err := s.resolve(filepath.ToSlash(filepath.Dir(filepath.FromSlash(noteRelPath))))
+	if err != nil {
+		noteParentAbs = s.root
+	}
+	rel, err := filepath.Rel(noteParentAbs, abs)
+	if err != nil {
+		rel = filepath.Join(".attachments", unique)
+	}
+	return filepath.ToSlash(rel), nil
 }

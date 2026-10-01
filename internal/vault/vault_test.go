@@ -1,8 +1,10 @@
 package vault
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -130,5 +132,36 @@ func TestReadWriteFile(t *testing.T) {
 	}
 	if content != "hello world" {
 		t.Fatalf("expected 'hello world', got %q", content)
+	}
+}
+
+func TestSaveAttachmentReturnsRelativeLink(t *testing.T) {
+	svc, root := newTestService(t)
+	if _, err := svc.CreateFolder("", "projects"); err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+	if _, err := svc.CreateFile("projects", "note"); err != nil {
+		t.Fatalf("CreateFile: %v", err)
+	}
+
+	data := base64.StdEncoding.EncodeToString([]byte("fake-png-bytes"))
+	link, err := svc.SaveAttachment("projects/note.md", "screenshot.png", data)
+	if err != nil {
+		t.Fatalf("SaveAttachment: %v", err)
+	}
+	if link != "../.attachments/"+filepath.Base(filepath.FromSlash(link)) {
+		t.Fatalf("unexpected relative link: %q", link)
+	}
+	if !strings.HasPrefix(filepath.Base(link), "screenshot-") {
+		t.Fatalf("expected filename to be based on original name, got %q", link)
+	}
+
+	attachDir := filepath.Join(root, ".attachments")
+	entries, err := os.ReadDir(attachDir)
+	if err != nil {
+		t.Fatalf("read .attachments: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly 1 attachment file, got %d", len(entries))
 	}
 }

@@ -34,6 +34,10 @@ export function RenameEntry(arg1, arg2) {
   return window['go']['main']['App']['RenameEntry'](arg1, arg2);
 }
 
+export function SaveAttachment(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveAttachment'](arg1, arg2, arg3);
+}
+
 export function SelectVaultFolder() {
   return window['go']['main']['App']['SelectVaultFolder']();
 }

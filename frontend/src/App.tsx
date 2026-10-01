@@ -1,32 +1,23 @@
-import {useRef, useState} from 'react'
+import {useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {FileTree} from './components/FileTree'
+import {Editor} from './components/Editor'
 import {ReadFile, WriteFile} from '../wailsjs/go/main/App'
 
 function App() {
     const vault = useVault()
     const [selectedPath, setSelectedPath] = useState<string | null>(null)
-    const [content, setContent] = useState('')
-    const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [initialContent, setInitialContent] = useState('')
 
     async function openFile(path: string) {
-        setSelectedPath(path)
         try {
-            setContent(await ReadFile(path))
+            const text = await ReadFile(path)
+            setInitialContent(text)
+            setSelectedPath(path)
         } catch {
-            setContent('')
+            setInitialContent('')
+            setSelectedPath(path)
         }
-    }
-
-    // Placeholder editor cho Phase 1 (raw textarea); Milkdown WYSIWYG Live
-    // Preview sẽ thay thế ở Phase 2. Debounce 600ms để tránh ghi đĩa mỗi phím gõ.
-    function onEdit(next: string) {
-        setContent(next)
-        if (!selectedPath) return
-        if (saveTimer.current) clearTimeout(saveTimer.current)
-        saveTimer.current = setTimeout(() => {
-            WriteFile(selectedPath, next)
-        }, 600)
     }
 
     if (vault.loading) {
@@ -80,13 +71,13 @@ function App() {
                     />
                 )}
             </aside>
-            <main className="flex-1 p-4">
+            <main className="flex-1 overflow-hidden p-4">
                 {selectedPath ? (
-                    <textarea
-                        className="h-full w-full resize-none bg-transparent font-mono text-sm outline-none"
-                        value={content}
-                        onChange={(e) => onEdit(e.target.value)}
-                        placeholder="Bắt đầu viết…"
+                    <Editor
+                        key={selectedPath}
+                        path={selectedPath}
+                        initialContent={initialContent}
+                        onChange={(markdown) => WriteFile(selectedPath, markdown)}
                     />
                 ) : (
                     <div className="flex h-full items-center justify-center text-neutral-500">
