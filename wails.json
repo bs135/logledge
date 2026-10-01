@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "logledge",
+  "outputfilename": "logledge",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "bs",
+    "email": "thanhhai135@gmail.com"
+  },
+  "info": {
+    "companyName": "Logledge",
+    "productName": "Logledge",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright 2026 Logledge",
+    "comments": "Modern markdown note-taking app"
+  }
+}
