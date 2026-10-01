@@ -4,6 +4,8 @@ import {FileTree} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
+import {SyncStatusBar} from './components/SyncStatusBar'
+import {SyncSettingsModal} from './components/SyncSettingsModal'
 import {ReadFile, WriteFile} from '../wailsjs/go/main/App'
 
 function App() {
@@ -12,6 +14,7 @@ function App() {
     const [initialContent, setInitialContent] = useState('')
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+    const [syncSettingsOpen, setSyncSettingsOpen] = useState(false)
 
     async function openFile(path: string) {
         try {
@@ -71,52 +74,56 @@ function App() {
     }
 
     return (
-        <div className="flex h-full bg-neutral-900 text-neutral-100">
-            <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-800 p-2">
-                {vault.tree && (
-                    <FileTree
-                        root={vault.tree}
-                        selectedPath={selectedPath}
-                        onSelectFile={openFile}
-                        onCreateFile={(parent) => {
-                            const name = window.prompt('Tên ghi chú mới:')
-                            if (name) vault.createFile(parent, name)
-                        }}
-                        onCreateFolder={(parent) => {
-                            const name = window.prompt('Tên thư mục mới:')
-                            if (name) vault.createFolder(parent, name)
-                        }}
-                        onRename={(path) => {
-                            const name = window.prompt('Tên mới:', path.split('/').pop())
-                            if (name) vault.rename(path, name)
-                        }}
-                        onDelete={(path) => {
-                            if (window.confirm(`Chuyển "${path}" vào thùng rác?`)) vault.remove(path)
-                        }}
-                        onMove={vault.move}
-                    />
-                )}
-            </aside>
-            <main className="flex-1 overflow-hidden p-4">
-                {selectedPath ? (
-                    <Editor
-                        key={selectedPath}
-                        path={selectedPath}
-                        initialContent={initialContent}
-                        onChange={(markdown) => WriteFile(selectedPath, markdown)}
-                    />
-                ) : (
-                    <div className="flex h-full items-center justify-center text-neutral-500">
-                        Chọn một ghi chú để bắt đầu
-                    </div>
-                )}
-            </main>
+        <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
+            <div className="flex min-h-0 flex-1">
+                <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-800 p-2">
+                    {vault.tree && (
+                        <FileTree
+                            root={vault.tree}
+                            selectedPath={selectedPath}
+                            onSelectFile={openFile}
+                            onCreateFile={(parent) => {
+                                const name = window.prompt('Tên ghi chú mới:')
+                                if (name) vault.createFile(parent, name)
+                            }}
+                            onCreateFolder={(parent) => {
+                                const name = window.prompt('Tên thư mục mới:')
+                                if (name) vault.createFolder(parent, name)
+                            }}
+                            onRename={(path) => {
+                                const name = window.prompt('Tên mới:', path.split('/').pop())
+                                if (name) vault.rename(path, name)
+                            }}
+                            onDelete={(path) => {
+                                if (window.confirm(`Chuyển "${path}" vào thùng rác?`)) vault.remove(path)
+                            }}
+                            onMove={vault.move}
+                        />
+                    )}
+                </aside>
+                <main className="flex-1 overflow-hidden p-4">
+                    {selectedPath ? (
+                        <Editor
+                            key={selectedPath}
+                            path={selectedPath}
+                            initialContent={initialContent}
+                            onChange={(markdown) => WriteFile(selectedPath, markdown)}
+                        />
+                    ) : (
+                        <div className="flex h-full items-center justify-center text-neutral-500">
+                            Chọn một ghi chú để bắt đầu
+                        </div>
+                    )}
+                </main>
+            </div>
+            <SyncStatusBar onOpenSettings={() => setSyncSettingsOpen(true)} />
             {quickSwitcherOpen && (
                 <QuickSwitcher onOpen={openFile} onClose={() => setQuickSwitcherOpen(false)} />
             )}
             {globalSearchOpen && (
                 <GlobalSearch onOpen={openFile} onClose={() => setGlobalSearchOpen(false)} />
             )}
+            {syncSettingsOpen && <SyncSettingsModal onClose={() => setSyncSettingsOpen(false)} />}
         </div>
     )
 }

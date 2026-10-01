@@ -1,3 +1,45 @@
+export namespace gitsync {
+	
+	export class Status {
+	    state: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Status(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.message = source["message"];
+	    }
+	}
+
+}
+
+export namespace main {
+	
+	export class SyncSettings {
+	    repoURL: string;
+	    branch: string;
+	    authMethod: string;
+	    hasPAT: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repoURL = source["repoURL"];
+	        this.branch = source["branch"];
+	        this.authMethod = source["authMethod"];
+	        this.hasPAT = source["hasPAT"];
+	    }
+	}
+
+}
+
 export namespace search {
 	
 	export class Result {

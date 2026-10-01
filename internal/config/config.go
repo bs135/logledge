@@ -13,6 +13,12 @@ import (
 type Config struct {
 	// VaultPath là đường dẫn tuyệt đối tới thư mục gốc Vault do người dùng chọn.
 	VaultPath string `json:"vaultPath"`
+
+	// Các trường cấu hình đồng bộ GitHub (Phase 4). Personal Access Token
+	// KHÔNG được lưu ở đây — nó được lưu riêng trong OS Keychain qua go-keyring.
+	GitRepoURL    string `json:"gitRepoUrl,omitempty"`
+	GitBranch     string `json:"gitBranch,omitempty"`
+	GitAuthMethod string `json:"gitAuthMethod,omitempty"` // "none" | "pat" | "ssh"
 }
 
 // path trả về đường dẫn tới file config.json trên đĩa.
