@@ -56,14 +56,17 @@ jobs:
           - name: windows-amd64
             target: windows/amd64
             os: windows-latest
+            output_file: logledge.exe
             build_args: -nsis -webview2 download
           - name: darwin-universal
             target: darwin/universal
             os: macos-latest
+            output_file: logledge
             build_args: ""
           - name: linux-amd64
             target: linux/amd64
             os: ubuntu-latest
+            output_file: logledge
             build_args: -tags webkit2_41
     steps:
       - name: Checkout repository
@@ -100,13 +103,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
+      - name: Install NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v makensis &> /dev/null; then
+            echo "Installing NSIS via Chocolatey..."
+            choco install nsis -y --no-progress
+            echo "C:\Program Files (x86)\NSIS" >> $GITHUB_PATH
+            echo "C:\Program Files\NSIS" >> $GITHUB_PATH
+          fi
+
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
       - name: Build Wails App
         shell: bash
         run: |
-          wails build -platform ${{ matrix.platform.target }} -trimpath -o logledge ${{ matrix.platform.build_args }}
+          wails build -platform ${{ matrix.platform.target }} -trimpath -o ${{ matrix.platform.output_file }} ${{ matrix.platform.build_args }}
 
       - name: Archive macOS app bundle
         if: runner.os == 'macOS'
