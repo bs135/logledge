@@ -9,5 +9,12 @@
   "author": {
     "name": "bs",
     "email": "thanhhai135@gmail.com"
+  },
+  "info": {
+    "companyName": "Logledge",
+    "productName": "Logledge",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright 2026 Logledge",
+    "comments": "Modern markdown note-taking app"
   }
 }

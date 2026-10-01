@@ -1,0 +1,100 @@
+name: Manual Test Build
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-check:
+    name: Fail-Fast Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Go build
+        run: go build ./...
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test -v ./...
+
+  build-matrix:
+    name: Build (${{ matrix.platform.name }})
+    needs: [pre-check]
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: windows-amd64
+            target: windows/amd64
+            os: windows-latest
+          - name: darwin-universal
+            target: darwin/universal
+            os: macos-latest
+          - name: linux-amd64
+            target: linux/amd64
+            os: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute artifact metadata
+        shell: bash
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          SAFE_BRANCH=$(echo "${GITHUB_REF_NAME}" | sed 's|/|-|g' | tr -cd '[:alnum:]-_')
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
+          echo "SAFE_BRANCH=${SAFE_BRANCH}" >> $GITHUB_ENV
+
+      - name: Build Wails App
+        uses: dAppServer/wails-build-action@v3
+        with:
+          build-name: logledge
+          build-platform: ${{ matrix.platform.target }}
+          go-version: "1.25"
+          node-version: "24.x"
+          package: "false"
+        env:
+          WAILS_NSIS: "true"
+
+      - name: Archive macOS app bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd build/bin
+          zip -r -y "logledge-${{ matrix.platform.name }}.zip" logledge.app
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logledge-${{ matrix.platform.name }}-${{ env.SAFE_BRANCH }}-${{ env.SHORT_SHA }}
+          path: build/bin/*
+          retention-days: 14
