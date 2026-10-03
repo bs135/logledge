@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/bs135/logledge/compare/v0.1.2...v0.1.3) (2026-10-03)
+
+
+### Bug Fixes
+
+* display dynamic app version in UI and update release-please config ([ffa6f0b](https://github.com/bs135/logledge/commit/ffa6f0b95a69d6f4eb73629b918bf6d98f165e86))
+* display dynamic application version across settings and help modals ([e4c9732](https://github.com/bs135/logledge/commit/e4c9732ff0d126936f9219bcad5f9fd3c53d9482))
+
 ## [0.1.2](https://github.com/bs135/logledge/compare/v0.1.1...v0.1.2) (2026-10-03)
 
 
