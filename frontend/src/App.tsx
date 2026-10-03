@@ -10,7 +10,9 @@ import {GlobalSearch} from './components/GlobalSearch'
 import {SyncStatusBar} from './components/SyncStatusBar'
 import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
-import {ReadFile, WriteFile} from '../wailsjs/go/main/App'
+import {VaultModal} from './components/VaultModal'
+import {DetectVaultInfo, PickVaultFolder, ReadFile, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
+import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 import {FilePlus, FolderPlus} from 'lucide-react'
 
@@ -29,8 +31,29 @@ function App() {
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settingsTab, setSettingsTab] = useState<'general' | 'appearance' | 'sync' | 'about'>('general')
+    const [settingsTab, setSettingsTab] = useState<'general' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
+    const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+
+    async function handleOpenVaultFolder() {
+        try {
+            const chosen = await PickVaultFolder()
+            if (!chosen) return
+            const detected = await DetectVaultInfo(chosen)
+            setAddingVault(detected)
+        } catch (err) {
+            alert(String(err))
+        }
+    }
+
+    async function handleSaveNewVault(entry: config.VaultEntry, pat?: string) {
+        if (pat && entry.gitAuthMethod === 'pat') {
+            await SetGitHubPAT(pat)
+        }
+        await SaveVault(entry, true)
+        setAddingVault(null)
+        handleVaultSwitched(entry.path)
+    }
 
     const toggleTheme = () => {
         if (theme === 'dark') {
@@ -183,7 +206,7 @@ function App() {
                     <p className="text-neutral-500 dark:text-neutral-400">{t('selectVaultPrompt')}</p>
                     <button
                         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-                        onClick={vault.selectFolder}
+                        onClick={handleOpenVaultFolder}
                     >
                         {t('selectVaultBtn')}
                     </button>
@@ -198,6 +221,15 @@ function App() {
                         onSetTheme={setTheme}
                         onSwitchVault={handleVaultSwitched}
                         onClose={() => setSettingsOpen(false)}
+                    />
+                )}
+                {addingVault && (
+                    <VaultModal
+                        isOpen={true}
+                        mode="create"
+                        initialVault={addingVault}
+                        onSave={handleSaveNewVault}
+                        onClose={() => setAddingVault(null)}
                     />
                 )}
             </div>
@@ -374,7 +406,7 @@ function App() {
                 </main>
             </div>
             <SyncStatusBar onOpenSettings={() => {
-                setSettingsTab('sync')
+                setSettingsTab('vaults')
                 setSettingsOpen(true)
             }} />
             {quickSwitcherOpen && (
@@ -394,6 +426,15 @@ function App() {
                 />
             )}
             {quickHelpOpen && <QuickHelpModal onClose={() => setQuickHelpOpen(false)} />}
+            {addingVault && (
+                <VaultModal
+                    isOpen={true}
+                    mode="create"
+                    initialVault={addingVault}
+                    onSave={handleSaveNewVault}
+                    onClose={() => setAddingVault(null)}
+                />
+            )}
         </div>
     )
 }

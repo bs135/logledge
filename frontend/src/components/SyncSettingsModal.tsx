@@ -45,10 +45,9 @@ export function SyncSettingsModal({onClose}: SyncSettingsModalProps) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div
                 className="w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-800 p-5 shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
             >
                 <h2 className="mb-4 text-lg font-semibold text-neutral-100">Cấu hình đồng bộ GitHub</h2>
 

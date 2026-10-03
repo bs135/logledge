@@ -1,12 +1,13 @@
 import {useEffect, useRef, useState} from 'react'
 import {
+    EventsOn,
     Quit,
     WindowHide,
     WindowIsMaximised,
     WindowMinimise,
     WindowToggleMaximise,
 } from '../../wailsjs/runtime/runtime'
-import {GetVaultList, SelectVaultFolder, SwitchVault} from '../../wailsjs/go/main/App'
+import {DetectVaultInfo, GetVaultList, PickVaultFolder, SaveVault, SetGitHubPAT, SwitchVault} from '../../wailsjs/go/main/App'
 import {config} from '../../wailsjs/go/models'
 import {useI18n} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
@@ -26,6 +27,7 @@ import {
     Copy,
     X,
 } from 'lucide-react'
+import {VaultModal} from './VaultModal'
 
 interface TitleBarProps {
     vaultPath: string | null
@@ -56,6 +58,7 @@ export function TitleBar({
     const [isMaximised, setIsMaximised] = useState(false)
     const [vaultDropdownOpen, setVaultDropdownOpen] = useState(false)
     const [vaults, setVaults] = useState<config.VaultEntry[]>([])
+    const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -74,6 +77,15 @@ export function TitleBar({
     }, [])
 
     useEffect(() => {
+        function reloadVaults() {
+            GetVaultList().then((list) => setVaults(list || []))
+        }
+        reloadVaults()
+        const off = EventsOn('vault:changed', reloadVaults)
+        return off
+    }, [vaultPath])
+
+    useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setVaultDropdownOpen(false)
@@ -86,7 +98,8 @@ export function TitleBar({
         }
     }, [vaultDropdownOpen])
 
-    const vaultName = vaultPath ? vaultPath.split(/[/\\]/).filter(Boolean).pop() : null
+    const activeVault = vaults.find((v) => v.path === vaultPath)
+    const vaultDisplayName = activeVault?.name || (vaultPath ? vaultPath.split(/[/\\]/).filter(Boolean).pop() : null)
     const noteName = selectedPath ? selectedPath.split('/').pop()?.replace(/\.md$/, '') : null
 
     async function handleSwitch(targetPath: string) {
@@ -103,13 +116,22 @@ export function TitleBar({
     async function handleOpenNewVault() {
         setVaultDropdownOpen(false)
         try {
-            const chosen = await SelectVaultFolder()
-            if (chosen) {
-                onVaultSwitched?.(chosen)
-            }
-        } catch {
-            // ignore
+            const chosen = await PickVaultFolder()
+            if (!chosen) return
+            const detected = await DetectVaultInfo(chosen)
+            setAddingVault(detected)
+        } catch (err) {
+            alert(String(err))
         }
+    }
+
+    async function handleSaveNewVault(entry: config.VaultEntry, pat?: string) {
+        if (pat && entry.gitAuthMethod === 'pat') {
+            await SetGitHubPAT(pat)
+        }
+        await SaveVault(entry, true)
+        setAddingVault(null)
+        onVaultSwitched?.(entry.path)
     }
 
     return (
@@ -131,7 +153,7 @@ export function TitleBar({
                     <PanelLeft className="h-4 w-4" />
                 </button>
 
-                {vaultName && (
+                {vaultDisplayName && (
                     <div className="relative flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500" ref={dropdownRef}>
                         <span>/</span>
                         <button
@@ -139,7 +161,7 @@ export function TitleBar({
                             className="flex items-center gap-1 rounded px-1.5 py-0.5 text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                             title={vaultPath ?? ''}
                         >
-                            <span className="max-w-[140px] truncate font-medium">{vaultName}</span>
+                            <span className="max-w-[140px] truncate font-medium">{vaultDisplayName}</span>
                             <ChevronDown className="h-3 w-3 opacity-70" />
                         </button>
 
@@ -152,6 +174,7 @@ export function TitleBar({
                                 <div className="max-h-48 overflow-y-auto space-y-0.5 my-1">
                                     {vaults.map((v) => {
                                         const isCurrent = v.path === vaultPath
+                                        const displayName = v.name || v.path.split(/[/\\]/).filter(Boolean).pop()
                                         return (
                                             <button
                                                 key={v.path}
@@ -163,7 +186,7 @@ export function TitleBar({
                                                 }`}
                                             >
                                                 <div className="min-w-0 pr-2">
-                                                    <div className="truncate font-medium">{v.name}</div>
+                                                    <div className="truncate font-medium">{displayName}</div>
                                                     <div className="truncate text-[10px] text-neutral-400 dark:text-neutral-500 opacity-80" title={v.path}>
                                                         {v.path}
                                                     </div>
@@ -294,6 +317,16 @@ export function TitleBar({
                     <X className="h-3.5 w-3.5" />
                 </button>
             </div>
+
+            {addingVault && (
+                <VaultModal
+                    isOpen={true}
+                    mode="create"
+                    initialVault={addingVault}
+                    onSave={handleSaveNewVault}
+                    onClose={() => setAddingVault(null)}
+                />
+            )}
         </header>
     )
 }

@@ -18,6 +18,10 @@ export function DeleteEntry(arg1) {
   return window['go']['main']['App']['DeleteEntry'](arg1);
 }
 
+export function DetectVaultInfo(arg1) {
+  return window['go']['main']['App']['DetectVaultInfo'](arg1);
+}
+
 export function GetAppSettings() {
   return window['go']['main']['App']['GetAppSettings']();
 }
@@ -50,6 +54,10 @@ export function MoveEntry(arg1, arg2) {
   return window['go']['main']['App']['MoveEntry'](arg1, arg2);
 }
 
+export function PickVaultFolder() {
+  return window['go']['main']['App']['PickVaultFolder']();
+}
+
 export function QuickSwitch(arg1) {
   return window['go']['main']['App']['QuickSwitch'](arg1);
 }
@@ -72,6 +80,10 @@ export function SaveAppSettings(arg1, arg2) {
 
 export function SaveAttachment(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveAttachment'](arg1, arg2, arg3);
+}
+
+export function SaveVault(arg1, arg2) {
+  return window['go']['main']['App']['SaveVault'](arg1, arg2);
 }
 
 export function SearchNotes(arg1) {

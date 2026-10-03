@@ -14,6 +14,8 @@ export function CreateFolder(arg1:string,arg2:string):Promise<string>;
 
 export function DeleteEntry(arg1:string):Promise<void>;
 
+export function DetectVaultInfo(arg1:string):Promise<config.VaultEntry>;
+
 export function GetAppSettings():Promise<config.Config>;
 
 export function GetLanguage():Promise<string>;
@@ -30,6 +32,8 @@ export function InitVault():Promise<string>;
 
 export function MoveEntry(arg1:string,arg2:string):Promise<string>;
 
+export function PickVaultFolder():Promise<string>;
+
 export function QuickSwitch(arg1:string):Promise<Array<string>>;
 
 export function ReadFile(arg1:string):Promise<string>;
@@ -41,6 +45,8 @@ export function RenameEntry(arg1:string,arg2:string):Promise<string>;
 export function SaveAppSettings(arg1:string,arg2:string):Promise<void>;
 
 export function SaveAttachment(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SaveVault(arg1:config.VaultEntry,arg2:boolean):Promise<void>;
 
 export function SearchNotes(arg1:string):Promise<Array<search.Result>>;
 

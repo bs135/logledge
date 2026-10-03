@@ -10,8 +10,11 @@ import (
 )
 
 type VaultEntry struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
+	Path          string `json:"path"`
+	Name          string `json:"name"`
+	GitRepoURL    string `json:"gitRepoUrl,omitempty"`
+	GitBranch     string `json:"gitBranch,omitempty"`
+	GitAuthMethod string `json:"gitAuthMethod,omitempty"` // "none" | "pat" | "ssh"
 }
 
 // Config represents the application settings persisted across sessions.

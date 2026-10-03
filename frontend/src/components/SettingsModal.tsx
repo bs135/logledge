@@ -1,12 +1,11 @@
 import {useEffect, useState} from 'react'
 import {
-    ConfigureSync,
-    GetAppSettings,
-    GetSyncSettings,
+    DetectVaultInfo,
     GetVaultList,
+    PickVaultFolder,
     RemoveVault,
     SaveAppSettings,
-    SelectVaultFolder,
+    SaveVault,
     SetGitHubPAT,
     SwitchVault,
     SyncNow,
@@ -21,15 +20,18 @@ import {
     X,
     Home,
     Palette,
-    RefreshCw,
     Info,
     Trash2,
     Plus,
     FolderGit2,
+    Pencil,
+    RefreshCw,
+    GitBranch,
 } from 'lucide-react'
+import {VaultModal} from './VaultModal'
 
 interface SettingsModalProps {
-    initialTab?: 'general' | 'appearance' | 'sync' | 'about'
+    initialTab?: 'general' | 'vaults' | 'appearance' | 'about'
     currentVaultPath: string | null
     currentTheme: ThemeMode
     onSetTheme: (theme: ThemeMode) => void
@@ -46,19 +48,16 @@ export function SettingsModal({
     onClose,
 }: SettingsModalProps) {
     const {lang, setLanguage, t} = useI18n()
-    const [tab, setTab] = useState<'general' | 'appearance' | 'sync' | 'about'>(initialTab)
+    const [tab, setTab] = useState<'general' | 'vaults' | 'appearance' | 'about'>(initialTab)
 
     // Multi-Vault state
     const [vaults, setVaults] = useState<config.VaultEntry[]>([])
     const [vaultLoading, setVaultLoading] = useState(false)
-
-    // Git Sync state
-    const [repoURL, setRepoURL] = useState('')
-    const [branch, setBranch] = useState('main')
-    const [authMethod, setAuthMethod] = useState<'none' | 'pat' | 'ssh'>('pat')
-    const [pat, setPat] = useState('')
-    const [hasPAT, setHasPAT] = useState(false)
-    const [syncSaving, setSyncSaving] = useState(false)
+    const [editingVault, setEditingVault] = useState<{
+        mode: 'create' | 'edit'
+        vault: config.VaultEntry
+    } | null>(null)
+    const [syncingActive, setSyncingActive] = useState(false)
     const [syncMsg, setSyncMsg] = useState<{type: 'success' | 'error'; text: string} | null>(null)
 
     // Load vaults list
@@ -70,27 +69,49 @@ export function SettingsModal({
 
     useEffect(() => {
         refreshVaults()
-        GetSyncSettings().then((s) => {
-            setRepoURL(s.repoURL || '')
-            setBranch(s.branch || 'main')
-            if (s.authMethod === 'pat' || s.authMethod === 'ssh' || s.authMethod === 'none') {
-                setAuthMethod(s.authMethod)
-            }
-            setHasPAT(s.hasPAT)
-        })
     }, [])
 
     async function handleAddVault() {
         try {
             setVaultLoading(true)
-            const chosen = await SelectVaultFolder()
-            if (chosen) {
-                onSwitchVault(chosen)
-                refreshVaults()
-            }
+            const chosen = await PickVaultFolder()
+            if (!chosen) return
+            const detected = await DetectVaultInfo(chosen)
+            setEditingVault({
+                mode: 'create',
+                vault: detected,
+            })
+        } catch (err) {
+            alert(String(err))
         } finally {
             setVaultLoading(false)
         }
+    }
+
+    function handleEditVault(v: config.VaultEntry) {
+        setEditingVault({
+            mode: 'edit',
+            vault: new config.VaultEntry({
+                path: v.path,
+                name: v.name,
+                gitRepoUrl: v.gitRepoUrl,
+                gitBranch: v.gitBranch,
+                gitAuthMethod: v.gitAuthMethod,
+            }),
+        })
+    }
+
+    async function handleSaveVaultModal(entry: config.VaultEntry, pat?: string) {
+        if (pat && entry.gitAuthMethod === 'pat') {
+            await SetGitHubPAT(pat)
+        }
+        const isCreate = editingVault?.mode === 'create'
+        await SaveVault(entry, isCreate)
+        if (isCreate) {
+            onSwitchVault(entry.path)
+        }
+        setEditingVault(null)
+        refreshVaults()
     }
 
     async function handleSwitchVault(targetPath: string) {
@@ -110,32 +131,19 @@ export function SettingsModal({
         refreshVaults()
     }
 
-    async function handleSaveSync() {
-        setSyncSaving(true)
-        setSyncMsg(null)
-        try {
-            if (authMethod === 'pat' && pat.trim()) {
-                await SetGitHubPAT(pat.trim())
-            }
-            await ConfigureSync(repoURL.trim(), branch.trim() || 'main', authMethod)
-            setSyncMsg({type: 'success', text: lang === 'vi' ? 'Đã lưu cấu hình đồng bộ thành công!' : 'Sync settings saved successfully!'})
-        } catch (err) {
-            setSyncMsg({type: 'error', text: String(err)})
-        } finally {
-            setSyncSaving(false)
-        }
-    }
-
     async function handleSyncNow() {
-        setSyncSaving(true)
+        setSyncingActive(true)
         setSyncMsg(null)
         try {
             await SyncNow()
-            setSyncMsg({type: 'success', text: lang === 'vi' ? 'Đã kích hoạt đồng bộ Git!' : 'Git sync triggered!'})
+            setSyncMsg({
+                type: 'success',
+                text: lang === 'vi' ? 'Đã kích hoạt đồng bộ Git!' : 'Git sync triggered!',
+            })
         } catch (err) {
             setSyncMsg({type: 'error', text: String(err)})
         } finally {
-            setSyncSaving(false)
+            setSyncingActive(false)
         }
     }
 
@@ -145,10 +153,9 @@ export function SettingsModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div
                 className="flex h-[560px] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-2xl text-neutral-800 dark:text-neutral-100"
-                onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className="flex h-12 shrink-0 items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-5">
@@ -180,6 +187,17 @@ export function SettingsModal({
                             <span>{t('generalTab')}</span>
                         </button>
                         <button
+                            onClick={() => setTab('vaults')}
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-left transition-colors ${
+                                tab === 'vaults'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
+                            }`}
+                        >
+                            <FolderGit2 className="h-4 w-4 shrink-0" />
+                            <span>{t('vaultsTab')}</span>
+                        </button>
+                        <button
                             onClick={() => setTab('appearance')}
                             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-left transition-colors ${
                                 tab === 'appearance'
@@ -189,17 +207,6 @@ export function SettingsModal({
                         >
                             <Palette className="h-4 w-4 shrink-0" />
                             <span>{t('appearanceTab')}</span>
-                        </button>
-                        <button
-                            onClick={() => setTab('sync')}
-                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-left transition-colors ${
-                                tab === 'sync'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
-                            }`}
-                        >
-                            <RefreshCw className="h-4 w-4 shrink-0" />
-                            <span>{t('syncTab')}</span>
                         </button>
                         <button
                             onClick={() => setTab('about')}
@@ -216,80 +223,16 @@ export function SettingsModal({
 
                     {/* Content area */}
                     <div className="flex-1 overflow-y-auto p-5 text-sm">
-                        {/* TAB 1: GENERAL */}
+                        {/* TAB 1: GENERAL (Language only) */}
                         {tab === 'general' && (
-                            <div className="space-y-6">
-                                {/* Multi-Vault Management */}
+                            <div className="space-y-4">
                                 <div>
-                                    <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('vaultsSection')}</h3>
+                                    <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('language')}</h3>
                                     <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
                                         {lang === 'vi'
-                                            ? 'Danh sách các kho ghi chú (Vault) đã mở trên máy. Bạn có thể chuyển nhanh giữa các kho.'
-                                            : 'List of vaults opened on this machine. You can quickly switch between them.'}
+                                            ? 'Chọn ngôn ngữ giao diện hiển thị cho ứng dụng.'
+                                            : 'Choose the interface display language for the application.'}
                                     </p>
-
-                                    <div className="space-y-2 mb-3">
-                                        {vaults.map((v) => {
-                                            const isActive = v.path === currentVaultPath
-                                            return (
-                                                <div
-                                                    key={v.path}
-                                                    className={`flex items-center justify-between rounded-lg border p-3 ${
-                                                        isActive
-                                                            ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/20'
-                                                            : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/40'
-                                                    }`}
-                                                >
-                                                    <div className="min-w-0 pr-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-medium text-neutral-900 dark:text-neutral-100">{v.name}</span>
-                                                            {isActive && (
-                                                                <span className="rounded bg-blue-100 dark:bg-blue-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400">
-                                                                    {lang === 'vi' ? 'Đang mở' : 'Active'}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div className="truncate text-xs text-neutral-500 dark:text-neutral-400" title={v.path}>
-                                                            {v.path}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        {!isActive && (
-                                                            <>
-                                                                <button
-                                                                    disabled={vaultLoading}
-                                                                    onClick={() => handleSwitchVault(v.path)}
-                                                                    className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-1 text-xs font-medium transition-colors"
-                                                                >
-                                                                    {t('switchVault')}
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleRemoveVault(v.path)}
-                                                                    title={t('removeVault')}
-                                                                    className="rounded p-1 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-
-                                    <button
-                                        disabled={vaultLoading}
-                                        onClick={handleAddVault}
-                                        className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 dark:hover:border-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
-                                    >
-                                        <Plus className="h-3.5 w-3.5" />
-                                        <span>{t('addVault')}</span>
-                                    </button>
-                                </div>
-
-                                <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4">
-                                    <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('language')}</h3>
                                     <div className="flex gap-3">
                                         <label className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 flex-1 transition-colors ${
                                             lang === 'vi'
@@ -331,7 +274,130 @@ export function SettingsModal({
                             </div>
                         )}
 
-                        {/* TAB 2: APPEARANCE */}
+                        {/* TAB 2: VAULT MANAGEMENT */}
+                        {tab === 'vaults' && (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('vaultsSection')}</h3>
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                                            {lang === 'vi'
+                                                ? 'Quản lý các kho ghi chú và thông tin đồng bộ Git riêng cho từng Vault.'
+                                                : 'Manage note vaults and individual Git synchronization settings for each vault.'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        disabled={vaultLoading}
+                                        onClick={handleAddVault}
+                                        className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shrink-0"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" />
+                                        <span>{t('addVault')}</span>
+                                    </button>
+                                </div>
+
+                                {syncMsg && (
+                                    <div
+                                        className={`rounded-lg p-2.5 text-xs ${
+                                            syncMsg.type === 'success'
+                                                ? 'bg-green-100 border border-green-300 text-green-800 dark:bg-green-950/60 dark:border-green-600/40 dark:text-green-300'
+                                                : 'bg-red-100 border border-red-300 text-red-800 dark:bg-red-950/60 dark:border-red-600/40 dark:text-red-300'
+                                        }`}
+                                    >
+                                        {syncMsg.text}
+                                    </div>
+                                )}
+
+                                <div className="space-y-2 pt-1">
+                                    {vaults.map((v) => {
+                                        const isActive = v.path === currentVaultPath
+                                        return (
+                                            <div
+                                                key={v.path}
+                                                className={`flex items-center justify-between rounded-lg border p-3 ${
+                                                    isActive
+                                                        ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/20'
+                                                        : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/40'
+                                                }`}
+                                            >
+                                                <div className="min-w-0 pr-2 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold text-neutral-900 dark:text-neutral-100">{v.name}</span>
+                                                        {isActive && (
+                                                            <span className="rounded bg-blue-100 dark:bg-blue-600/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400">
+                                                                {t('active')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="truncate text-xs text-neutral-500 dark:text-neutral-400 mt-0.5" title={v.path}>
+                                                        {v.path}
+                                                    </div>
+                                                    {v.gitRepoUrl ? (
+                                                        <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-neutral-600 dark:text-neutral-400">
+                                                            <span className="truncate max-w-[280px] font-mono text-[10px] text-neutral-500 dark:text-neutral-400" title={v.gitRepoUrl}>
+                                                                {v.gitRepoUrl}
+                                                            </span>
+                                                            <span className="inline-flex items-center gap-0.5 rounded bg-neutral-200 dark:bg-neutral-700 px-1.5 py-0.5 text-[10px] font-mono">
+                                                                <GitBranch className="h-2.5 w-2.5" />
+                                                                <span>{v.gitBranch || 'main'}</span>
+                                                            </span>
+                                                            <span className="rounded bg-neutral-200 dark:bg-neutral-700 px-1.5 py-0.5 text-[10px] uppercase font-mono">
+                                                                {v.gitAuthMethod || 'none'}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1 italic">
+                                                            {t('noGitConfigured')}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                    {isActive && v.gitRepoUrl && (
+                                                        <button
+                                                            disabled={syncingActive}
+                                                            onClick={handleSyncNow}
+                                                            title={t('syncNow')}
+                                                            className="flex items-center gap-1 rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2 py-1 text-xs font-medium transition-colors"
+                                                        >
+                                                            <RefreshCw className={`h-3 w-3 ${syncingActive ? 'animate-spin' : ''}`} />
+                                                            <span>{t('syncNow')}</span>
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleEditVault(v)}
+                                                        title={t('editVault')}
+                                                        className="rounded p-1.5 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    {!isActive && (
+                                                        <>
+                                                            <button
+                                                                disabled={vaultLoading}
+                                                                onClick={() => handleSwitchVault(v.path)}
+                                                                className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-1 text-xs font-medium transition-colors"
+                                                            >
+                                                                {t('switchVault')}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRemoveVault(v.path)}
+                                                                title={t('removeVault')}
+                                                                className="rounded p-1 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 3: APPEARANCE */}
                         {tab === 'appearance' && (
                             <div className="space-y-4">
                                 <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('theme')}</h3>
@@ -398,88 +464,6 @@ export function SettingsModal({
                             </div>
                         )}
 
-                        {/* TAB 3: GIT SYNC */}
-                        {tab === 'sync' && (
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('syncTab')}</h3>
-
-                                <div>
-                                    <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">GitHub Repository URL</label>
-                                    <input
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950/60 px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 outline-none focus:border-blue-500 transition-colors"
-                                        placeholder="https://github.com/owner/notes-vault.git"
-                                        value={repoURL}
-                                        onChange={(e) => setRepoURL(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">{lang === 'vi' ? 'Nhánh (Branch)' : 'Branch'}</label>
-                                    <input
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950/60 px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 outline-none focus:border-blue-500 transition-colors"
-                                        value={branch}
-                                        onChange={(e) => setBranch(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">{lang === 'vi' ? 'Phương thức xác thực' : 'Authentication Method'}</label>
-                                    <select
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950/60 px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 outline-none focus:border-blue-500 transition-colors"
-                                        value={authMethod}
-                                        onChange={(e) => setAuthMethod(e.target.value as 'none' | 'pat' | 'ssh')}
-                                    >
-                                        <option value="pat">Personal Access Token (HTTPS)</option>
-                                        <option value="ssh">SSH Key (Cấu hình SSH sẵn có của OS)</option>
-                                    </select>
-                                </div>
-
-                                {authMethod === 'pat' && (
-                                    <div>
-                                        <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
-                                            Personal Access Token {hasPAT && <span className="text-green-600 dark:text-green-500">({lang === 'vi' ? 'đã lưu trong OS Keychain' : 'stored in OS Keychain'})</span>}
-                                        </label>
-                                        <input
-                                            type="password"
-                                            className="w-full rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950/60 px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 outline-none focus:border-blue-500 transition-colors"
-                                            placeholder={hasPAT ? (lang === 'vi' ? 'Nhập để thay thế token hiện có…' : 'Enter to replace existing token…') : 'ghp_…'}
-                                            value={pat}
-                                            onChange={(e) => setPat(e.target.value)}
-                                        />
-                                    </div>
-                                )}
-
-                                {syncMsg && (
-                                    <div
-                                        className={`rounded-lg p-2.5 text-xs ${
-                                            syncMsg.type === 'success'
-                                                ? 'bg-green-100 border border-green-300 text-green-800 dark:bg-green-950/60 dark:border-green-600/40 dark:text-green-300'
-                                                : 'bg-red-100 border border-red-300 text-red-800 dark:bg-red-950/60 dark:border-red-600/40 dark:text-red-300'
-                                        }`}
-                                    >
-                                        {syncMsg.text}
-                                    </div>
-                                )}
-
-                                <div className="flex gap-2 pt-2">
-                                    <button
-                                        disabled={syncSaving || !repoURL.trim()}
-                                        onClick={handleSaveSync}
-                                        className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition-colors"
-                                    >
-                                        {syncSaving ? (lang === 'vi' ? 'Đang lưu…' : 'Saving…') : t('save')}
-                                    </button>
-                                    <button
-                                        disabled={syncSaving || !repoURL.trim()}
-                                        onClick={handleSyncNow}
-                                        className="rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-4 py-2 text-xs font-medium transition-colors"
-                                    >
-                                        {lang === 'vi' ? 'Đồng bộ ngay' : 'Sync Now'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
                         {/* TAB 4: ABOUT & HELP */}
                         {tab === 'about' && (
                             <div className="space-y-5">
@@ -487,7 +471,7 @@ export function SettingsModal({
                                     <img src="/icon.svg" alt="Logledge" className="h-10 w-10" />
                                     <div>
                                         <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100">Logledge</h3>
-                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">v0.1.0-alpha • Local-first Modern Desktop Note App</p>
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">v0.1.1 • Local-first Modern Desktop Note App</p>
                                     </div>
                                 </div>
 
@@ -533,6 +517,17 @@ export function SettingsModal({
                     </div>
                 </div>
             </div>
+
+            {/* Sub-modal: Add / Edit Vault */}
+            {editingVault && (
+                <VaultModal
+                    isOpen={true}
+                    mode={editingVault.mode}
+                    initialVault={editingVault.vault}
+                    onSave={handleSaveVaultModal}
+                    onClose={() => setEditingVault(null)}
+                />
+            )}
         </div>
     )
 }

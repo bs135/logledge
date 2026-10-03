@@ -3,6 +3,9 @@ export namespace config {
 	export class VaultEntry {
 	    path: string;
 	    name: string;
+	    gitRepoUrl?: string;
+	    gitBranch?: string;
+	    gitAuthMethod?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new VaultEntry(source);
@@ -12,6 +15,9 @@ export namespace config {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.name = source["name"];
+	        this.gitRepoUrl = source["gitRepoUrl"];
+	        this.gitBranch = source["gitBranch"];
+	        this.gitAuthMethod = source["gitAuthMethod"];
 	    }
 	}
 	export class Config {

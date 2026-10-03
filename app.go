@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,17 +118,49 @@ func (a *App) openVault(path string) error {
 	go a.search.Reindex()
 
 	cfg, _ := config.Load()
-	auth := gitsync.AuthMethod(cfg.GitAuthMethod)
-	if auth == "" {
-		auth = gitsync.AuthNone
+	cfg.VaultPath = path
+	_ = config.Save(cfg)
+
+	var entry *config.VaultEntry
+	for i := range cfg.Vaults {
+		if filepath.Clean(cfg.Vaults[i].Path) == path {
+			entry = &cfg.Vaults[i]
+			break
+		}
 	}
-	if err := a.sync.Configure(path, cfg.GitRepoURL, cfg.GitBranch, auth); err != nil {
+
+	repoURL := ""
+	branch := "main"
+	auth := gitsync.AuthNone
+
+	if entry != nil && entry.GitRepoURL != "" {
+		repoURL = entry.GitRepoURL
+		if entry.GitBranch != "" {
+			branch = entry.GitBranch
+		}
+		if entry.GitAuthMethod != "" {
+			auth = gitsync.AuthMethod(entry.GitAuthMethod)
+		}
+	} else if cfg.GitRepoURL != "" {
+		// Migration fallback from older global config
+		repoURL = cfg.GitRepoURL
+		if cfg.GitBranch != "" {
+			branch = cfg.GitBranch
+		}
+		if cfg.GitAuthMethod != "" {
+			auth = gitsync.AuthMethod(cfg.GitAuthMethod)
+		}
+	}
+
+	if err := a.sync.Configure(path, repoURL, branch, auth); err != nil {
 		// Sync configuration error should not block opening the Vault;
 		// the error status is emitted via sync:status for frontend display.
 	}
 	if a.sync.IsConfigured() {
 		go a.sync.Sync()
 		a.sync.StartPeriodic(syncInterval)
+	} else {
+		a.sync.Stop()
 	}
 	return nil
 }
@@ -144,26 +178,126 @@ func (a *App) InitVault() (string, error) {
 	return cfg.VaultPath, nil
 }
 
-// SelectVaultFolder opens the native OS directory picker, initializes that directory
-// as the active Vault, and persists the selection. Returns "" if cancelled by the user.
-func (a *App) SelectVaultFolder() (string, error) {
+// PickVaultFolder opens the native OS directory picker without opening the vault yet.
+// Returns "" if cancelled by the user.
+func (a *App) PickVaultFolder() (string, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Chọn thư mục làm Vault",
 	})
 	if err != nil || dir == "" {
 		return "", err
 	}
-	if err := a.openVault(dir); err != nil {
+	return filepath.Clean(dir), nil
+}
+
+// DetectVaultInfo inspects a directory and returns a VaultEntry with detected Git info.
+func (a *App) DetectVaultInfo(path string) (config.VaultEntry, error) {
+	path = filepath.Clean(path)
+	name := filepath.Base(path)
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		name = path
+	}
+
+	detected := gitsync.DetectGitInfo(path)
+
+	return config.VaultEntry{
+		Path:          path,
+		Name:          name,
+		GitRepoURL:    detected.RepoURL,
+		GitBranch:     detected.Branch,
+		GitAuthMethod: string(detected.AuthMethod),
+	}, nil
+}
+
+// SaveVault creates or updates a vault configuration in config.json.
+// If makeActive is true, it switches to this vault.
+// If it is the currently active vault, it dynamically reapplies sync settings.
+func (a *App) SaveVault(entry config.VaultEntry, makeActive bool) error {
+	entry.Path = filepath.Clean(entry.Path)
+	if entry.Name == "" {
+		entry.Name = filepath.Base(entry.Path)
+		if entry.Name == "" || entry.Name == "." || entry.Name == string(filepath.Separator) {
+			entry.Name = entry.Path
+		}
+	}
+	if entry.GitBranch == "" {
+		entry.GitBranch = "main"
+	}
+	if entry.GitAuthMethod == "" {
+		if entry.GitRepoURL != "" {
+			if strings.HasPrefix(entry.GitRepoURL, "git@") || strings.HasPrefix(entry.GitRepoURL, "ssh://") {
+				entry.GitAuthMethod = string(gitsync.AuthSSH)
+			} else {
+				entry.GitAuthMethod = string(gitsync.AuthPAT)
+			}
+		} else {
+			entry.GitAuthMethod = string(gitsync.AuthNone)
+		}
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Config{}
+	}
+
+	found := false
+	for i := range cfg.Vaults {
+		if filepath.Clean(cfg.Vaults[i].Path) == entry.Path {
+			cfg.Vaults[i] = entry
+			found = true
+			break
+		}
+	}
+	if !found {
+		cfg.Vaults = append(cfg.Vaults, entry)
+	}
+
+	if makeActive {
+		cfg.VaultPath = entry.Path
+	}
+
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+
+	if makeActive {
+		if err := a.openVault(entry.Path); err != nil {
+			return err
+		}
+		a.emitVaultChanged()
+	} else if a.vault.Root() != "" && filepath.Clean(a.vault.Root()) == entry.Path {
+		auth := gitsync.AuthMethod(entry.GitAuthMethod)
+		if err := a.sync.Configure(entry.Path, entry.GitRepoURL, entry.GitBranch, auth); err != nil {
+			// error status emitted via sync:status
+		}
+		if a.sync.IsConfigured() {
+			go a.sync.Sync()
+			a.sync.StartPeriodic(syncInterval)
+		} else {
+			a.sync.Stop()
+		}
+		a.emitVaultChanged()
+	}
+
+	return nil
+}
+
+// SelectVaultFolder opens the native OS directory picker, initializes that directory
+// as the active Vault, and persists the selection. Returns "" if cancelled by the user.
+func (a *App) SelectVaultFolder() (string, error) {
+	dir, err := a.PickVaultFolder()
+	if err != nil || dir == "" {
 		return "", err
 	}
-	if err := a.ensureVaultInConfig(dir); err != nil {
+	detected, _ := a.DetectVaultInfo(dir)
+	if err := a.SaveVault(detected, true); err != nil {
 		return "", err
 	}
-	a.emitVaultChanged()
 	return dir, nil
 }
 
 func (a *App) ensureVaultInConfig(dir string) error {
+	dir = filepath.Clean(dir)
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = config.Config{}
@@ -171,7 +305,7 @@ func (a *App) ensureVaultInConfig(dir string) error {
 	cfg.VaultPath = dir
 	found := false
 	for _, v := range cfg.Vaults {
-		if filepath.Clean(v.Path) == filepath.Clean(dir) {
+		if filepath.Clean(v.Path) == dir {
 			found = true
 			break
 		}
@@ -181,9 +315,13 @@ func (a *App) ensureVaultInConfig(dir string) error {
 		if name == "" || name == "." || name == string(filepath.Separator) {
 			name = dir
 		}
+		detected := gitsync.DetectGitInfo(dir)
 		cfg.Vaults = append(cfg.Vaults, config.VaultEntry{
-			Path: dir,
-			Name: name,
+			Path:          dir,
+			Name:          name,
+			GitRepoURL:    detected.RepoURL,
+			GitBranch:     detected.Branch,
+			GitAuthMethod: string(detected.AuthMethod),
 		})
 	}
 	return config.Save(cfg)
@@ -331,20 +469,44 @@ type SyncSettings struct {
 	HasPAT     bool   `json:"hasPAT"`
 }
 
-// GetSyncSettings returns the current sync settings (loaded from config.json).
+// GetSyncSettings returns the current sync settings (loaded from active vault in config.json).
 func (a *App) GetSyncSettings() (SyncSettings, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return SyncSettings{}, err
 	}
-	_, hasPAT, _ := gitsync.GetPAT()
-	auth := cfg.GitAuthMethod
-	if auth == "" {
-		auth = string(gitsync.AuthNone)
+	root := a.vault.Root()
+	var entry *config.VaultEntry
+	for i := range cfg.Vaults {
+		if filepath.Clean(cfg.Vaults[i].Path) == filepath.Clean(root) {
+			entry = &cfg.Vaults[i]
+			break
+		}
 	}
+	repoURL := ""
+	branch := "main"
+	auth := string(gitsync.AuthNone)
+	if entry != nil {
+		repoURL = entry.GitRepoURL
+		if entry.GitBranch != "" {
+			branch = entry.GitBranch
+		}
+		if entry.GitAuthMethod != "" {
+			auth = entry.GitAuthMethod
+		}
+	} else {
+		repoURL = cfg.GitRepoURL
+		if cfg.GitBranch != "" {
+			branch = cfg.GitBranch
+		}
+		if cfg.GitAuthMethod != "" {
+			auth = cfg.GitAuthMethod
+		}
+	}
+	_, hasPAT, _ := gitsync.GetPAT()
 	return SyncSettings{
-		RepoURL:    cfg.GitRepoURL,
-		Branch:     cfg.GitBranch,
+		RepoURL:    repoURL,
+		Branch:     branch,
 		AuthMethod: auth,
 		HasPAT:     hasPAT,
 	}, nil
@@ -353,21 +515,26 @@ func (a *App) GetSyncSettings() (SyncSettings, error) {
 // ConfigureSync saves GitHub sync settings, applies them to the active Vault
 // (running git init/remote if needed), and starts periodic synchronization.
 func (a *App) ConfigureSync(repoURL, branch, authMethod string) error {
+	root := a.vault.Root()
+	if root == "" {
+		return errors.New("no active vault")
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	cfg.GitRepoURL = repoURL
-	cfg.GitBranch = branch
-	cfg.GitAuthMethod = authMethod
+	for i := range cfg.Vaults {
+		if filepath.Clean(cfg.Vaults[i].Path) == filepath.Clean(root) {
+			cfg.Vaults[i].GitRepoURL = repoURL
+			cfg.Vaults[i].GitBranch = branch
+			cfg.Vaults[i].GitAuthMethod = authMethod
+			break
+		}
+	}
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
 
-	root := a.vault.Root()
-	if root == "" {
-		return nil // No Vault opened yet; settings will take effect when a Vault is opened
-	}
 	if err := a.sync.Configure(root, repoURL, branch, gitsync.AuthMethod(authMethod)); err != nil {
 		return err
 	}
