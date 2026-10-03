@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -9,6 +10,7 @@ import (
 	"logledge/internal/config"
 	"logledge/internal/gitsync"
 	"logledge/internal/search"
+	"logledge/internal/tray"
 	"logledge/internal/vault"
 )
 
@@ -25,10 +27,11 @@ const syncInterval = 5 * time.Minute
 
 // App struct
 type App struct {
-	ctx    context.Context
-	vault  *vault.Service
-	search *search.Service
-	sync   *gitsync.Service
+	ctx         context.Context
+	vault       *vault.Service
+	search      *search.Service
+	sync        *gitsync.Service
+	trayCleanup func()
 }
 
 // NewApp creates a new App application struct
@@ -45,12 +48,16 @@ func NewApp() *App {
 // cold-start; frontend triggers InitVault() after mounting.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.trayCleanup = tray.Start(ctx, a)
 }
 
 // shutdown is invoked by main.go (via OnShutdown) before the app closes:
 // attempts a final synchronization with a timeout to avoid hanging app exit
 // on slow or severed network connections.
 func (a *App) shutdown(ctx context.Context) {
+	if a.trayCleanup != nil {
+		a.trayCleanup()
+	}
 	a.sync.Stop()
 	if !a.sync.IsConfigured() {
 		return
@@ -134,10 +141,89 @@ func (a *App) SelectVaultFolder() (string, error) {
 	if err := a.openVault(dir); err != nil {
 		return "", err
 	}
-	if err := config.Save(config.Config{VaultPath: dir}); err != nil {
+	if err := a.ensureVaultInConfig(dir); err != nil {
 		return "", err
 	}
 	return dir, nil
+}
+
+func (a *App) ensureVaultInConfig(dir string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Config{}
+	}
+	cfg.VaultPath = dir
+	found := false
+	for _, v := range cfg.Vaults {
+		if filepath.Clean(v.Path) == filepath.Clean(dir) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		name := filepath.Base(dir)
+		if name == "" || name == "." || name == string(filepath.Separator) {
+			name = dir
+		}
+		cfg.Vaults = append(cfg.Vaults, config.VaultEntry{
+			Path: dir,
+			Name: name,
+		})
+	}
+	return config.Save(cfg)
+}
+
+// GetVaultList returns the registered vaults and the currently active one.
+func (a *App) GetVaultList() ([]config.VaultEntry, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	return cfg.Vaults, nil
+}
+
+// SwitchVault switches the active vault to targetPath.
+func (a *App) SwitchVault(targetPath string) error {
+	if err := a.openVault(targetPath); err != nil {
+		return err
+	}
+	if err := a.ensureVaultInConfig(targetPath); err != nil {
+		return err
+	}
+	a.emitVaultChanged()
+	return nil
+}
+
+// RemoveVault removes a vault from the registered vaults list.
+func (a *App) RemoveVault(targetPath string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	var updated []config.VaultEntry
+	for _, v := range cfg.Vaults {
+		if filepath.Clean(v.Path) != filepath.Clean(targetPath) {
+			updated = append(updated, v)
+		}
+	}
+	cfg.Vaults = updated
+	return config.Save(cfg)
+}
+
+// GetAppSettings returns the saved configuration (theme, language, etc.).
+func (a *App) GetAppSettings() (config.Config, error) {
+	return config.Load()
+}
+
+// SaveAppSettings updates general settings like theme and language.
+func (a *App) SaveAppSettings(theme, language string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	cfg.Theme = theme
+	cfg.Language = language
+	return config.Save(cfg)
 }
 
 // GetTree returns the entire directory and file tree of the active Vault.
