@@ -53,16 +53,16 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
     }
 
     return (
-        <div className="flex items-center justify-between border-t border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-400">
+        <div className="flex items-center justify-between border-t border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 px-3 py-1.5 text-xs text-neutral-600 dark:text-neutral-400">
             <button
-                className="flex items-center gap-1.5 hover:text-neutral-200"
+                className="flex items-center gap-1.5 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors"
                 onClick={handleClick}
                 title={status.message || 'Bấm để đồng bộ ngay'}
             >
                 <span>{STATE_ICON[status.state] ?? '⚙️'}</span>
                 <span>{syncing ? 'Đang đồng bộ…' : STATE_LABEL[status.state] ?? status.state}</span>
             </button>
-            <button className="hover:text-neutral-200" onClick={onOpenSettings}>
+            <button className="hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors" onClick={onOpenSettings}>
                 Cấu hình đồng bộ
             </button>
         </div>

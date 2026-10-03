@@ -101,7 +101,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 setContextMenuPos({x: e.clientX, y: e.clientY})
             }}
         >
-            <div className="px-6 pt-3 pb-1 border-b border-neutral-800/40 light:border-neutral-200">
+            <div className="px-6 pt-3 pb-1 border-b border-neutral-200 dark:border-neutral-800/40">
                 <input
                     type="text"
                     value={title}
@@ -115,7 +115,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                         }
                     }}
                     placeholder="Untitled"
-                    className="w-full bg-transparent text-2xl font-bold tracking-tight text-neutral-100 placeholder-neutral-600 focus:outline-none light:text-neutral-900 light:placeholder-neutral-400"
+                    className="w-full bg-transparent text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
                 />
             </div>
             <div ref={containerRef} className="milkdown-container flex-1 overflow-y-auto" />

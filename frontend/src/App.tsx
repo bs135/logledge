@@ -31,6 +31,16 @@ function App() {
     const [settingsTab, setSettingsTab] = useState<'general' | 'appearance' | 'sync' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
 
+    const toggleTheme = () => {
+        if (theme === 'dark') {
+            setTheme('light')
+        } else if (theme === 'light') {
+            setTheme('system')
+        } else {
+            setTheme('dark')
+        }
+    }
+
     async function openFile(path: string) {
         try {
             const text = await ReadFile(path)
@@ -131,11 +141,13 @@ function App() {
 
     if (vault.loading) {
         return (
-            <div className="flex h-full flex-col bg-neutral-900 text-neutral-400 light:bg-neutral-50 light:text-neutral-500">
+            <div className="flex h-full flex-col bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400">
                 <TitleBar
                     vaultPath={null}
                     selectedPath={null}
                     sidebarOpen={false}
+                    theme={theme}
+                    onToggleTheme={toggleTheme}
                     onToggleSidebar={() => {}}
                     onOpenQuickSwitcher={() => {}}
                     onOpenSettings={() => {}}
@@ -148,11 +160,13 @@ function App() {
 
     if (!vault.vaultPath) {
         return (
-            <div className="flex h-full flex-col bg-neutral-900 text-neutral-100 light:bg-neutral-50 light:text-neutral-900">
+            <div className="flex h-full flex-col bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
                 <TitleBar
                     vaultPath={null}
                     selectedPath={null}
                     sidebarOpen={false}
+                    theme={theme}
+                    onToggleTheme={toggleTheme}
                     onToggleSidebar={() => {}}
                     onOpenQuickSwitcher={() => {}}
                     onOpenSettings={() => {
@@ -165,14 +179,14 @@ function App() {
                 <div className="flex flex-1 flex-col items-center justify-center gap-4">
                     <img src="/icon.svg" alt="Logledge" className="h-16 w-16" />
                     <h1 className="text-2xl font-semibold">{t('appName')}</h1>
-                    <p className="text-neutral-400 light:text-neutral-500">{t('selectVaultPrompt')}</p>
+                    <p className="text-neutral-500 dark:text-neutral-400">{t('selectVaultPrompt')}</p>
                     <button
                         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
                         onClick={vault.selectFolder}
                     >
                         {t('selectVaultBtn')}
                     </button>
-                    {vault.error && <p className="text-sm text-red-400">{vault.error}</p>}
+                    {vault.error && <p className="text-sm text-red-500 dark:text-red-400">{vault.error}</p>}
                 </div>
                 {quickHelpOpen && <QuickHelpModal onClose={() => setQuickHelpOpen(false)} />}
                 {settingsOpen && (
@@ -190,11 +204,13 @@ function App() {
     }
 
     return (
-        <div className="flex h-full flex-col bg-neutral-900 text-neutral-100 light:bg-neutral-50 light:text-neutral-900 overflow-hidden">
+        <div className="flex h-full flex-col bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 overflow-hidden">
             <TitleBar
                 vaultPath={vault.vaultPath}
                 selectedPath={selectedPath}
                 sidebarOpen={sidebarOpen}
+                theme={theme}
+                onToggleTheme={toggleTheme}
                 onToggleSidebar={() =>
                     setSidebarOpen((s) => {
                         const next = !s
@@ -215,8 +231,8 @@ function App() {
             />
             <div className="flex min-h-0 flex-1 overflow-hidden">
                 {sidebarOpen && (
-                    <aside className="w-64 shrink-0 overflow-hidden border-r border-neutral-800 light:border-neutral-200 light:bg-neutral-50/50 p-2 flex flex-col">
-                        <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-400 light:text-neutral-500 font-medium select-none">
+                    <aside className="w-64 shrink-0 overflow-hidden border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col">
+                        <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
                             <span className="tracking-wider text-[11px]">{t('explorer')}</span>
                             <div className="flex items-center gap-1">
                                 <button
@@ -230,8 +246,8 @@ function App() {
                                     title={onlyNotes ? t('onlyNotes') : t('allFiles')}
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
                                         onlyNotes
-                                            ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 light:bg-blue-50 light:text-blue-700 light:border-blue-300'
-                                            : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200 light:bg-neutral-200 light:text-neutral-700'
+                                            ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
+                                            : 'bg-neutral-200 text-neutral-700 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
                                     }`}
                                 >
                                     {onlyNotes ? '.md' : 'all'}
@@ -242,7 +258,7 @@ function App() {
                                         if (name) vault.createFile('', name)
                                     }}
                                     title={t('newNote')}
-                                    className="p-1 hover:bg-neutral-800 light:hover:bg-neutral-200 rounded text-neutral-400 hover:text-neutral-200 light:text-neutral-600"
+                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                 >
                                     +📄
                                 </button>
@@ -252,7 +268,7 @@ function App() {
                                         if (name) vault.createFolder('', name)
                                     }}
                                     title={t('newFolder')}
-                                    className="p-1 hover:bg-neutral-800 light:hover:bg-neutral-200 rounded text-neutral-400 hover:text-neutral-200 light:text-neutral-600"
+                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                 >
                                     +📁
                                 </button>
@@ -294,9 +310,9 @@ function App() {
                         </div>
                     </aside>
                 )}
-                <main className="flex-1 overflow-hidden p-4 flex flex-col light:bg-white">
+                <main className="flex-1 overflow-hidden p-4 flex flex-col bg-white dark:bg-neutral-900">
                     {externalChangeNotice !== null && (
-                        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-950/80 border border-amber-600/50 px-3 py-1.5 text-xs text-amber-200 light:bg-amber-50 light:border-amber-300 light:text-amber-900">
+                        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
                             <span>{t('externalUpdateNotice')}</span>
                             <div className="flex gap-2">
                                 <button
@@ -307,13 +323,13 @@ function App() {
                                         setExternalChangeNotice(null)
                                         isDirtyRef.current = false
                                     }}
-                                    className="rounded bg-amber-600 px-2.5 py-0.5 font-medium text-neutral-900 hover:bg-amber-500"
+                                    className="rounded bg-amber-600 px-2.5 py-0.5 font-medium text-white hover:bg-amber-500"
                                 >
                                     {t('reloadBtn')}
                                 </button>
                                 <button
                                     onClick={() => setExternalChangeNotice(null)}
-                                    className="rounded bg-neutral-700 px-2.5 py-0.5 text-neutral-200 hover:bg-neutral-600 light:bg-neutral-200 light:text-neutral-800"
+                                    className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-0.5"
                                 >
                                     {t('keepDraftBtn')}
                                 </button>
@@ -350,7 +366,7 @@ function App() {
                             }}
                         />
                     ) : (
-                        <div className="flex h-full items-center justify-center text-neutral-500 light:text-neutral-400">
+                        <div className="flex h-full items-center justify-center text-neutral-400 dark:text-neutral-500">
                             {t('selectNotePlaceholder')}
                         </div>
                     )}

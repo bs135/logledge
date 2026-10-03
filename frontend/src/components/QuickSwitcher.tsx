@@ -54,7 +54,7 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
             <div
-                className="w-full max-w-lg overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 shadow-2xl"
+                className="w-full max-w-lg overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 <input
@@ -63,14 +63,16 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Gõ tên ghi chú…"
-                    className="w-full border-b border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-100 outline-none"
+                    className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
                 />
                 <ul className="max-h-80 overflow-y-auto py-1">
                     {results.map((path, i) => (
                         <li key={path}>
                             <button
-                                className={`block w-full truncate px-4 py-2 text-left text-sm ${
-                                    i === activeIndex ? 'bg-blue-600 text-white' : 'text-neutral-200 hover:bg-neutral-700'
+                                className={`block w-full truncate px-4 py-2 text-left text-sm transition-colors ${
+                                    i === activeIndex
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
                                 }`}
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
@@ -80,7 +82,7 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                         </li>
                     ))}
                     {results.length === 0 && (
-                        <li className="px-4 py-3 text-sm text-neutral-500">Không tìm thấy ghi chú nào</li>
+                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">Không tìm thấy ghi chú nào</li>
                     )}
                 </ul>
             </div>

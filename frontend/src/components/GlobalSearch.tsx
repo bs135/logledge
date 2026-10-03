@@ -59,7 +59,7 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
             <div
-                className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 shadow-2xl"
+                className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 <input
@@ -68,14 +68,16 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Tìm kiếm toàn văn trong Vault…"
-                    className="w-full border-b border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-100 outline-none"
+                    className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
                 />
                 <ul className="max-h-96 overflow-y-auto py-1">
                     {results.map((r, i) => (
                         <li key={r.path}>
                             <button
-                                className={`block w-full px-4 py-2 text-left text-sm ${
-                                    i === activeIndex ? 'bg-blue-600 text-white' : 'text-neutral-200 hover:bg-neutral-700'
+                                className={`block w-full px-4 py-2 text-left text-sm transition-colors ${
+                                    i === activeIndex
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
                                 }`}
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
@@ -87,7 +89,7 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                         </li>
                     ))}
                     {query.trim() && results.length === 0 && (
-                        <li className="px-4 py-3 text-sm text-neutral-500">Không tìm thấy kết quả nào</li>
+                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">Không tìm thấy kết quả nào</li>
                     )}
                 </ul>
             </div>
@@ -101,7 +103,7 @@ function highlightSnippet(snippet: string) {
     const parts = snippet.split('**')
     return parts.map((part, i) =>
         i % 2 === 1 ? (
-            <mark key={i} className="rounded bg-yellow-500/40 px-0.5 text-yellow-100">
+            <mark key={i} className="rounded bg-yellow-300/60 dark:bg-yellow-500/40 px-0.5 text-neutral-900 dark:text-yellow-100">
                 {part}
             </mark>
         ) : (

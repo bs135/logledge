@@ -61,7 +61,7 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
             }}
         >
             <div
-                className="absolute z-50 min-w-[170px] rounded-md border border-neutral-700 bg-neutral-800 py-1 text-xs text-neutral-200 shadow-xl shadow-black/60"
+                className="absolute z-50 min-w-[170px] rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 py-1 text-xs text-neutral-800 dark:text-neutral-200 shadow-xl shadow-black/10 dark:shadow-black/60"
                 style={{left: `${left}px`, top: `${top}px`}}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -80,13 +80,13 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
                     shortcut="Ctrl+V"
                     onClick={() => triggerAction(handlePaste)}
                 />
-                <div className="my-1 border-t border-neutral-700" />
+                <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
                 <ContextMenuItem
                     label="Select All"
                     shortcut="Ctrl+A"
                     onClick={() => triggerAction(() => document.execCommand('selectAll'))}
                 />
-                <div className="my-1 border-t border-neutral-700" />
+                <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
                 <ContextMenuItem
                     label="Undo"
                     shortcut="Ctrl+Z"
@@ -113,11 +113,11 @@ function ContextMenuItem({
 }) {
     return (
         <button
-            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-neutral-700 hover:text-white transition-colors"
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-900 dark:hover:text-white transition-colors"
             onClick={onClick}
         >
             <span>{label}</span>
-            {shortcut && <span className="ml-4 text-[10px] text-neutral-400">{shortcut}</span>}
+            {shortcut && <span className="ml-4 text-[10px] text-neutral-500 dark:text-neutral-400">{shortcut}</span>}
         </button>
     )
 }

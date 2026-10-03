@@ -105,8 +105,8 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
                     e.stopPropagation()
                     setMenuPos({x: e.clientX, y: e.clientY})
                 }}
-                className={`flex cursor-pointer items-center gap-1 rounded px-2 py-1 hover:bg-neutral-800 ${
-                    isSelected ? 'bg-neutral-700' : ''
+                className={`flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors ${
+                    isSelected ? 'bg-neutral-200 dark:bg-neutral-700 font-medium text-neutral-900 dark:text-white' : ''
                 } ${dragOver ? 'outline outline-1 outline-blue-500' : ''}`}
                 style={{paddingLeft: `${depth * 14 + 8}px`}}
             >
@@ -172,7 +172,7 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
     return (
         <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }}>
             <div
-                className="absolute z-50 min-w-[160px] rounded border border-neutral-700 bg-neutral-800 py-1 shadow-lg shadow-black/50"
+                className="absolute z-50 min-w-[160px] rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 py-1 shadow-lg shadow-black/10 dark:shadow-black/50"
                 style={{left: `${left}px`, top: `${top}px`}}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -188,8 +188,8 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
 function MenuItem({label, onClick, destructive}: {label: string; onClick: () => void; destructive?: boolean}) {
     return (
         <button
-            className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-neutral-700 ${
-                destructive ? 'text-red-400' : 'text-neutral-200'
+            className={`block w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+                destructive ? 'text-red-600 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'
             }`}
             onClick={onClick}
         >
