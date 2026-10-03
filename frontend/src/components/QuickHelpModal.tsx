@@ -1,6 +1,7 @@
 import {useEffect} from 'react'
 import {X, FolderGit2, Keyboard, BookOpen} from 'lucide-react'
 import {useI18n} from '../i18n'
+import {APP_VERSION} from '../version'
 
 interface QuickHelpModalProps {
     onClose: () => void
@@ -44,7 +45,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                         <div>
                             <h3 className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">Logledge</h3>
                             <p className="text-neutral-600 dark:text-neutral-400 mt-0.5">{t('aboutLogledgeDesc')}</p>
-                            <p className="text-neutral-500 mt-1 text-[11px]">Version 0.1.1 • Wails v2 + React + Milkdown Crepe</p>
+                            <p className="text-neutral-500 mt-1 text-[11px]">Version {APP_VERSION} • Wails v2 + React + Milkdown Crepe</p>
                         </div>
                         <a
                             href="https://github.com/bs135/logledge"

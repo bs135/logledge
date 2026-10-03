@@ -29,6 +29,7 @@ import {
     GitBranch,
 } from 'lucide-react'
 import {VaultModal} from './VaultModal'
+import {APP_VERSION} from '../version'
 
 interface SettingsModalProps {
     initialTab?: 'general' | 'vaults' | 'appearance' | 'about'
@@ -471,7 +472,7 @@ export function SettingsModal({
                                     <img src="/icon.svg" alt="Logledge" className="h-10 w-10" />
                                     <div>
                                         <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100">Logledge</h3>
-                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">v0.1.1 • Local-first Modern Desktop Note App</p>
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">v{APP_VERSION} • Local-first Modern Desktop Note App</p>
                                     </div>
                                 </div>
 
