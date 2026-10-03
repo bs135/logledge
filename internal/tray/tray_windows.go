@@ -4,6 +4,8 @@ package tray
 
 import (
 	"context"
+	_ "embed"
+	"encoding/binary"
 	"runtime"
 	"syscall"
 	"unsafe"
@@ -11,6 +13,9 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/sys/windows"
 )
+
+//go:embed icon.ico
+var embeddedIcon []byte
 
 type Syncer interface {
 	SyncNow() error
@@ -20,23 +25,26 @@ var (
 	modKernel32         = syscall.NewLazyDLL("kernel32.dll")
 	procGetModuleHandle = modKernel32.NewProc("GetModuleHandleW")
 
-	modUser32               = syscall.NewLazyDLL("user32.dll")
-	procRegisterClassExW    = modUser32.NewProc("RegisterClassExW")
-	procCreateWindowExW     = modUser32.NewProc("CreateWindowExW")
-	procDefWindowProcW      = modUser32.NewProc("DefWindowProcW")
-	procDestroyWindow       = modUser32.NewProc("DestroyWindow")
-	procPostQuitMessage     = modUser32.NewProc("PostQuitMessage")
-	procGetMessageW         = modUser32.NewProc("GetMessageW")
-	procTranslateMessage    = modUser32.NewProc("TranslateMessage")
-	procDispatchMessageW    = modUser32.NewProc("DispatchMessageW")
-	procPostMessageW        = modUser32.NewProc("PostMessageW")
-	procLoadIconW           = modUser32.NewProc("LoadIconW")
-	procCreatePopupMenu     = modUser32.NewProc("CreatePopupMenu")
-	procAppendMenuW         = modUser32.NewProc("AppendMenuW")
-	procTrackPopupMenu      = modUser32.NewProc("TrackPopupMenu")
-	procDestroyMenu         = modUser32.NewProc("DestroyMenu")
-	procGetCursorPos        = modUser32.NewProc("GetCursorPos")
-	procSetForegroundWindow = modUser32.NewProc("SetForegroundWindow")
+	modUser32                   = syscall.NewLazyDLL("user32.dll")
+	procRegisterClassExW        = modUser32.NewProc("RegisterClassExW")
+	procCreateWindowExW         = modUser32.NewProc("CreateWindowExW")
+	procDefWindowProcW          = modUser32.NewProc("DefWindowProcW")
+	procDestroyWindow           = modUser32.NewProc("DestroyWindow")
+	procPostQuitMessage         = modUser32.NewProc("PostQuitMessage")
+	procGetMessageW             = modUser32.NewProc("GetMessageW")
+	procTranslateMessage        = modUser32.NewProc("TranslateMessage")
+	procDispatchMessageW        = modUser32.NewProc("DispatchMessageW")
+	procPostMessageW            = modUser32.NewProc("PostMessageW")
+	procLoadIconW               = modUser32.NewProc("LoadIconW")
+	procCreatePopupMenu         = modUser32.NewProc("CreatePopupMenu")
+	procAppendMenuW             = modUser32.NewProc("AppendMenuW")
+	procTrackPopupMenu          = modUser32.NewProc("TrackPopupMenu")
+	procDestroyMenu             = modUser32.NewProc("DestroyMenu")
+	procGetCursorPos            = modUser32.NewProc("GetCursorPos")
+	procSetForegroundWindow     = modUser32.NewProc("SetForegroundWindow")
+	procGetSystemMetrics        = modUser32.NewProc("GetSystemMetrics")
+	procCreateIconFromResourceEx = modUser32.NewProc("CreateIconFromResourceEx")
+	procDestroyIcon             = modUser32.NewProc("DestroyIcon")
 
 	modShell32          = syscall.NewLazyDLL("shell32.dll")
 	procShellNotifyIconW = modShell32.NewProc("Shell_NotifyIconW")
@@ -133,12 +141,7 @@ func Start(ctx context.Context, s Syncer) func() {
 		className, _ := windows.UTF16PtrFromString("LogledgeTrayWindow")
 		windowTitle, _ := windows.UTF16PtrFromString("Logledge Tray")
 
-		// Try loading app icon from resource 1; fallback to standard application icon (32512)
-		hIconRet, _, _ := procLoadIconW.Call(uintptr(hInstance), 1)
-		if hIconRet == 0 {
-			hIconRet, _, _ = procLoadIconW.Call(0, 32512)
-		}
-		hIcon := windows.Handle(hIconRet)
+		hIcon := loadTrayIcon(hInstance)
 
 		var hwnd windows.HWND
 		var nid notifyIconDataW
@@ -249,6 +252,9 @@ func Start(ctx context.Context, s Syncer) func() {
 			<-stopCh
 			procShellNotifyIconW.Call(nimDelete, uintptr(unsafe.Pointer(&nid)))
 			procPostMessageW.Call(uintptr(hwnd), wmDestroy, 0, 0)
+			if hIcon != 0 {
+				procDestroyIcon.Call(uintptr(hIcon))
+			}
 		}()
 
 		var m msg
@@ -270,4 +276,75 @@ func Start(ctx context.Context, s Syncer) func() {
 			<-doneCh
 		}
 	}
+}
+
+// loadTrayIcon attempts to load the app icon from embedded icon.ico data at the optimal
+// system icon size (SM_CXSMICON / SM_CYSMICON), falling back to PE resources or IDI_APPLICATION.
+func loadTrayIcon(hInstance windows.Handle) windows.Handle {
+	if len(embeddedIcon) >= 6 && binary.LittleEndian.Uint16(embeddedIcon[0:2]) == 0 && binary.LittleEndian.Uint16(embeddedIcon[2:4]) == 1 {
+		count := int(binary.LittleEndian.Uint16(embeddedIcon[4:6]))
+		if len(embeddedIcon) >= 6+count*16 {
+			cxRet, _, _ := procGetSystemMetrics.Call(49) // SM_CXSMICON
+			cyRet, _, _ := procGetSystemMetrics.Call(50) // SM_CYSMICON
+			cx := int(cxRet)
+			cy := int(cyRet)
+			if cx <= 0 {
+				cx = 16
+			}
+			if cy <= 0 {
+				cy = 16
+			}
+
+			bestIdx := -1
+			bestDiff := 999999
+			for i := 0; i < count; i++ {
+				offset := 6 + i*16
+				w := int(embeddedIcon[offset])
+				if w == 0 {
+					w = 256
+				}
+				h := int(embeddedIcon[offset+1])
+				if h == 0 {
+					h = 256
+				}
+				diff := (w - cx)*(w - cx) + (h - cy)*(h - cy)
+				if diff < bestDiff {
+					bestDiff = diff
+					bestIdx = i
+				}
+			}
+
+			if bestIdx >= 0 {
+				offset := 6 + bestIdx*16
+				imgBytes := binary.LittleEndian.Uint32(embeddedIcon[offset+8 : offset+12])
+				imgOffset := binary.LittleEndian.Uint32(embeddedIcon[offset+12 : offset+16])
+				if int(imgOffset+imgBytes) <= len(embeddedIcon) {
+					hIconRet, _, _ := procCreateIconFromResourceEx.Call(
+						uintptr(unsafe.Pointer(&embeddedIcon[imgOffset])),
+						uintptr(imgBytes),
+						1,          // fIcon = TRUE
+						0x00030000, // dwVersion
+						uintptr(cx),
+						uintptr(cy),
+						0, // LR_DEFAULTCOLOR
+					)
+					if hIconRet != 0 {
+						return windows.Handle(hIconRet)
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to PE resource 1
+	if hInstance != 0 {
+		hIconRet, _, _ := procLoadIconW.Call(uintptr(hInstance), 1)
+		if hIconRet != 0 {
+			return windows.Handle(hIconRet)
+		}
+	}
+
+	// Fallback to IDI_APPLICATION
+	hIconRet, _, _ := procLoadIconW.Call(0, 32512)
+	return windows.Handle(hIconRet)
 }
