@@ -12,6 +12,7 @@ import {
     Edit3,
     Trash2,
 } from 'lucide-react'
+import {useI18n} from '../i18n'
 
 const NOTE_EXTENSIONS = ['.md', '.markdown', '.txt']
 
@@ -180,6 +181,7 @@ interface ContextMenuProps {
 }
 
 function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onRename, onDelete}: ContextMenuProps) {
+    const {t} = useI18n()
     const parent = node.isDir ? node.path : node.path.split('/').slice(0, -1).join('/')
 
     function act(fn: () => void) {
@@ -201,22 +203,22 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
                 onClick={(e) => e.stopPropagation()}
             >
                 <MenuItem
-                    label="New note"
+                    label={t('newNote')}
                     icon={<FilePlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     onClick={() => act(() => onCreateFile(parent))}
                 />
                 <MenuItem
-                    label="New folder"
+                    label={t('newFolder')}
                     icon={<FolderPlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     onClick={() => act(() => onCreateFolder(parent))}
                 />
                 <MenuItem
-                    label="Rename"
+                    label={t('rename')}
                     icon={<Edit3 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     onClick={() => act(() => onRename(node.path))}
                 />
                 <MenuItem
-                    label="Delete"
+                    label={t('delete')}
                     icon={<Trash2 className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />}
                     onClick={() => act(() => onDelete(node.path))}
                     destructive

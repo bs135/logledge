@@ -1,11 +1,14 @@
 import {useEffect} from 'react'
 import {X, FolderGit2, Keyboard, BookOpen} from 'lucide-react'
+import {useI18n} from '../i18n'
 
 interface QuickHelpModalProps {
     onClose: () => void
 }
 
 export function QuickHelpModal({onClose}: QuickHelpModalProps) {
+    const {t} = useI18n()
+
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
             if (e.key === 'Escape') onClose()
@@ -24,7 +27,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                 <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-5 py-3">
                     <div className="flex items-center gap-2.5">
                         <img src="/icon.svg" alt="Logledge" className="h-5 w-5" />
-                        <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Quick Help</h2>
+                        <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{t('aboutAndHelp')}</h2>
                     </div>
                     <button
                         onClick={onClose}
@@ -40,7 +43,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                     <div className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/50 p-3.5 flex items-center justify-between">
                         <div>
                             <h3 className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">Logledge</h3>
-                            <p className="text-neutral-600 dark:text-neutral-400 mt-0.5">Modern Markdown note-taking with native Git synchronization.</p>
+                            <p className="text-neutral-600 dark:text-neutral-400 mt-0.5">{t('aboutLogledgeDesc')}</p>
                             <p className="text-neutral-500 mt-1 text-[11px]">Version 0.1.1 • Wails v2 + React + Milkdown Crepe</p>
                         </div>
                         <a
@@ -58,15 +61,15 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                     <div>
                         <h4 className="flex items-center font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
                             <Keyboard className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
-                            <span>Keyboard Shortcuts</span>
+                            <span>{t('shortcuts')}</span>
                         </h4>
                         <div className="grid grid-cols-2 gap-2">
-                            <ShortcutItem keys="Ctrl + P" desc="Quick Switcher (find note)" />
-                            <ShortcutItem keys="Ctrl + Shift + F" desc="Global full-text search" />
-                            <ShortcutItem keys="Ctrl + B" desc="Toggle left sidebar" />
-                            <ShortcutItem keys="Ctrl + ," desc="Open Settings & Sync" />
-                            <ShortcutItem keys="Enter / Blur" desc="Save inline note title" />
-                            <ShortcutItem keys="Esc" desc="Close modals & menus" />
+                            <ShortcutItem keys="Ctrl + P" desc={t('quickSwitcherDesc')} />
+                            <ShortcutItem keys="Ctrl + Shift + F" desc={t('globalSearchDesc')} />
+                            <ShortcutItem keys="Ctrl + B" desc={t('toggleSidebarDesc')} />
+                            <ShortcutItem keys="Ctrl + ," desc={t('settingsSyncDesc')} />
+                            <ShortcutItem keys="Enter / Blur" desc={t('saveTitleDesc')} />
+                            <ShortcutItem keys="Esc" desc={t('closeModalsDesc')} />
                         </div>
                     </div>
 
@@ -74,7 +77,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                     <div>
                         <h4 className="flex items-center font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
                             <BookOpen className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
-                            <span>Markdown & Live Preview</span>
+                            <span>{t('markdownTips')}</span>
                         </h4>
                         <div className="space-y-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/30 p-3 text-[11px]">
                             <div className="flex justify-between">
@@ -111,7 +114,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                         onClick={onClose}
                         className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 px-4 py-1.5 text-xs font-medium transition-colors"
                     >
-                        Close
+                        {t('close')}
                     </button>
                 </div>
             </div>

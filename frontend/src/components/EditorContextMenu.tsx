@@ -1,5 +1,6 @@
 import {useEffect} from 'react'
 import {Scissors, Copy, Clipboard, CheckSquare, Undo2, Redo2} from 'lucide-react'
+import {useI18n} from '../i18n'
 
 interface EditorContextMenuProps {
     position: {x: number; y: number}
@@ -7,6 +8,7 @@ interface EditorContextMenuProps {
 }
 
 export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
+    const {t} = useI18n()
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
             if (e.key === 'Escape') onClose()
@@ -67,39 +69,39 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
                 onClick={(e) => e.stopPropagation()}
             >
                 <ContextMenuItem
-                    label="Cut"
+                    label={t('cut')}
                     icon={<Scissors className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+X"
                     onClick={() => triggerAction(handleCut)}
                 />
                 <ContextMenuItem
-                    label="Copy"
+                    label={t('copy')}
                     icon={<Copy className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+C"
                     onClick={() => triggerAction(handleCopy)}
                 />
                 <ContextMenuItem
-                    label="Paste"
+                    label={t('paste')}
                     icon={<Clipboard className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+V"
                     onClick={() => triggerAction(handlePaste)}
                 />
                 <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
                 <ContextMenuItem
-                    label="Select All"
+                    label={t('selectAll')}
                     icon={<CheckSquare className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+A"
                     onClick={() => triggerAction(() => document.execCommand('selectAll'))}
                 />
                 <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
                 <ContextMenuItem
-                    label="Undo"
+                    label={t('undo')}
                     icon={<Undo2 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+Z"
                     onClick={() => triggerAction(() => document.execCommand('undo'))}
                 />
                 <ContextMenuItem
-                    label="Redo"
+                    label={t('redo')}
                     icon={<Redo2 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+Y"
                     onClick={() => triggerAction(() => document.execCommand('redo'))}

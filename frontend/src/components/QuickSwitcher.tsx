@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
 import {QuickSwitch} from '../../wailsjs/go/main/App'
 import {Search, FileText} from 'lucide-react'
+import {useI18n} from '../i18n'
 
 interface QuickSwitcherProps {
     onOpen: (path: string) => void
@@ -11,6 +12,7 @@ interface QuickSwitcherProps {
 // QuickSwitcher is the Command Palette (Ctrl+P): quickly finds files by name
 // using fuzzy search, opening immediately on Enter or result click.
 export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
+    const {t} = useI18n()
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<string[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
@@ -65,7 +67,7 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Gõ tên ghi chú…"
+                        placeholder={t('quickSwitcherPlaceholder')}
                         className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
                     />
                 </div>
@@ -87,7 +89,7 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                         </li>
                     ))}
                     {results.length === 0 && (
-                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">Không tìm thấy ghi chú nào</li>
+                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">{t('noNotesFound')}</li>
                     )}
                 </ul>
             </div>

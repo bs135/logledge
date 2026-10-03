@@ -3,6 +3,7 @@ import type {KeyboardEvent} from 'react'
 import {SearchNotes} from '../../wailsjs/go/main/App'
 import type {search} from '../../wailsjs/go/models'
 import {Search, FileText} from 'lucide-react'
+import {useI18n} from '../i18n'
 
 interface GlobalSearchProps {
     onOpen: (path: string) => void
@@ -12,6 +13,7 @@ interface GlobalSearchProps {
 // GlobalSearch is a full-text search modal (Ctrl+Shift+F): searches across
 // all note content in the Vault, displaying highlighted context snippets.
 export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
+    const {t} = useI18n()
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<search.Result[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
@@ -70,7 +72,7 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Tìm kiếm toàn văn trong Vault…"
+                        placeholder={t('searchVaultPlaceholder')}
                         className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
                     />
                 </div>
@@ -96,7 +98,7 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                         </li>
                     ))}
                     {query.trim() && results.length === 0 && (
-                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">Không tìm thấy kết quả nào</li>
+                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">{t('noResultsFound')}</li>
                     )}
                 </ul>
             </div>

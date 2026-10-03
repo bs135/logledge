@@ -253,7 +253,7 @@ export function TitleBar({
                 </button>
                 <button
                     onClick={onOpenHelp}
-                    title="Help"
+                    title={t('help')}
                     className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 >
                     <HelpCircle className="h-4 w-4" />
@@ -264,14 +264,14 @@ export function TitleBar({
                 {/* Window Control Buttons */}
                 <button
                     onClick={() => WindowMinimise()}
-                    title="Minimize"
+                    title={lang === 'vi' ? 'Thu nhỏ' : 'Minimize'}
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                     <Minus className="h-3.5 w-3.5" />
                 </button>
                 <button
                     onClick={() => WindowToggleMaximise()}
-                    title={isMaximised ? 'Restore' : 'Maximize'}
+                    title={isMaximised ? (lang === 'vi' ? 'Khôi phục kích thước' : 'Restore') : (lang === 'vi' ? 'Phóng to' : 'Maximize')}
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                     {isMaximised ? (

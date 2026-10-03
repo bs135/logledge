@@ -17,7 +17,7 @@ import {FilePlus, FolderPlus} from 'lucide-react'
 function App() {
     const vault = useVault()
     const {theme, setTheme} = useTheme()
-    const {t} = useI18n()
+    const {t, lang} = useI18n()
     const [selectedPath, setSelectedPath] = useState<string | null>(null)
     const [initialContent, setInitialContent] = useState('')
     const [editorKey, setEditorKey] = useState(0)
@@ -362,7 +362,7 @@ function App() {
                                         setSelectedPath(newPath)
                                     }
                                 } catch (err) {
-                                    alert('Không thể đổi tên: ' + String(err))
+                                    alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
                                 }
                             }}
                         />
