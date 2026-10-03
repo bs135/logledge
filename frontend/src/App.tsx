@@ -12,6 +12,7 @@ import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
 import {ReadFile, WriteFile} from '../wailsjs/go/main/App'
 import {EventsOn} from '../wailsjs/runtime/runtime'
+import {FilePlus, FolderPlus} from 'lucide-react'
 
 function App() {
     const vault = useVault()
@@ -260,7 +261,7 @@ function App() {
                                     title={t('newNote')}
                                     className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                 >
-                                    +📄
+                                    <FilePlus className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                     onClick={() => {
@@ -270,7 +271,7 @@ function App() {
                                     title={t('newFolder')}
                                     className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                 >
-                                    +📁
+                                    <FolderPlus className="h-3.5 w-3.5" />
                                 </button>
                             </div>
                         </div>

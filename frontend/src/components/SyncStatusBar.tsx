@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 import {GetSyncStatus, SyncNow} from '../../wailsjs/go/main/App'
 import {gitsync} from '../../wailsjs/go/models'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
+import {Settings, CheckCircle2, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
 
 interface SyncStatusBarProps {
     onOpenSettings: () => void
@@ -16,13 +17,25 @@ const STATE_LABEL: Record<string, string> = {
     error: 'Lỗi đồng bộ',
 }
 
-const STATE_ICON: Record<string, string> = {
-    not_configured: '⚙️',
-    idle: '✅',
-    syncing: '🔄',
-    conflict: '⚠️',
-    offline: '📴',
-    error: '❌',
+function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
+    if (syncing) {
+        return <RefreshCw className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+    }
+    switch (state) {
+        case 'idle':
+            return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        case 'syncing':
+            return <RefreshCw className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+        case 'conflict':
+            return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+        case 'offline':
+            return <WifiOff className="h-3.5 w-3.5 text-neutral-400" />
+        case 'error':
+            return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        case 'not_configured':
+        default:
+            return <Settings className="h-3.5 w-3.5 text-neutral-500" />
+    }
 }
 
 // SyncStatusBar displays GitHub sync status (Phase 4) at the bottom of the screen,
@@ -59,11 +72,12 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
                 onClick={handleClick}
                 title={status.message || 'Bấm để đồng bộ ngay'}
             >
-                <span>{STATE_ICON[status.state] ?? '⚙️'}</span>
+                <StatusIcon state={status.state} syncing={syncing} />
                 <span>{syncing ? 'Đang đồng bộ…' : STATE_LABEL[status.state] ?? status.state}</span>
             </button>
-            <button className="hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors" onClick={onOpenSettings}>
-                Cấu hình đồng bộ
+            <button className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors" onClick={onOpenSettings}>
+                <Settings className="h-3 w-3" />
+                <span>Cấu hình đồng bộ</span>
             </button>
         </div>
     )

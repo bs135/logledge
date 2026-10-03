@@ -16,6 +16,17 @@ import {config} from '../../wailsjs/go/models'
 import {useI18n} from '../i18n'
 import type {Language} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
+import {
+    Settings,
+    X,
+    Home,
+    Palette,
+    RefreshCw,
+    Info,
+    Trash2,
+    Plus,
+    FolderGit2,
+} from 'lucide-react'
 
 interface SettingsModalProps {
     initialTab?: 'general' | 'appearance' | 'sync' | 'about'
@@ -142,19 +153,14 @@ export function SettingsModal({
                 {/* Header */}
                 <div className="flex h-12 shrink-0 items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-5">
                     <div className="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5 text-neutral-500 dark:text-neutral-400">
-                            <circle cx="12" cy="12" r="3" />
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                        </svg>
+                        <Settings className="h-5 w-5 text-neutral-500 dark:text-neutral-400" />
                         <h2 className="text-base font-semibold">{t('settings')}</h2>
                     </div>
                     <button
                         onClick={onClose}
                         className="rounded p-1 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                            <path d="M18 6 6 18M6 6l12 12" />
-                        </svg>
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
 
@@ -170,7 +176,7 @@ export function SettingsModal({
                                     : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
                             }`}
                         >
-                            <span>🏠</span>
+                            <Home className="h-4 w-4 shrink-0" />
                             <span>{t('generalTab')}</span>
                         </button>
                         <button
@@ -181,7 +187,7 @@ export function SettingsModal({
                                     : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
                             }`}
                         >
-                            <span>🎨</span>
+                            <Palette className="h-4 w-4 shrink-0" />
                             <span>{t('appearanceTab')}</span>
                         </button>
                         <button
@@ -192,7 +198,7 @@ export function SettingsModal({
                                     : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
                             }`}
                         >
-                            <span>🔄</span>
+                            <RefreshCw className="h-4 w-4 shrink-0" />
                             <span>{t('syncTab')}</span>
                         </button>
                         <button
@@ -203,7 +209,7 @@ export function SettingsModal({
                                     : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
                             }`}
                         >
-                            <span>ℹ️</span>
+                            <Info className="h-4 w-4 shrink-0" />
                             <span>{t('aboutTab')}</span>
                         </button>
                     </div>
@@ -262,9 +268,7 @@ export function SettingsModal({
                                                                     title={t('removeVault')}
                                                                     className="rounded p-1 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                                                                 >
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
-                                                                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                                    </svg>
+                                                                    <Trash2 className="h-3.5 w-3.5" />
                                                                 </button>
                                                             </>
                                                         )}
@@ -279,9 +283,7 @@ export function SettingsModal({
                                         onClick={handleAddVault}
                                         className="flex items-center gap-2 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 dark:hover:border-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
-                                            <path d="M12 5v14M5 12h14" />
-                                        </svg>
+                                        <Plus className="h-3.5 w-3.5" />
                                         <span>{t('addVault')}</span>
                                     </button>
                                 </div>
@@ -500,10 +502,7 @@ export function SettingsModal({
                                         onClick={() => BrowserOpenURL('https://github.com/bs135/logledge')}
                                         className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 px-3 py-1.5 text-xs font-medium transition-colors"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
-                                            <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
-                                            <path d="M9 18c-4.51 2-5-2-7-2" />
-                                        </svg>
+                                        <FolderGit2 className="h-3.5 w-3.5" />
                                         <span>GitHub Repository</span>
                                     </button>
                                 </div>

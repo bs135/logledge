@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
 import {QuickSwitch} from '../../wailsjs/go/main/App'
+import {Search, FileText} from 'lucide-react'
 
 interface QuickSwitcherProps {
     onOpen: (path: string) => void
@@ -57,19 +58,22 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                 className="w-full max-w-lg overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <input
-                    ref={inputRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Gõ tên ghi chú…"
-                    className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
-                />
+                <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-3">
+                    <Search className="h-4 w-4 text-neutral-400 shrink-0" />
+                    <input
+                        ref={inputRef}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Gõ tên ghi chú…"
+                        className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
+                    />
+                </div>
                 <ul className="max-h-80 overflow-y-auto py-1">
                     {results.map((path, i) => (
                         <li key={path}>
                             <button
-                                className={`block w-full truncate px-4 py-2 text-left text-sm transition-colors ${
+                                className={`flex items-center w-full truncate px-4 py-2 text-left text-sm transition-colors ${
                                     i === activeIndex
                                         ? 'bg-blue-600 text-white'
                                         : 'text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
@@ -77,7 +81,8 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
                             >
-                                {path}
+                                <FileText className={`h-3.5 w-3.5 mr-2 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                <span className="truncate">{path}</span>
                             </button>
                         </li>
                     ))}

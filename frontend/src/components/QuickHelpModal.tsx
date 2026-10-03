@@ -1,4 +1,5 @@
 import {useEffect} from 'react'
+import {X, FolderGit2, Keyboard, BookOpen} from 'lucide-react'
 
 interface QuickHelpModalProps {
     onClose: () => void
@@ -29,7 +30,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                         onClick={onClose}
                         className="rounded p-1 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors"
                     >
-                        ✕
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
 
@@ -46,16 +47,18 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                             href="https://github.com/bs135/logledge"
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:hover:text-white px-3 py-1.5 transition-colors"
+                            className="inline-flex items-center rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:hover:text-white px-3 py-1.5 transition-colors"
                         >
-                            GitHub
+                            <FolderGit2 className="h-3.5 w-3.5 mr-1.5" />
+                            <span>GitHub</span>
                         </a>
                     </div>
 
                     {/* Shortcuts */}
                     <div>
-                        <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
-                            Keyboard Shortcuts
+                        <h4 className="flex items-center font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
+                            <Keyboard className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
+                            <span>Keyboard Shortcuts</span>
                         </h4>
                         <div className="grid grid-cols-2 gap-2">
                             <ShortcutItem keys="Ctrl + P" desc="Quick Switcher (find note)" />
@@ -69,8 +72,9 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
 
                     {/* Markdown Tips */}
                     <div>
-                        <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
-                            Markdown & Live Preview
+                        <h4 className="flex items-center font-semibold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider text-[11px] mb-2">
+                            <BookOpen className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
+                            <span>Markdown & Live Preview</span>
                         </h4>
                         <div className="space-y-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/30 p-3 text-[11px]">
                             <div className="flex justify-between">

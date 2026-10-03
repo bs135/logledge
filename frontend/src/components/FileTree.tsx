@@ -1,6 +1,17 @@
 import {useState} from 'react'
 import type {DragEvent} from 'react'
 import {vault} from '../../wailsjs/go/models'
+import {
+    ChevronRight,
+    ChevronDown,
+    Folder,
+    FolderOpen,
+    FileText,
+    FilePlus,
+    FolderPlus,
+    Edit3,
+    Trash2,
+} from 'lucide-react'
 
 const NOTE_EXTENSIONS = ['.md', '.markdown', '.txt']
 
@@ -105,13 +116,26 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
                     e.stopPropagation()
                     setMenuPos({x: e.clientX, y: e.clientY})
                 }}
-                className={`flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors ${
+                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors ${
                     isSelected ? 'bg-neutral-200 dark:bg-neutral-700 font-medium text-neutral-900 dark:text-white' : ''
                 } ${dragOver ? 'outline outline-1 outline-blue-500' : ''}`}
                 style={{paddingLeft: `${depth * 14 + 8}px`}}
             >
-                <span className="w-3 text-neutral-500">{node.isDir ? (open ? '▾' : '▸') : ''}</span>
-                <span className="truncate">{node.isDir ? '📁' : '📄'} {node.name}</span>
+                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
+                    {node.isDir ? (
+                        open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />
+                    ) : null}
+                </span>
+                {node.isDir ? (
+                    open ? (
+                        <FolderOpen className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                    ) : (
+                        <Folder className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                    )
+                ) : (
+                    <FileText className="h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" />
+                )}
+                <span className="truncate">{node.name}</span>
             </div>
 
             {menuPos && (
@@ -176,24 +200,52 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
                 style={{left: `${left}px`, top: `${top}px`}}
                 onClick={(e) => e.stopPropagation()}
             >
-                <MenuItem label="New note" onClick={() => act(() => onCreateFile(parent))} />
-                <MenuItem label="New folder" onClick={() => act(() => onCreateFolder(parent))} />
-                <MenuItem label="Rename" onClick={() => act(() => onRename(node.path))} />
-                <MenuItem label="Delete" onClick={() => act(() => onDelete(node.path))} destructive />
+                <MenuItem
+                    label="New note"
+                    icon={<FilePlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    onClick={() => act(() => onCreateFile(parent))}
+                />
+                <MenuItem
+                    label="New folder"
+                    icon={<FolderPlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    onClick={() => act(() => onCreateFolder(parent))}
+                />
+                <MenuItem
+                    label="Rename"
+                    icon={<Edit3 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    onClick={() => act(() => onRename(node.path))}
+                />
+                <MenuItem
+                    label="Delete"
+                    icon={<Trash2 className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />}
+                    onClick={() => act(() => onDelete(node.path))}
+                    destructive
+                />
             </div>
         </div>
     )
 }
 
-function MenuItem({label, onClick, destructive}: {label: string; onClick: () => void; destructive?: boolean}) {
+function MenuItem({
+    label,
+    icon,
+    onClick,
+    destructive,
+}: {
+    label: string
+    icon?: React.ReactNode
+    onClick: () => void
+    destructive?: boolean
+}) {
     return (
         <button
-            className={`block w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
                 destructive ? 'text-red-600 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'
             }`}
             onClick={onClick}
         >
-            {label}
+            {icon && <span className="shrink-0">{icon}</span>}
+            <span>{label}</span>
         </button>
     )
 }

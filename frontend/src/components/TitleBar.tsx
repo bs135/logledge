@@ -10,6 +10,22 @@ import {GetVaultList, SelectVaultFolder, SwitchVault} from '../../wailsjs/go/mai
 import {config} from '../../wailsjs/go/models'
 import {useI18n} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
+import {
+    PanelLeft,
+    ChevronDown,
+    Check,
+    Plus,
+    Settings,
+    Search,
+    Moon,
+    Sun,
+    Monitor,
+    HelpCircle,
+    Minus,
+    Square,
+    Copy,
+    X,
+} from 'lucide-react'
 
 interface TitleBarProps {
     vaultPath: string | null
@@ -112,19 +128,7 @@ export function TitleBar({
                     title={sidebarOpen ? 'Hide sidebar (Ctrl+B)' : 'Show sidebar (Ctrl+B)'}
                     className="flex h-6 w-6 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-3.5 w-3.5"
-                    >
-                        <rect width="18" height="18" x="3" y="3" rx="2" />
-                        <path d="M9 3v18" />
-                    </svg>
+                    <PanelLeft className="h-4 w-4" />
                 </button>
 
                 {vaultName && (
@@ -136,9 +140,7 @@ export function TitleBar({
                             title={vaultPath ?? ''}
                         >
                             <span className="max-w-[140px] truncate font-medium">{vaultName}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 opacity-70">
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
+                            <ChevronDown className="h-3 w-3 opacity-70" />
                         </button>
 
                         {/* Vault Switcher Dropdown */}
@@ -166,7 +168,7 @@ export function TitleBar({
                                                         {v.path}
                                                     </div>
                                                 </div>
-                                                {isCurrent && <span className="text-blue-600 dark:text-blue-400 shrink-0">✓</span>}
+                                                {isCurrent && <Check className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />}
                                             </button>
                                         )
                                     })}
@@ -176,7 +178,7 @@ export function TitleBar({
                                         onClick={handleOpenNewVault}
                                         className="w-full flex items-center gap-1.5 rounded px-2 py-1.5 text-left text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                                     >
-                                        <span>+</span>
+                                        <Plus className="h-3.5 w-3.5 text-neutral-500" />
                                         <span>{t('addVault')}</span>
                                     </button>
                                     <button
@@ -186,7 +188,7 @@ export function TitleBar({
                                         }}
                                         className="w-full flex items-center gap-1.5 rounded px-2 py-1.5 text-left text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                                     >
-                                        <span>⚙</span>
+                                        <Settings className="h-3.5 w-3.5 text-neutral-500" />
                                         <span>{lang === 'vi' ? 'Quản lý Vault trong Cài đặt…' : 'Manage Vaults in Settings…'}</span>
                                     </button>
                                 </div>
@@ -212,17 +214,7 @@ export function TitleBar({
                     style={{['--wails-draggable' as string]: 'no-drag'}}
                     onClick={onOpenQuickSwitcher}
                 >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-3 w-3"
-                    >
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.3-4.3" />
-                    </svg>
+                    <Search className="h-3.5 w-3.5" />
                     <span className="text-[11px]">{t('quickSwitcher')}</span>
                     <kbd className="rounded bg-neutral-200 dark:bg-neutral-800 px-1 py-0.2 text-[10px] text-neutral-600 dark:text-neutral-400">Ctrl+P</kbd>
                 </div>
@@ -243,20 +235,11 @@ export function TitleBar({
                         className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                     >
                         {theme === 'dark' ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-                            </svg>
+                            <Moon className="h-4 w-4" />
                         ) : theme === 'light' ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                                <circle cx="12" cy="12" r="4" />
-                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-                            </svg>
+                            <Sun className="h-4 w-4" />
                         ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                                <rect width="20" height="14" x="2" y="3" rx="2" />
-                                <line x1="8" x2="16" y1="21" y2="21" />
-                                <line x1="12" x2="12" y1="17" y2="21" />
-                            </svg>
+                            <Monitor className="h-4 w-4" />
                         )}
                     </button>
                 )}
@@ -266,35 +249,14 @@ export function TitleBar({
                     title="About & Shortcuts (?)"
                     className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-3.5 w-3.5"
-                    >
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                        <path d="M12 17h.01" />
-                    </svg>
+                    <HelpCircle className="h-4 w-4" />
                 </button>
                 <button
                     onClick={onOpenSettings}
                     title={t('settings')}
                     className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-3.5 w-3.5"
-                    >
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
+                    <Settings className="h-4 w-4" />
                 </button>
 
                 <div className="ml-1 h-4 w-px bg-neutral-300 dark:bg-neutral-800" />
@@ -305,9 +267,7 @@ export function TitleBar({
                     title="Minimize"
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
-                        <path d="M4 12h16v1.5H4z" />
-                    </svg>
+                    <Minus className="h-3.5 w-3.5" />
                 </button>
                 <button
                     onClick={() => WindowToggleMaximise()}
@@ -315,14 +275,9 @@ export function TitleBar({
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                     {isMaximised ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3 w-3">
-                            <rect x="5" y="7" width="11" height="11" rx="1" />
-                            <path d="M8 7V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-2" />
-                        </svg>
+                        <Copy className="h-3 w-3 rotate-180" />
                     ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3 w-3">
-                            <rect x="4" y="4" width="16" height="16" rx="1" />
-                        </svg>
+                        <Square className="h-3 w-3" />
                     )}
                 </button>
                 <button
@@ -336,9 +291,7 @@ export function TitleBar({
                     title={lang === 'vi' ? 'Thu nhỏ xuống khay hệ thống (Giữ Ctrl để Thoát)' : 'Hide to system tray (Hold Ctrl to Quit)'}
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-red-600 hover:text-white transition-colors"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3 w-3">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                    </svg>
+                    <X className="h-3.5 w-3.5" />
                 </button>
             </div>
         </header>

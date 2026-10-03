@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
 import {SearchNotes} from '../../wailsjs/go/main/App'
 import type {search} from '../../wailsjs/go/models'
+import {Search, FileText} from 'lucide-react'
 
 interface GlobalSearchProps {
     onOpen: (path: string) => void
@@ -62,14 +63,17 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                 className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <input
-                    ref={inputRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Tìm kiếm toàn văn trong Vault…"
-                    className="w-full border-b border-neutral-200 dark:border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
-                />
+                <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-3">
+                    <Search className="h-4 w-4 text-neutral-400 shrink-0" />
+                    <input
+                        ref={inputRef}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Tìm kiếm toàn văn trong Vault…"
+                        className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
+                    />
+                </div>
                 <ul className="max-h-96 overflow-y-auto py-1">
                     {results.map((r, i) => (
                         <li key={r.path}>
@@ -82,7 +86,10 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
                             >
-                                <div className="truncate font-medium">{r.title}</div>
+                                <div className="flex items-center gap-1.5 truncate font-medium">
+                                    <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                    <span className="truncate">{r.title}</span>
+                                </div>
                                 <div className="mt-0.5 truncate text-xs opacity-80">{highlightSnippet(r.snippet)}</div>
                                 <div className="mt-0.5 truncate text-xs opacity-50">{r.path}</div>
                             </button>
