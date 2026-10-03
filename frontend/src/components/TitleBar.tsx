@@ -83,8 +83,7 @@ export function TitleBar({
         setVaultDropdownOpen(false)
         try {
             const chosen = await SelectVaultFolder()
-            if (chosen && chosen !== vaultPath) {
-                await SwitchVault(chosen)
+            if (chosen) {
                 onVaultSwitched?.(chosen)
             }
         } catch {

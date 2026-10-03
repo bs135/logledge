@@ -92,6 +92,10 @@ func (a *App) emitSyncStatus(status gitsync.Status) {
 // for the same root directory, initiating background indexing and synchronization
 // without blocking cold-start.
 func (a *App) openVault(path string) error {
+	path = filepath.Clean(path)
+	if a.vault.Root() != "" && filepath.Clean(a.vault.Root()) == path {
+		return nil
+	}
 	if err := a.vault.Open(path); err != nil {
 		return err
 	}
@@ -144,6 +148,7 @@ func (a *App) SelectVaultFolder() (string, error) {
 	if err := a.ensureVaultInConfig(dir); err != nil {
 		return "", err
 	}
+	a.emitVaultChanged()
 	return dir, nil
 }
 
@@ -184,6 +189,12 @@ func (a *App) GetVaultList() ([]config.VaultEntry, error) {
 
 // SwitchVault switches the active vault to targetPath.
 func (a *App) SwitchVault(targetPath string) error {
+	targetPath = filepath.Clean(targetPath)
+	if a.vault.Root() != "" && filepath.Clean(a.vault.Root()) == targetPath {
+		_ = a.ensureVaultInConfig(targetPath)
+		a.emitVaultChanged()
+		return nil
+	}
 	if err := a.openVault(targetPath); err != nil {
 		return err
 	}

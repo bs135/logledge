@@ -5,6 +5,7 @@
 package search
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -28,11 +29,11 @@ type Result struct {
 // Service manages the SQLite FTS5 index for a Vault. The index database is stored
 // outside the Vault (in the user cache directory) to avoid bloating or polluting Git sync in Phase 4.
 type Service struct {
-	root string
-	db   *sql.DB
-
-	mu       sync.Mutex
-	indexing bool
+	mu     sync.RWMutex
+	root   string
+	db     *sql.DB
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // New creates a Service with no index open.
@@ -57,10 +58,7 @@ func indexFilePath(vaultRoot string) (string, error) {
 
 // Open opens (or creates if missing) the SQLite index for the Vault at root.
 func (s *Service) Open(root string) error {
-	if s.db != nil {
-		_ = s.db.Close()
-		s.db = nil
-	}
+	_ = s.Close()
 
 	p, err := indexFilePath(root)
 	if err != nil {
@@ -82,48 +80,89 @@ func (s *Service) Open(root string) error {
 		);
 		CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body);
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return err
 	}
 
+	s.mu.Lock()
 	s.root = root
 	s.db = db
+	s.mu.Unlock()
 	return nil
 }
 
-// Close terminates the SQLite connection for the current index.
+// Close terminates the SQLite connection for the current index and cancels any active indexing.
 func (s *Service) Close() error {
+	s.mu.Lock()
+	cancel := s.cancel
+	s.cancel = nil
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	s.wg.Wait()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil
 	}
 	err := s.db.Close()
 	s.db = nil
+	s.root = ""
 	return err
 }
 
 // Reindex traverses the Vault, re-indexing only .md files whose mtime has
 // changed since the last index run, and purging files that no longer exist on disk.
-// Safe for concurrent/repeated invocations (redundant calls are skipped).
+// Safe for concurrent/repeated invocations (redundant calls are safely cancelled/sequenced).
 func (s *Service) Reindex() error {
 	s.mu.Lock()
-	if s.indexing {
+	if s.db == nil || s.root == "" {
 		s.mu.Unlock()
-		return nil
-	}
-	s.indexing = true
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.indexing = false
-		s.mu.Unlock()
-	}()
-
-	if s.db == nil {
 		return errors.New("search chưa mở index nào")
 	}
 
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+	s.mu.Unlock()
+
+	s.wg.Wait()
+
+	s.mu.Lock()
+	if s.db == nil || s.root == "" {
+		s.mu.Unlock()
+		return errors.New("search chưa mở index nào")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	db := s.db
+	root := s.root
+	s.wg.Add(1)
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		cancel()
+		if s.cancel != nil {
+			s.cancel = nil
+		}
+		s.mu.Unlock()
+		s.wg.Done()
+	}()
+
 	seen := make(map[string]bool)
-	err := filepath.WalkDir(s.root, func(abs string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(abs string, d os.DirEntry, err error) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if err != nil {
 			return nil // skip erroneous entries without failing entire crawl
 		}
@@ -138,7 +177,7 @@ func (s *Service) Reindex() error {
 			return nil
 		}
 
-		rel, err := filepath.Rel(s.root, abs)
+		rel, err := filepath.Rel(root, abs)
 		if err != nil {
 			return nil
 		}
@@ -152,10 +191,16 @@ func (s *Service) Reindex() error {
 		mtime := info.ModTime().UnixNano()
 
 		var id, existingMtime int64
-		row := s.db.QueryRow(`SELECT id, mtime FROM files WHERE path = ?`, rel)
+		row := db.QueryRowContext(ctx, `SELECT id, mtime FROM files WHERE path = ?`, rel)
 		scanErr := row.Scan(&id, &existingMtime)
 		if scanErr == nil && existingMtime == mtime {
 			return nil // unchanged since previous index run
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 
 		data, err := os.ReadFile(abs)
@@ -167,14 +212,14 @@ func (s *Service) Reindex() error {
 
 		if scanErr == nil {
 			// File exists in index; update contents while preserving rowid.
-			if _, err := s.db.Exec(`INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body); err != nil {
+			if _, err := db.ExecContext(ctx, `INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body); err != nil {
 				// In case of rowid collision in legacy index, delete and re-insert.
-				s.db.Exec(`DELETE FROM notes_fts WHERE rowid = ?`, id)
-				s.db.Exec(`INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body)
+				_, _ = db.ExecContext(ctx, `DELETE FROM notes_fts WHERE rowid = ?`, id)
+				_, _ = db.ExecContext(ctx, `INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, id, title, body)
 			}
-			s.db.Exec(`UPDATE files SET mtime = ? WHERE id = ?`, mtime, id)
+			_, _ = db.ExecContext(ctx, `UPDATE files SET mtime = ? WHERE id = ?`, mtime, id)
 		} else {
-			res, err := s.db.Exec(`INSERT INTO files(path, mtime) VALUES (?, ?)`, rel, mtime)
+			res, err := db.ExecContext(ctx, `INSERT INTO files(path, mtime) VALUES (?, ?)`, rel, mtime)
 			if err != nil {
 				return nil
 			}
@@ -182,30 +227,45 @@ func (s *Service) Reindex() error {
 			if err != nil {
 				return nil
 			}
-			s.db.Exec(`INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, newID, title, body)
+			_, _ = db.ExecContext(ctx, `INSERT INTO notes_fts(rowid, title, body) VALUES (?, ?, ?)`, newID, title, body)
 		}
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
 		return err
 	}
 
-	return s.removeStale(seen)
+	return s.removeStale(ctx, db, seen)
 }
 
 // removeStale removes files from the index that were deleted or renamed on disk
 // (no longer present in the `seen` set from the latest crawl).
-func (s *Service) removeStale(seen map[string]bool) error {
-	rows, err := s.db.Query(`SELECT id, path FROM files`)
+func (s *Service) removeStale(ctx context.Context, db *sql.DB, seen map[string]bool) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	rows, err := db.QueryContext(ctx, `SELECT id, path FROM files`)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
 		return err
 	}
+	defer rows.Close()
+
 	type staleEntry struct {
 		id   int64
 		path string
 	}
 	var stale []staleEntry
 	for rows.Next() {
+		if ctx.Err() != nil {
+			return nil
+		}
 		var e staleEntry
 		if err := rows.Scan(&e.id, &e.path); err != nil {
 			continue
@@ -214,11 +274,14 @@ func (s *Service) removeStale(seen map[string]bool) error {
 			stale = append(stale, e)
 		}
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	for _, e := range stale {
-		s.db.Exec(`DELETE FROM notes_fts WHERE rowid = ?`, e.id)
-		s.db.Exec(`DELETE FROM files WHERE id = ?`, e.id)
+		if ctx.Err() != nil {
+			return nil
+		}
+		_, _ = db.ExecContext(ctx, `DELETE FROM notes_fts WHERE rowid = ?`, e.id)
+		_, _ = db.ExecContext(ctx, `DELETE FROM files WHERE id = ?`, e.id)
 	}
 	return nil
 }
@@ -226,7 +289,11 @@ func (s *Service) removeStale(seen map[string]bool) error {
 // Search executes a full-text query (FTS5 MATCH) across the Vault, returning up
 // to `limit` results with contextual snippets highlighted with ** ** delimiters.
 func (s *Service) Search(query string, limit int) ([]Result, error) {
-	if s.db == nil {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
 		return nil, errors.New("search chưa mở index nào")
 	}
 	query = strings.TrimSpace(query)
@@ -237,7 +304,7 @@ func (s *Service) Search(query string, limit int) ([]Result, error) {
 		limit = 20
 	}
 
-	rows, err := s.db.Query(`
+	rows, err := db.Query(`
 		SELECT f.path, n.title, snippet(notes_fts, 1, '**', '**', '...', 10) AS snip
 		FROM notes_fts n
 		JOIN files f ON f.id = n.rowid
@@ -274,14 +341,18 @@ func ftsQuery(query string) string {
 // QuickSwitch performs fuzzy filename matching (Ctrl+P), returning up to `limit`
 // relative paths sorted by match quality descending.
 func (s *Service) QuickSwitch(query string, limit int) ([]string, error) {
-	if s.db == nil {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+
+	if db == nil {
 		return nil, errors.New("search chưa mở index nào")
 	}
 	if limit <= 0 {
 		limit = 20
 	}
 
-	rows, err := s.db.Query(`SELECT path FROM files ORDER BY path`)
+	rows, err := db.Query(`SELECT path FROM files ORDER BY path`)
 	if err != nil {
 		return nil, err
 	}

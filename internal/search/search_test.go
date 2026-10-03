@@ -106,3 +106,46 @@ func TestQuickSwitchFuzzy(t *testing.T) {
 		t.Fatalf("expected fuzzy match on roadmap.md, got %v", matches)
 	}
 }
+
+func TestConcurrentReindexAndOpenVault(t *testing.T) {
+	svc, root1 := newTestSearch(t)
+	root2 := t.TempDir()
+
+	for i := 0; i < 20; i++ {
+		writeNote(t, root1, filepath.Join("notes", strings.Repeat("a", i+1)+".md"), "content about golang testing")
+		writeNote(t, root2, filepath.Join("notes", strings.Repeat("b", i+1)+".md"), "content about second vault notes")
+	}
+
+	// Concurrently trigger reindex while opening and switching vaults repeatedly
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 10; i++ {
+			_ = svc.Reindex()
+			time.Sleep(2 * time.Millisecond)
+		}
+		close(done)
+	}()
+
+	for i := 0; i < 5; i++ {
+		target := root1
+		if i%2 == 1 {
+			target = root2
+		}
+		if err := svc.Open(target); err != nil {
+			t.Fatalf("Open during concurrent reindex failed: %v", err)
+		}
+		time.Sleep(3 * time.Millisecond)
+	}
+	<-done
+
+	// Verify service is still usable
+	if err := svc.Reindex(); err != nil {
+		t.Fatalf("Reindex after concurrent test failed: %v", err)
+	}
+	res, err := svc.Search("vault", 10)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	_ = res
+}
+

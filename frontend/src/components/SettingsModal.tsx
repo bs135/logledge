@@ -73,8 +73,7 @@ export function SettingsModal({
         try {
             setVaultLoading(true)
             const chosen = await SelectVaultFolder()
-            if (chosen && chosen !== currentVaultPath) {
-                await SwitchVault(chosen)
+            if (chosen) {
                 onSwitchVault(chosen)
                 refreshVaults()
             }
