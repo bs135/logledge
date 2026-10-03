@@ -75,10 +75,6 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
                 <StatusIcon state={status.state} syncing={syncing} />
                 <span>{syncing ? 'Đang đồng bộ…' : STATE_LABEL[status.state] ?? status.state}</span>
             </button>
-            <button className="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors" onClick={onOpenSettings}>
-                <Settings className="h-3 w-3" />
-                <span>Cấu hình đồng bộ</span>
-            </button>
         </div>
     )
 }

@@ -24,7 +24,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                 <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-5 py-3">
                     <div className="flex items-center gap-2.5">
                         <img src="/icon.svg" alt="Logledge" className="h-5 w-5" />
-                        <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">About Logledge & Quick Help</h2>
+                        <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Quick Help</h2>
                     </div>
                     <button
                         onClick={onClose}

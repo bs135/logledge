@@ -19,7 +19,7 @@ import {
     Search,
     Moon,
     Sun,
-    Monitor,
+    SunMoon,
     HelpCircle,
     Minus,
     Square,
@@ -239,24 +239,24 @@ export function TitleBar({
                         ) : theme === 'light' ? (
                             <Sun className="h-4 w-4" />
                         ) : (
-                            <Monitor className="h-4 w-4" />
+                            <SunMoon className="h-4 w-4" />
                         )}
                     </button>
                 )}
 
-                <button
-                    onClick={onOpenHelp}
-                    title="About & Shortcuts (?)"
-                    className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
-                >
-                    <HelpCircle className="h-4 w-4" />
-                </button>
                 <button
                     onClick={onOpenSettings}
                     title={t('settings')}
                     className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 >
                     <Settings className="h-4 w-4" />
+                </button>
+                <button
+                    onClick={onOpenHelp}
+                    title="Help"
+                    className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                >
+                    <HelpCircle className="h-4 w-4" />
                 </button>
 
                 <div className="ml-1 h-4 w-px bg-neutral-300 dark:bg-neutral-800" />
