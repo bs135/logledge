@@ -18,6 +18,18 @@ export function DeleteEntry(arg1) {
   return window['go']['main']['App']['DeleteEntry'](arg1);
 }
 
+export function DetectVaultInfo(arg1) {
+  return window['go']['main']['App']['DetectVaultInfo'](arg1);
+}
+
+export function GetAppSettings() {
+  return window['go']['main']['App']['GetAppSettings']();
+}
+
+export function GetLanguage() {
+  return window['go']['main']['App']['GetLanguage']();
+}
+
 export function GetSyncSettings() {
   return window['go']['main']['App']['GetSyncSettings']();
 }
@@ -30,12 +42,20 @@ export function GetTree() {
   return window['go']['main']['App']['GetTree']();
 }
 
+export function GetVaultList() {
+  return window['go']['main']['App']['GetVaultList']();
+}
+
 export function InitVault() {
   return window['go']['main']['App']['InitVault']();
 }
 
 export function MoveEntry(arg1, arg2) {
   return window['go']['main']['App']['MoveEntry'](arg1, arg2);
+}
+
+export function PickVaultFolder() {
+  return window['go']['main']['App']['PickVaultFolder']();
 }
 
 export function QuickSwitch(arg1) {
@@ -46,12 +66,24 @@ export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
 
+export function RemoveVault(arg1) {
+  return window['go']['main']['App']['RemoveVault'](arg1);
+}
+
 export function RenameEntry(arg1, arg2) {
   return window['go']['main']['App']['RenameEntry'](arg1, arg2);
 }
 
+export function SaveAppSettings(arg1, arg2) {
+  return window['go']['main']['App']['SaveAppSettings'](arg1, arg2);
+}
+
 export function SaveAttachment(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveAttachment'](arg1, arg2, arg3);
+}
+
+export function SaveVault(arg1, arg2) {
+  return window['go']['main']['App']['SaveVault'](arg1, arg2);
 }
 
 export function SearchNotes(arg1) {
@@ -64,6 +96,10 @@ export function SelectVaultFolder() {
 
 export function SetGitHubPAT(arg1) {
   return window['go']['main']['App']['SetGitHubPAT'](arg1);
+}
+
+export function SwitchVault(arg1) {
+  return window['go']['main']['App']['SwitchVault'](arg1);
 }
 
 export function SyncNow() {

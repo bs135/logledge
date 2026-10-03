@@ -18,9 +18,10 @@ export interface UseVaultResult {
     loading: boolean
     error: string | null
     selectFolder: () => Promise<void>
+    reload: () => Promise<void>
     createFile: (parentRelPath: string, name: string) => Promise<void>
     createFolder: (parentRelPath: string, name: string) => Promise<void>
-    rename: (relPath: string, newName: string) => Promise<void>
+    rename: (relPath: string, newName: string) => Promise<string | undefined>
     move: (srcRelPath: string, destParentRelPath: string) => Promise<void>
     remove: (relPath: string) => Promise<void>
 }
@@ -73,6 +74,25 @@ export function useVault(): UseVaultResult {
         }
     }, [refresh])
 
+    const reload = useCallback(async () => {
+        setLoading(true)
+        setError(null)
+        try {
+            const path = await InitVault()
+            setVaultPath(path || null)
+            if (path) {
+                const tr = await GetTree()
+                setTree(tr)
+            } else {
+                setTree(null)
+            }
+        } catch (err) {
+            setError(String(err))
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
     const wrap = useCallback(
         (fn: () => Promise<unknown>) => async () => {
             try {
@@ -94,8 +114,17 @@ export function useVault(): UseVaultResult {
         [wrap],
     )
     const rename = useCallback(
-        (relPath: string, newName: string) => wrap(() => RenameEntry(relPath, newName))(),
-        [wrap],
+        async (relPath: string, newName: string): Promise<string | undefined> => {
+            try {
+                const newPath = await RenameEntry(relPath, newName)
+                refresh()
+                return newPath
+            } catch (err) {
+                setError(String(err))
+                throw err
+            }
+        },
+        [refresh],
     )
     const move = useCallback(
         (srcRelPath: string, destParentRelPath: string) =>
@@ -104,5 +133,5 @@ export function useVault(): UseVaultResult {
     )
     const remove = useCallback((relPath: string) => wrap(() => DeleteEntry(relPath))(), [wrap])
 
-    return {vaultPath, tree, loading, error, selectFolder, createFile, createFolder, rename, move, remove}
+    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove}
 }

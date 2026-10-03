@@ -2,6 +2,8 @@ import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
 import {SearchNotes} from '../../wailsjs/go/main/App'
 import type {search} from '../../wailsjs/go/models'
+import {Search, FileText} from 'lucide-react'
+import {useI18n} from '../i18n'
 
 interface GlobalSearchProps {
     onOpen: (path: string) => void
@@ -11,6 +13,7 @@ interface GlobalSearchProps {
 // GlobalSearch is a full-text search modal (Ctrl+Shift+F): searches across
 // all note content in the Vault, displaying highlighted context snippets.
 export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
+    const {t} = useI18n()
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<search.Result[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
@@ -59,35 +62,43 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-24" onClick={onClose}>
             <div
-                className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 shadow-2xl"
+                className="w-full max-w-xl overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <input
-                    ref={inputRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Tìm kiếm toàn văn trong Vault…"
-                    className="w-full border-b border-neutral-700 bg-transparent px-4 py-3 text-sm text-neutral-100 outline-none"
-                />
+                <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 px-3">
+                    <Search className="h-4 w-4 text-neutral-400 shrink-0" />
+                    <input
+                        ref={inputRef}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={t('searchVaultPlaceholder')}
+                        className="w-full bg-transparent px-3 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none"
+                    />
+                </div>
                 <ul className="max-h-96 overflow-y-auto py-1">
                     {results.map((r, i) => (
                         <li key={r.path}>
                             <button
-                                className={`block w-full px-4 py-2 text-left text-sm ${
-                                    i === activeIndex ? 'bg-blue-600 text-white' : 'text-neutral-200 hover:bg-neutral-700'
+                                className={`block w-full px-4 py-2 text-left text-sm transition-colors ${
+                                    i === activeIndex
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
                                 }`}
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
                             >
-                                <div className="truncate font-medium">{r.title}</div>
+                                <div className="flex items-center gap-1.5 truncate font-medium">
+                                    <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                    <span className="truncate">{r.title}</span>
+                                </div>
                                 <div className="mt-0.5 truncate text-xs opacity-80">{highlightSnippet(r.snippet)}</div>
                                 <div className="mt-0.5 truncate text-xs opacity-50">{r.path}</div>
                             </button>
                         </li>
                     ))}
                     {query.trim() && results.length === 0 && (
-                        <li className="px-4 py-3 text-sm text-neutral-500">Không tìm thấy kết quả nào</li>
+                        <li className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">{t('noResultsFound')}</li>
                     )}
                 </ul>
             </div>
@@ -101,7 +112,7 @@ function highlightSnippet(snippet: string) {
     const parts = snippet.split('**')
     return parts.map((part, i) =>
         i % 2 === 1 ? (
-            <mark key={i} className="rounded bg-yellow-500/40 px-0.5 text-yellow-100">
+            <mark key={i} className="rounded bg-yellow-300/60 dark:bg-yellow-500/40 px-0.5 text-neutral-900 dark:text-yellow-100">
                 {part}
             </mark>
         ) : (
