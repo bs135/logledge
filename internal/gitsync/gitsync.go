@@ -143,6 +143,7 @@ func (s *Service) Stop() {
 func (s *Service) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = s.root
+	prepareCmd(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
