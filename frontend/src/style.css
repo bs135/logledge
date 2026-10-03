@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @font-face {
     font-family: "Nunito";
     font-style: normal;
@@ -18,4 +20,62 @@ body {
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
 }
+
+/* Ensure all Crepe editor headings use Sans-serif */
+.milkdown {
+    --crepe-font-title: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif !important;
+}
+
+.milkdown h1,
+.milkdown h2,
+.milkdown h3,
+.milkdown h4,
+.milkdown h5,
+.milkdown h6 {
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif !important;
+}
+
+/* Dark mode theme variables for Crepe */
+html.dark .milkdown {
+    --crepe-color-background: #171717;
+    --crepe-color-on-background: #e5e5e5;
+    --crepe-color-surface: #171717;
+    --crepe-color-surface-low: #262626;
+    --crepe-color-on-surface: #d4d4d4;
+    --crepe-color-on-surface-variant: #a3a3a3;
+    --crepe-color-outline: #525252;
+    --crepe-color-primary: #a3a3a3;
+    --crepe-color-secondary: #404040;
+    --crepe-color-on-secondary: #d4d4d4;
+    --crepe-color-inverse: #e5e5e5;
+    --crepe-color-on-inverse: #262626;
+    --crepe-color-inline-code: #f87171;
+    --crepe-color-error: #ef4444;
+    --crepe-color-hover: #262626;
+    --crepe-color-selected: #404040;
+    --crepe-color-inline-area: #262626;
+}
+
+/* Light mode theme variables for Crepe */
+html.light .milkdown {
+    --crepe-color-background: #ffffff;
+    --crepe-color-on-background: #1e293b;
+    --crepe-color-surface: #ffffff;
+    --crepe-color-surface-low: #f8fafc;
+    --crepe-color-on-surface: #1e293b;
+    --crepe-color-on-surface-variant: #64748b;
+    --crepe-color-outline: #cbd5e1;
+    --crepe-color-primary: #0f172a;
+    --crepe-color-secondary: #e2e8f0;
+    --crepe-color-on-secondary: #0f172a;
+    --crepe-color-inverse: #0f172a;
+    --crepe-color-on-inverse: #f8fafc;
+    --crepe-color-inline-code: #e11d48;
+    --crepe-color-error: #ef4444;
+    --crepe-color-hover: #f1f5f9;
+    --crepe-color-selected: #e2e8f0;
+    --crepe-color-inline-area: #e2e8f0;
+}
+
+
 

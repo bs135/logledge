@@ -18,6 +18,10 @@ export function DeleteEntry(arg1) {
   return window['go']['main']['App']['DeleteEntry'](arg1);
 }
 
+export function GetAppSettings() {
+  return window['go']['main']['App']['GetAppSettings']();
+}
+
 export function GetSyncSettings() {
   return window['go']['main']['App']['GetSyncSettings']();
 }
@@ -28,6 +32,10 @@ export function GetSyncStatus() {
 
 export function GetTree() {
   return window['go']['main']['App']['GetTree']();
+}
+
+export function GetVaultList() {
+  return window['go']['main']['App']['GetVaultList']();
 }
 
 export function InitVault() {
@@ -46,8 +54,16 @@ export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
 
+export function RemoveVault(arg1) {
+  return window['go']['main']['App']['RemoveVault'](arg1);
+}
+
 export function RenameEntry(arg1, arg2) {
   return window['go']['main']['App']['RenameEntry'](arg1, arg2);
+}
+
+export function SaveAppSettings(arg1, arg2) {
+  return window['go']['main']['App']['SaveAppSettings'](arg1, arg2);
 }
 
 export function SaveAttachment(arg1, arg2, arg3) {
@@ -64,6 +80,10 @@ export function SelectVaultFolder() {
 
 export function SetGitHubPAT(arg1) {
   return window['go']['main']['App']['SetGitHubPAT'](arg1);
+}
+
+export function SwitchVault(arg1) {
+  return window['go']['main']['App']['SwitchVault'](arg1);
 }
 
 export function SyncNow() {

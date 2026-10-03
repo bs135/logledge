@@ -9,10 +9,24 @@ import (
 	"path/filepath"
 )
 
+type VaultEntry struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
 // Config represents the application settings persisted across sessions.
 type Config struct {
 	// VaultPath is the absolute path to the Vault root directory selected by the user.
 	VaultPath string `json:"vaultPath"`
+
+	// Vaults stores the list of known vaults for multi-vault switching.
+	Vaults []VaultEntry `json:"vaults,omitempty"`
+
+	// Theme preference: "dark" | "light" | "system"
+	Theme string `json:"theme,omitempty"`
+
+	// Language preference: "vi" | "en"
+	Language string `json:"language,omitempty"`
 
 	// GitHub synchronization configuration fields (Phase 4). The Personal Access Token
 	// is NOT stored here — it is kept securely in the OS Keychain via go-keyring.
