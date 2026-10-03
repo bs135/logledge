@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -32,6 +33,8 @@ type App struct {
 	search      *search.Service
 	sync        *gitsync.Service
 	trayCleanup func()
+	langMu      sync.RWMutex
+	language    string
 }
 
 // NewApp creates a new App application struct
@@ -48,6 +51,14 @@ func NewApp() *App {
 // cold-start; frontend triggers InitVault() after mounting.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	cfg, _ := config.Load()
+	a.langMu.Lock()
+	if cfg.Language != "" {
+		a.language = cfg.Language
+	} else {
+		a.language = "vi"
+	}
+	a.langMu.Unlock()
 	a.trayCleanup = tray.Start(ctx, a)
 }
 
@@ -226,8 +237,24 @@ func (a *App) GetAppSettings() (config.Config, error) {
 	return config.Load()
 }
 
+// GetLanguage returns the currently active language ("vi" or "en").
+func (a *App) GetLanguage() string {
+	a.langMu.RLock()
+	defer a.langMu.RUnlock()
+	if a.language == "" {
+		return "vi"
+	}
+	return a.language
+}
+
 // SaveAppSettings updates general settings like theme and language.
 func (a *App) SaveAppSettings(theme, language string) error {
+	a.langMu.Lock()
+	if language != "" {
+		a.language = language
+	}
+	a.langMu.Unlock()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err

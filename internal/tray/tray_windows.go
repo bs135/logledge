@@ -12,6 +12,8 @@ import (
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/sys/windows"
+
+	"logledge/internal/config"
 )
 
 //go:embed icon.ico
@@ -19,6 +21,17 @@ var embeddedIcon []byte
 
 type Syncer interface {
 	SyncNow() error
+}
+
+type LangProvider interface {
+	GetLanguage() string
+}
+
+func getMenuLabels(lang string) (show, sync, quit string) {
+	if lang == "en" {
+		return "Open Logledge", "Sync Now", "Quit"
+	}
+	return "Mở Logledge", "Đồng bộ ngay", "Thoát"
 }
 
 var (
@@ -162,9 +175,19 @@ func Start(ctx context.Context, s Syncer) func() {
 					}
 					defer procDestroyMenu.Call(uintptr(hMenu))
 
-					showLabel, _ := windows.UTF16PtrFromString("Hiển thị Logledge / Show Logledge")
-					syncLabel, _ := windows.UTF16PtrFromString("Đồng bộ ngay / Sync Now")
-					quitLabel, _ := windows.UTF16PtrFromString("Thoát / Quit")
+					lang := "vi"
+					if lp, ok := s.(LangProvider); ok {
+						if l := lp.GetLanguage(); l != "" {
+							lang = l
+						}
+					} else if cfg, err := config.Load(); err == nil && cfg.Language != "" {
+						lang = cfg.Language
+					}
+
+					showText, syncText, quitText := getMenuLabels(lang)
+					showLabel, _ := windows.UTF16PtrFromString(showText)
+					syncLabel, _ := windows.UTF16PtrFromString(syncText)
+					quitLabel, _ := windows.UTF16PtrFromString(quitText)
 
 					procAppendMenuW.Call(uintptr(hMenu), mfString, uintptr(idShow), uintptr(unsafe.Pointer(showLabel)))
 					procAppendMenuW.Call(uintptr(hMenu), mfString, uintptr(idSync), uintptr(unsafe.Pointer(syncLabel)))

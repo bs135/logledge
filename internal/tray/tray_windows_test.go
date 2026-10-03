@@ -26,3 +26,21 @@ func TestLoadTrayIcon(t *testing.T) {
 		procDestroyIcon.Call(uintptr(hIcon))
 	}
 }
+
+func TestGetMenuLabels(t *testing.T) {
+	showVi, syncVi, quitVi := getMenuLabels("vi")
+	if showVi != "Mở Logledge" || syncVi != "Đồng bộ ngay" || quitVi != "Thoát" {
+		t.Errorf("Unexpected Vietnamese labels: %s, %s, %s", showVi, syncVi, quitVi)
+	}
+
+	showEn, syncEn, quitEn := getMenuLabels("en")
+	if showEn != "Open Logledge" || syncEn != "Sync Now" || quitEn != "Quit" {
+		t.Errorf("Unexpected English labels: %s, %s, %s", showEn, syncEn, quitEn)
+	}
+
+	// Default fallback for unknown or empty
+	showDef, syncDef, quitDef := getMenuLabels("")
+	if showDef != "Mở Logledge" || syncDef != "Đồng bộ ngay" || quitDef != "Thoát" {
+		t.Errorf("Unexpected fallback labels: %s, %s, %s", showDef, syncDef, quitDef)
+	}
+}

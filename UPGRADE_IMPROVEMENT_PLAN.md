@@ -21,7 +21,7 @@ The proposed 4-sprint roadmap addresses critical UX flaws, modernizes the app sh
 12. **Multi-Vault Support (Sprint 3)**: Highly feasible. Extend `config.Config` to store a list of known vaults (`Vaults []VaultInfo`) and active vault. Add backend methods `GetVaults`, `SwitchVault`, `AddVault`, `RemoveVault`, and a vault switcher UI in the title bar / sidebar header.
 13. **i18n (Tiếng Việt / English) (Sprint 3)**: Highly feasible. Add lightweight dictionary-based translation (`useI18n`) with language switcher.
 14. **Quick Help & About Dialog (Sprint 4)**: Highly feasible. Help modal showing version, keyboard shortcuts reference, markdown cheat sheet, and project links.
-15. **System Tray Integration (Sprint 4)**: Highly feasible. Integrate `github.com/getlantern/systray` (pure Go Windows API, CGO_ENABLED=0 compatible) with menu items (Show Logledge, Sync Now, Quit) and `HideWindowOnClose: true` option.
+15. **System Tray Integration (Sprint 4)**: Highly feasible. Integrate `github.com/getlantern/systray` (pure Go Windows API, CGO_ENABLED=0 compatible) with menu items (Open Logledge, Sync Now, Quit) and `HideWindowOnClose: true` option.
 
 ---
 
@@ -80,7 +80,7 @@ The proposed 4-sprint roadmap addresses critical UX flaws, modernizes the app sh
 12. **Multi-Vault Support (Sprint 3)**: Highly feasible. Extend `config.Config` to store a list of known vaults (`Vaults []VaultInfo`) and active vault. Add backend methods `GetVaults`, `SwitchVault`, `AddVault`, `RemoveVault`, and a vault switcher UI in the title bar / sidebar header.
 13. **i18n (Tiếng Việt / English) (Sprint 3)**: Highly feasible. Add lightweight dictionary-based translation (`useI18n`) with language switcher.
 14. **Quick Help & About Dialog (Sprint 4)**: Highly feasible. Help modal showing version, keyboard shortcuts reference, markdown cheat sheet, and project links.
-15. **System Tray Integration (Sprint 4)**: Highly feasible. Integrate `github.com/getlantern/systray` (pure Go Windows API, CGO_ENABLED=0 compatible) with menu items (Show Logledge, Sync Now, Quit) and `HideWindowOnClose: true` option.
+15. **System Tray Integration (Sprint 4)**: Highly feasible. Integrate `github.com/getlantern/systray` (pure Go Windows API, CGO_ENABLED=0 compatible) with menu items (Open Logledge, Sync Now, Quit) and `HideWindowOnClose: true` option.
 
 ---
 

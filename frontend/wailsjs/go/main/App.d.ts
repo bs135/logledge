@@ -16,6 +16,8 @@ export function DeleteEntry(arg1:string):Promise<void>;
 
 export function GetAppSettings():Promise<config.Config>;
 
+export function GetLanguage():Promise<string>;
+
 export function GetSyncSettings():Promise<main.SyncSettings>;
 
 export function GetSyncStatus():Promise<gitsync.Status>;

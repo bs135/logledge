@@ -22,6 +22,10 @@ export function GetAppSettings() {
   return window['go']['main']['App']['GetAppSettings']();
 }
 
+export function GetLanguage() {
+  return window['go']['main']['App']['GetLanguage']();
+}
+
 export function GetSyncSettings() {
   return window['go']['main']['App']['GetSyncSettings']();
 }
