@@ -1,10 +1,35 @@
 import {useState} from 'react'
 import type {DragEvent} from 'react'
-import type {vault} from '../../wailsjs/go/models'
+import {vault} from '../../wailsjs/go/models'
+
+const NOTE_EXTENSIONS = ['.md', '.markdown', '.txt']
+
+function isNoteFile(name: string): boolean {
+    const lower = name.toLowerCase()
+    return NOTE_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+function filterNode(node: vault.Node, onlyNotes: boolean): vault.Node | null {
+    if (!onlyNotes) return node
+    if (!node.isDir) {
+        return isNoteFile(node.name) ? node : null
+    }
+    const filteredChildren = (node.children || [])
+        .map((child) => filterNode(child, onlyNotes))
+        .filter((child): child is vault.Node => child !== null)
+
+    return vault.Node.createFrom({
+        name: node.name,
+        path: node.path,
+        isDir: node.isDir,
+        children: filteredChildren,
+    })
+}
 
 interface FileTreeProps {
     root: vault.Node
     selectedPath: string | null
+    onlyNotes?: boolean
     onSelectFile: (path: string) => void
     onCreateFile: (parentRelPath: string) => void
     onCreateFolder: (parentRelPath: string) => void
@@ -15,11 +40,12 @@ interface FileTreeProps {
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
 // folder collapse/expand, context menu (right-click), and drag-and-drop movement.
-export function FileTree(props: FileTreeProps) {
+export function FileTree({onlyNotes = true, ...props}: FileTreeProps) {
+    const filteredRoot = filterNode(props.root, onlyNotes) || props.root
     return (
         <div className="select-none text-sm">
-            {props.root.children?.map((child) => (
-                <TreeEntry key={child.path} node={child} depth={0} rootPath={props.root.path} {...props} />
+            {filteredRoot.children?.map((child) => (
+                <TreeEntry key={child.path} node={child} depth={0} rootPath={filteredRoot.path} {...props} />
             ))}
         </div>
     )
@@ -33,7 +59,7 @@ interface TreeEntryProps extends Omit<FileTreeProps, 'root'> {
 
 function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateFile, onCreateFolder, onRename, onDelete, onMove}: TreeEntryProps) {
     const [open, setOpen] = useState(depth < 1)
-    const [menuOpen, setMenuOpen] = useState(false)
+    const [menuPos, setMenuPos] = useState<{x: number; y: number} | null>(null)
     const [dragOver, setDragOver] = useState(false)
 
     const isSelected = !node.isDir && node.path === selectedPath
@@ -76,7 +102,8 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
                 onClick={handleClick}
                 onContextMenu={(e) => {
                     e.preventDefault()
-                    setMenuOpen(true)
+                    e.stopPropagation()
+                    setMenuPos({x: e.clientX, y: e.clientY})
                 }}
                 className={`flex cursor-pointer items-center gap-1 rounded px-2 py-1 hover:bg-neutral-800 ${
                     isSelected ? 'bg-neutral-700' : ''
@@ -87,9 +114,10 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
                 <span className="truncate">{node.isDir ? '📁' : '📄'} {node.name}</span>
             </div>
 
-            {menuOpen && (
+            {menuPos && (
                 <ContextMenu
-                    onClose={() => setMenuOpen(false)}
+                    position={menuPos}
+                    onClose={() => setMenuPos(null)}
                     node={node}
                     onCreateFile={onCreateFile}
                     onCreateFolder={onCreateFolder}
@@ -119,6 +147,7 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
 
 interface ContextMenuProps {
     node: vault.Node
+    position: {x: number; y: number}
     onClose: () => void
     onCreateFile: (parentRelPath: string) => void
     onCreateFolder: (parentRelPath: string) => void
@@ -126,7 +155,7 @@ interface ContextMenuProps {
     onDelete: (relPath: string) => void
 }
 
-function ContextMenu({node, onClose, onCreateFile, onCreateFolder, onRename, onDelete}: ContextMenuProps) {
+function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onRename, onDelete}: ContextMenuProps) {
     const parent = node.isDir ? node.path : node.path.split('/').slice(0, -1).join('/')
 
     function act(fn: () => void) {
@@ -134,11 +163,17 @@ function ContextMenu({node, onClose, onCreateFile, onCreateFolder, onRename, onD
         onClose()
     }
 
+    // Keep menu within viewport
+    const menuWidth = 160
+    const menuHeight = 160
+    const left = Math.max(10, Math.min(position.x, window.innerWidth - menuWidth - 10))
+    const top = Math.max(10, Math.min(position.y, window.innerHeight - menuHeight - 10))
+
     return (
-        <div className="fixed inset-0 z-10" onClick={onClose}>
+        <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }}>
             <div
-                className="absolute z-20 min-w-[160px] rounded border border-neutral-700 bg-neutral-800 py-1 shadow-lg"
-                style={{left: '1rem'}}
+                className="absolute z-50 min-w-[160px] rounded border border-neutral-700 bg-neutral-800 py-1 shadow-lg shadow-black/50"
+                style={{left: `${left}px`, top: `${top}px`}}
                 onClick={(e) => e.stopPropagation()}
             >
                 <MenuItem label="New note" onClick={() => act(() => onCreateFile(parent))} />
