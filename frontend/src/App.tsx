@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
@@ -45,6 +45,9 @@ function App() {
     const [isResizing, setIsResizing] = useState(false)
     const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+    const lastResizeMouseDownTimeRef = useRef(0)
+    const isDraggingSidebarRef = useRef(false)
+    const dragStartXRef = useRef(0)
     const [onlyNotes, setOnlyNotes] = useState(() => localStorage.getItem('logledge:onlyNotes') !== 'false')
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
@@ -162,35 +165,73 @@ function App() {
         }
     }, [selectedPath])
 
-    // Handle left sidebar resize via dragging right edge
-    useEffect(() => {
-        if (!isResizing) return
+    const handleResetSidebarWidth = useCallback(() => {
+        setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+    }, [])
+
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+
+        const now = Date.now()
+        const timeDiff = now - lastResizeMouseDownTimeRef.current
+        if (timeDiff <= 500 && timeDiff > 0) {
+            handleResetSidebarWidth()
+            lastResizeMouseDownTimeRef.current = 0
+            isDraggingSidebarRef.current = false
+            setIsResizing(false)
+            return
+        }
+        lastResizeMouseDownTimeRef.current = now
+
+        dragStartXRef.current = e.clientX
+        isDraggingSidebarRef.current = false
 
         const prevUserSelect = document.body.style.userSelect
         const prevCursor = document.body.style.cursor
-        document.body.style.userSelect = 'none'
-        document.body.style.cursor = 'col-resize'
 
-        const handleMouseMove = (e: MouseEvent) => {
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            if (!isDraggingSidebarRef.current) {
+                if (Math.abs(moveEvent.clientX - dragStartXRef.current) >= 3) {
+                    isDraggingSidebarRef.current = true
+                    lastResizeMouseDownTimeRef.current = 0
+                    setIsResizing(true)
+                    document.body.style.userSelect = 'none'
+                    document.body.style.cursor = 'col-resize'
+                } else {
+                    return
+                }
+            }
+
             const containerLeft = containerRef.current?.getBoundingClientRect().left ?? 0
             const maxAllowed = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 200))
-            const newWidth = Math.min(Math.max(e.clientX - containerLeft, MIN_SIDEBAR_WIDTH), maxAllowed)
+            const newWidth = Math.min(Math.max(moveEvent.clientX - containerLeft, MIN_SIDEBAR_WIDTH), maxAllowed)
             setSidebarWidth(newWidth)
         }
 
         const handleMouseUp = () => {
-            setIsResizing(false)
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+            window.removeEventListener('blur', handleMouseUp)
+            if (isDraggingSidebarRef.current) {
+                isDraggingSidebarRef.current = false
+                setIsResizing(false)
+                document.body.style.userSelect = prevUserSelect
+                document.body.style.cursor = prevCursor
+            }
         }
 
         window.addEventListener('mousemove', handleMouseMove)
         window.addEventListener('mouseup', handleMouseUp)
+        window.addEventListener('blur', handleMouseUp)
+    }, [handleResetSidebarWidth])
+
+    useEffect(() => {
         return () => {
-            document.body.style.userSelect = prevUserSelect
-            document.body.style.cursor = prevCursor
-            window.removeEventListener('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', handleMouseUp)
+            document.body.style.userSelect = ''
+            document.body.style.cursor = ''
         }
-    }, [isResizing])
+    }, [])
 
     useEffect(() => {
         localStorage.setItem('logledge:sidebarWidth', String(sidebarWidth))
@@ -422,14 +463,8 @@ function App() {
                             e.preventDefault()
                             e.stopPropagation()
                         }}
-                        onMouseDown={(e) => {
-                            if (e.button !== 0) return
-                            e.preventDefault()
-                            setIsResizing(true)
-                        }}
-                        onDoubleClick={() => {
-                            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
-                        }}
+                        onMouseDown={handleResizeMouseDown}
+                        onDoubleClick={handleResetSidebarWidth}
                         onKeyDown={(e) => {
                             if (e.key === 'ArrowLeft') {
                                 e.preventDefault()
@@ -443,13 +478,16 @@ function App() {
                                 setSidebarWidth(MIN_SIDEBAR_WIDTH)
                             } else if (e.key === 'End') {
                                 e.preventDefault()
-                                setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+                                handleResetSidebarWidth()
                             }
                         }}
                         className="relative w-px shrink-0 select-none bg-neutral-200 dark:bg-neutral-800 cursor-col-resize group focus:outline-none"
                     >
                         {/* Invisible expanded hit area for easier grabbing */}
-                        <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-20 cursor-col-resize" />
+                        <div
+                            className="absolute inset-y-0 -left-1.5 -right-1.5 z-20 cursor-col-resize"
+                            onDoubleClick={handleResetSidebarWidth}
+                        />
                         {/* Visual indicator on hover and active dragging */}
                         <div
                             className={`absolute inset-y-0 -left-[1px] w-[3px] transition-colors pointer-events-none ${
