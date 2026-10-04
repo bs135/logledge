@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.0](https://github.com/bs135/logledge/compare/v0.1.3...v0.2.0) (2026-10-04)
+
+
+### Features
+
+* add context menu to left sidebar empty area ([5a4679b](https://github.com/bs135/logledge/commit/5a4679b749133aa7e3b35db85b35b48a056577ce))
+* add custom confirmation modal for delete actions ([48ef59b](https://github.com/bs135/logledge/commit/48ef59b078505c007c924d2fd8be7ab8e36404bd))
+* add Delete and F2 keyboard shortcuts to FileTree ([084b01d](https://github.com/bs135/logledge/commit/084b01d14d0ad2bc1378ba601cd7fc0bc82dd297))
+* make left sidebar resizable with drag handle ([ce52c03](https://github.com/bs135/logledge/commit/ce52c03f90b6bb12b3384f016c35f17bf8004210))
+* support inline input for creating and renaming notes and folders ([c781af1](https://github.com/bs135/logledge/commit/c781af16521ff2de1bb62989a1bea46cc43bdb0b))
+* upgrade file type filter with whitelist and blacklist support ([afb7f16](https://github.com/bs135/logledge/commit/afb7f1686c09f7e0965bdd8c62f18c0f2f934ce8))
+* upgrade FileTree UI with inline actions, confirm modal, and shortcuts ([0754f97](https://github.com/bs135/logledge/commit/0754f978f8993700830b8c595aa29df8bdee92fd))
+
+
+### Bug Fixes
+
+* default vault authentication method to none when repo url is not detected ([9ae1f71](https://github.com/bs135/logledge/commit/9ae1f718d018c2cf47aab684bfb73cfd88566503))
+* disable default browser context menu on header icon buttons ([6991189](https://github.com/bs135/logledge/commit/6991189ff910e932d9934ad2fbedf82cda849c0c))
+* fix double-click reset on sidebar resize handle ([f15f317](https://github.com/bs135/logledge/commit/f15f31709d2f073112f183c27fe2cf681adbbc2d))
+* prevent duplicate system tray icons on multiple app launches ([5e15e62](https://github.com/bs135/logledge/commit/5e15e628d25bdb9689266c26616a6cb35ee1d9fe))
+
 ## [0.1.3](https://github.com/bs135/logledge/compare/v0.1.2...v0.1.3) (2026-10-03)
 
 
