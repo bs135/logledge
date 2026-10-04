@@ -31,7 +31,7 @@ export function VaultModal({
     const [repoURL, setRepoURL] = useState(initialVault.gitRepoUrl || '')
     const [branch, setBranch] = useState(initialVault.gitBranch || 'main')
     const [authMethod, setAuthMethod] = useState<'none' | 'pat' | 'ssh'>(
-        (initialVault.gitAuthMethod as 'none' | 'pat' | 'ssh') || 'pat'
+        (initialVault.gitAuthMethod as 'none' | 'pat' | 'ssh') || (initialVault.gitRepoUrl ? 'pat' : 'none')
     )
     const [pat, setPat] = useState('')
     const [hasPAT, setHasPAT] = useState(false)
@@ -42,7 +42,10 @@ export function VaultModal({
         setName(initialVault.name || '')
         setRepoURL(initialVault.gitRepoUrl || '')
         setBranch(initialVault.gitBranch || 'main')
-        setAuthMethod((initialVault.gitAuthMethod as 'none' | 'pat' | 'ssh') || 'pat')
+        const initialAuth =
+            (initialVault.gitAuthMethod as 'none' | 'pat' | 'ssh') ||
+            (initialVault.gitRepoUrl ? 'pat' : 'none')
+        setAuthMethod(initialAuth)
         setPat('')
         setError(null)
     }, [initialVault])
@@ -61,6 +64,10 @@ export function VaultModal({
         if (trimmed.startsWith('git@') || trimmed.startsWith('ssh://')) {
             setAuthMethod('ssh')
         } else if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+            setAuthMethod('pat')
+        } else if (!trimmed) {
+            setAuthMethod('none')
+        } else if (authMethod === 'none') {
             setAuthMethod('pat')
         }
     }

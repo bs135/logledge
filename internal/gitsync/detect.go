@@ -19,7 +19,7 @@ type DetectedGitInfo struct {
 func DetectGitInfo(dir string) DetectedGitInfo {
 	info := DetectedGitInfo{
 		Branch:     "main",
-		AuthMethod: AuthPAT,
+		AuthMethod: AuthNone,
 	}
 
 	// 1. Try git CLI first
@@ -96,7 +96,7 @@ func DetectGitInfo(dir string) DetectedGitInfo {
 			info.AuthMethod = AuthPAT
 		}
 	} else {
-		info.AuthMethod = AuthPAT
+		info.AuthMethod = AuthNone
 	}
 
 	return info
