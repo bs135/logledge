@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/binary"
 	"runtime"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -35,11 +36,15 @@ func getMenuLabels(lang string) (show, sync, quit string) {
 }
 
 var (
+	trayMu        sync.Mutex
+	activeCleanup func()
+
 	modKernel32         = syscall.NewLazyDLL("kernel32.dll")
 	procGetModuleHandle = modKernel32.NewProc("GetModuleHandleW")
 
 	modUser32                   = syscall.NewLazyDLL("user32.dll")
 	procRegisterClassExW        = modUser32.NewProc("RegisterClassExW")
+	procUnregisterClassW        = modUser32.NewProc("UnregisterClassW")
 	procCreateWindowExW         = modUser32.NewProc("CreateWindowExW")
 	procDefWindowProcW          = modUser32.NewProc("DefWindowProcW")
 	procDestroyWindow           = modUser32.NewProc("DestroyWindow")
@@ -140,8 +145,17 @@ type notifyIconDataW struct {
 // Start registers and displays a system tray icon with a popup menu.
 // Returns a cleanup function that removes the tray icon upon application shutdown.
 func Start(ctx context.Context, s Syncer) func() {
+	trayMu.Lock()
+	defer trayMu.Unlock()
+
+	if activeCleanup != nil {
+		activeCleanup()
+		activeCleanup = nil
+	}
+
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
+	readyCh := make(chan struct{})
 
 	go func() {
 		runtime.LockOSThread()
@@ -254,6 +268,7 @@ func Start(ctx context.Context, s Syncer) func() {
 		)
 		hwnd = windows.HWND(hwndRet)
 		if hwnd == 0 {
+			close(readyCh)
 			return
 		}
 
@@ -269,6 +284,7 @@ func Start(ctx context.Context, s Syncer) func() {
 		copy(nid.szTip[:], tipChars)
 
 		procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&nid)))
+		close(readyCh)
 
 		// Watch for stopCh to destroy window
 		go func() {
@@ -278,6 +294,7 @@ func Start(ctx context.Context, s Syncer) func() {
 			if hIcon != 0 {
 				procDestroyIcon.Call(uintptr(hIcon))
 			}
+			procUnregisterClassW.Call(uintptr(unsafe.Pointer(className)), uintptr(hInstance))
 		}()
 
 		var m msg
@@ -291,12 +308,28 @@ func Start(ctx context.Context, s Syncer) func() {
 		}
 	}()
 
+	<-readyCh
+
+	cleanupOnce := sync.Once{}
+	rawCleanup := func() {
+		cleanupOnce.Do(func() {
+			select {
+			case <-stopCh:
+			default:
+				close(stopCh)
+				<-doneCh
+			}
+		})
+	}
+
+	activeCleanup = rawCleanup
+
 	return func() {
-		select {
-		case <-stopCh:
-		default:
-			close(stopCh)
-			<-doneCh
+		trayMu.Lock()
+		defer trayMu.Unlock()
+		if activeCleanup != nil {
+			activeCleanup()
+			activeCleanup = nil
 		}
 	}
 }

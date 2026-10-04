@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"logledge/internal/config"
@@ -46,6 +47,23 @@ func NewApp() *App {
 	a.search = search.New()
 	a.sync = gitsync.New(a.emitSyncStatus)
 	return a
+}
+
+var (
+	windowShowFunc       = runtime.WindowShow
+	windowUnminimiseFunc = runtime.WindowUnminimise
+)
+
+// onSecondInstanceLaunch is invoked by Wails SingleInstanceLock when another instance
+// of the application is launched. It brings the existing window to the foreground and unminimizes it.
+func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
+	for i := 0; i < 20 && a.ctx == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if a.ctx != nil {
+		windowShowFunc(a.ctx)
+		windowUnminimiseFunc(a.ctx)
+	}
 }
 
 // startup is called when the app starts. The context is saved
