@@ -115,6 +115,8 @@ export const translations = {
         resizeSidebar: 'Drag to resize sidebar (Double click to reset)',
         newNotePlaceholder: 'Note name…',
         newFolderPlaceholder: 'Folder name…',
+        deleteModalTitle: 'Move to Trash?',
+        deleteModalDesc: 'Are you sure you want to move this item to trash? You can restore it from the operating system recycle bin.',
     },
     vi: {
         appName: 'Logledge',
@@ -227,6 +229,8 @@ export const translations = {
         resizeSidebar: 'Kéo để co giãn thanh bên (Nhấp đúp để đặt lại)',
         newNotePlaceholder: 'Tên ghi chú…',
         newFolderPlaceholder: 'Tên thư mục…',
+        deleteModalTitle: 'Chuyển vào thùng rác?',
+        deleteModalDesc: 'Bạn có chắc chắn muốn chuyển mục này vào thùng rác không? Bạn có thể khôi phục lại từ thùng rác của hệ điều hành.',
     },
 }
 

@@ -11,6 +11,7 @@ import {SyncStatusBar} from './components/SyncStatusBar'
 import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
+import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
@@ -63,6 +64,7 @@ function App() {
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
     const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
     useEffect(() => {
         GetFileFilterConfig()
@@ -182,6 +184,16 @@ function App() {
             } catch (err) {
                 alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
             }
+        }
+    }
+
+    async function handleConfirmDelete() {
+        if (!deleteTarget) return
+        const pathToDelete = deleteTarget
+        setDeleteTarget(null)
+        await vault.remove(pathToDelete)
+        if (selectedPath === pathToDelete) {
+            setSelectedPath(null)
         }
     }
 
@@ -499,12 +511,7 @@ function App() {
                                         onCreateFile={handleCreateNote}
                                         onCreateFolder={handleCreateFolder}
                                         onRename={handleStartRename}
-                                        onDelete={(path) => {
-                                            if (window.confirm(`${t('moveToTrashConfirm')} "${path}"`)) {
-                                                vault.remove(path)
-                                                if (selectedPath === path) setSelectedPath(null)
-                                            }
-                                        }}
+                                        onDelete={(path) => setDeleteTarget(path)}
                                         onMove={vault.move}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
@@ -663,6 +670,14 @@ function App() {
                     onCreateFolder={() => handleCreateFolder('')}
                 />
             )}
+            <ConfirmModal
+                isOpen={deleteTarget !== null}
+                title={t('deleteModalTitle')}
+                message={t('deleteModalDesc')}
+                itemName={deleteTarget ? deleteTarget.split('/').pop() : undefined}
+                onConfirm={handleConfirmDelete}
+                onClose={() => setDeleteTarget(null)}
+            />
             {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
         </div>
     )
