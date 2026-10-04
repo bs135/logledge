@@ -58,6 +58,8 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 │   │   └── style.css           # Tailwind CSS imports, typography overrides, dark theme variables
 │   └── wailsjs/                # Auto-generated Wails Go bindings (do not edit manually)
 ├── build/                      # Build assets, application icons, NSIS installers
+├── docs/                       # Project documentation, planning, and guides
+│   └── assets/                 # Project documentation assets (images, diagrams, etc.)
 └── .github/workflows/          # CI, release, and automated testing workflows
 ```
 
