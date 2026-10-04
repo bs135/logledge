@@ -11,6 +11,7 @@ import {SyncStatusBar} from './components/SyncStatusBar'
 import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
+import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {DetectVaultInfo, PickVaultFolder, ReadFile, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
@@ -42,6 +43,7 @@ function App() {
         return DEFAULT_SIDEBAR_WIDTH
     })
     const [isResizing, setIsResizing] = useState(false)
+    const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [onlyNotes, setOnlyNotes] = useState(() => localStorage.getItem('logledge:onlyNotes') !== 'false')
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
@@ -109,6 +111,21 @@ function App() {
         isDirtyRef.current = false
         setExternalChangeNotice(null)
         vault.reload()
+    }
+
+    async function handleCreateNote(parent = '') {
+        const name = window.prompt(t('newNote') + ':')
+        if (!name) return
+        const newPath = await vault.createFile(parent, name)
+        if (newPath) {
+            openFile(newPath)
+        }
+    }
+
+    async function handleCreateFolder(parent = '') {
+        const name = window.prompt(t('newFolder') + ':')
+        if (!name) return
+        await vault.createFolder(parent, name)
     }
 
     // Auto-refresh active note if changed externally or after git sync
@@ -322,10 +339,14 @@ function App() {
                                 maxWidth: `min(${MAX_SIDEBAR_WIDTH}px, calc(100vw - 200px))`,
                             }}
                             className="shrink-0 overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col"
+                            onContextMenu={(e) => {
+                                e.preventDefault()
+                                setSidebarContextMenuPos({x: e.clientX, y: e.clientY})
+                            }}
                         >
                             <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
                                 <span className="tracking-wider text-[11px]">{t('explorer')}</span>
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1" onContextMenu={(e) => e.stopPropagation()}>
                                     <button
                                         onClick={() =>
                                             setOnlyNotes((n) => {
@@ -344,20 +365,14 @@ function App() {
                                         {onlyNotes ? '.md' : 'all'}
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            const name = window.prompt(t('newNote') + ':')
-                                            if (name) vault.createFile('', name)
-                                        }}
+                                        onClick={() => handleCreateNote('')}
                                         title={t('newNote')}
                                         className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                     >
                                         <FilePlus className="h-3.5 w-3.5" />
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            const name = window.prompt(t('newFolder') + ':')
-                                            if (name) vault.createFolder('', name)
-                                        }}
+                                        onClick={() => handleCreateFolder('')}
                                         title={t('newFolder')}
                                         className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                     >
@@ -372,14 +387,8 @@ function App() {
                                         onlyNotes={onlyNotes}
                                         selectedPath={selectedPath}
                                         onSelectFile={openFile}
-                                        onCreateFile={(parent) => {
-                                            const name = window.prompt(t('newNote') + ':')
-                                            if (name) vault.createFile(parent, name)
-                                        }}
-                                        onCreateFolder={(parent) => {
-                                            const name = window.prompt(t('newFolder') + ':')
-                                            if (name) vault.createFolder(parent, name)
-                                        }}
+                                        onCreateFile={handleCreateNote}
+                                        onCreateFolder={handleCreateFolder}
                                         onRename={async (path) => {
                                             const name = window.prompt(t('rename') + ':', path.split('/').pop())
                                             if (name) {
@@ -409,6 +418,10 @@ function App() {
                         aria-valuemax={MAX_SIDEBAR_WIDTH}
                         tabIndex={0}
                         title={t('resizeSidebar')}
+                        onContextMenu={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                        }}
                         onMouseDown={(e) => {
                             if (e.button !== 0) return
                             e.preventDefault()
@@ -538,6 +551,14 @@ function App() {
                     initialVault={addingVault}
                     onSave={handleSaveNewVault}
                     onClose={() => setAddingVault(null)}
+                />
+            )}
+            {sidebarContextMenuPos && (
+                <SidebarContextMenu
+                    position={sidebarContextMenuPos}
+                    onClose={() => setSidebarContextMenuPos(null)}
+                    onCreateFile={() => handleCreateNote('')}
+                    onCreateFolder={() => handleCreateFolder('')}
                 />
             )}
             {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}

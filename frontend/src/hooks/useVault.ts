@@ -19,8 +19,8 @@ export interface UseVaultResult {
     error: string | null
     selectFolder: () => Promise<void>
     reload: () => Promise<void>
-    createFile: (parentRelPath: string, name: string) => Promise<void>
-    createFolder: (parentRelPath: string, name: string) => Promise<void>
+    createFile: (parentRelPath: string, name: string) => Promise<string | undefined>
+    createFolder: (parentRelPath: string, name: string) => Promise<string | undefined>
     rename: (relPath: string, newName: string) => Promise<string | undefined>
     move: (srcRelPath: string, destParentRelPath: string) => Promise<void>
     remove: (relPath: string) => Promise<void>
@@ -106,12 +106,30 @@ export function useVault(): UseVaultResult {
     )
 
     const createFile = useCallback(
-        (parentRelPath: string, name: string) => wrap(() => CreateFile(parentRelPath, name))(),
-        [wrap],
+        async (parentRelPath: string, name: string): Promise<string | undefined> => {
+            try {
+                const newPath = await CreateFile(parentRelPath, name)
+                refresh()
+                return newPath
+            } catch (err) {
+                setError(String(err))
+                return undefined
+            }
+        },
+        [refresh],
     )
     const createFolder = useCallback(
-        (parentRelPath: string, name: string) => wrap(() => CreateFolder(parentRelPath, name))(),
-        [wrap],
+        async (parentRelPath: string, name: string): Promise<string | undefined> => {
+            try {
+                const newPath = await CreateFolder(parentRelPath, name)
+                refresh()
+                return newPath
+            } catch (err) {
+                setError(String(err))
+                return undefined
+            }
+        },
+        [refresh],
     )
     const rename = useCallback(
         async (relPath: string, newName: string): Promise<string | undefined> => {

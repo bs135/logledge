@@ -55,7 +55,7 @@ interface FileTreeProps {
 export function FileTree({onlyNotes = true, ...props}: FileTreeProps) {
     const filteredRoot = filterNode(props.root, onlyNotes) || props.root
     return (
-        <div className="select-none text-sm">
+        <div className="select-none text-sm min-h-full">
             {filteredRoot.children?.map((child) => (
                 <TreeEntry key={child.path} node={child} depth={0} rootPath={filteredRoot.path} {...props} />
             ))}
