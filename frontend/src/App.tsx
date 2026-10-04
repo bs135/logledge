@@ -12,10 +12,10 @@ import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
-import {DetectVaultInfo, PickVaultFolder, ReadFile, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
+import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
-import {FilePlus, FolderPlus} from 'lucide-react'
+import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
 const MIN_SIDEBAR_WIDTH = 180
@@ -48,13 +48,30 @@ function App() {
     const lastResizeMouseDownTimeRef = useRef(0)
     const isDraggingSidebarRef = useRef(false)
     const dragStartXRef = useRef(0)
-    const [onlyNotes, setOnlyNotes] = useState(() => localStorage.getItem('logledge:onlyNotes') !== 'false')
+    const [filterConfig, setFilterConfig] = useState<config.FileFilterConfig>(() => {
+        return new config.FileFilterConfig({
+            enabled: true,
+            mode: 'whitelist',
+            whitelist: ['.md', '.markdown', '.txt'],
+            blacklist: ['.exe', '.bin', '.dll', '.logledge'],
+        })
+    })
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settingsTab, setSettingsTab] = useState<'general' | 'vaults' | 'appearance' | 'about'>('general')
+    const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
     const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+
+    useEffect(() => {
+        GetFileFilterConfig()
+            .then((cfg) => {
+                if (cfg) {
+                    setFilterConfig(cfg)
+                }
+            })
+            .catch(() => {})
+    }, [])
 
     async function handleOpenVaultFolder() {
         try {
@@ -326,6 +343,8 @@ function App() {
                         initialTab={settingsTab}
                         currentVaultPath={vault.vaultPath}
                         currentTheme={theme}
+                        filterConfig={filterConfig}
+                        onUpdateFilterConfig={setFilterConfig}
                         onSetTheme={setTheme}
                         onSwitchVault={handleVaultSwitched}
                         onClose={() => setSettingsOpen(false)}
@@ -389,21 +408,26 @@ function App() {
                                 <span className="tracking-wider text-[11px]">{t('explorer')}</span>
                                 <div className="flex items-center gap-1" onContextMenu={(e) => e.stopPropagation()}>
                                     <button
-                                        onClick={() =>
-                                            setOnlyNotes((n) => {
-                                                const next = !n
-                                                localStorage.setItem('logledge:onlyNotes', String(next))
-                                                return next
+                                        onClick={() => {
+                                            const updated = new config.FileFilterConfig({
+                                                ...filterConfig,
+                                                enabled: !filterConfig.enabled,
                                             })
-                                        }
-                                        title={onlyNotes ? t('onlyNotes') : t('allFiles')}
-                                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-                                            onlyNotes
+                                            setFilterConfig(updated)
+                                            SaveFileFilterConfig(updated).catch(() => {})
+                                        }}
+                                        title={filterConfig.enabled ? t('filterActive') : t('filterInactive')}
+                                        className={`p-1 rounded transition-colors ${
+                                            filterConfig.enabled
                                                 ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
-                                                : 'bg-neutral-200 text-neutral-700 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
+                                                : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200'
                                         }`}
                                     >
-                                        {onlyNotes ? '.md' : 'all'}
+                                        {filterConfig.enabled ? (
+                                            <Filter className="h-3.5 w-3.5" />
+                                        ) : (
+                                            <FilterX className="h-3.5 w-3.5" />
+                                        )}
                                     </button>
                                     <button
                                         onClick={() => handleCreateNote('')}
@@ -425,7 +449,7 @@ function App() {
                                 {vault.tree && (
                                     <FileTree
                                         root={vault.tree}
-                                        onlyNotes={onlyNotes}
+                                        filter={filterConfig}
                                         selectedPath={selectedPath}
                                         onSelectFile={openFile}
                                         onCreateFile={handleCreateNote}
@@ -576,6 +600,8 @@ function App() {
                     initialTab={settingsTab}
                     currentVaultPath={vault.vaultPath}
                     currentTheme={theme}
+                    filterConfig={filterConfig}
+                    onUpdateFilterConfig={setFilterConfig}
                     onSetTheme={setTheme}
                     onSwitchVault={handleVaultSwitched}
                     onClose={() => setSettingsOpen(false)}

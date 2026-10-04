@@ -5,6 +5,7 @@ import {
     PickVaultFolder,
     RemoveVault,
     SaveAppSettings,
+    SaveFileFilterConfig,
     SaveVault,
     SetGitHubPAT,
     SwitchVault,
@@ -19,6 +20,7 @@ import {
     Settings,
     X,
     Home,
+    Filter,
     Palette,
     Info,
     Trash2,
@@ -32,9 +34,11 @@ import {VaultModal} from './VaultModal'
 import {APP_VERSION} from '../version'
 
 interface SettingsModalProps {
-    initialTab?: 'general' | 'vaults' | 'appearance' | 'about'
+    initialTab?: 'general' | 'filter' | 'vaults' | 'appearance' | 'about'
     currentVaultPath: string | null
     currentTheme: ThemeMode
+    filterConfig: config.FileFilterConfig
+    onUpdateFilterConfig: (newConfig: config.FileFilterConfig) => void
     onSetTheme: (theme: ThemeMode) => void
     onSwitchVault: (newPath: string) => void
     onClose: () => void
@@ -44,12 +48,14 @@ export function SettingsModal({
     initialTab = 'general',
     currentVaultPath,
     currentTheme,
+    filterConfig,
+    onUpdateFilterConfig,
     onSetTheme,
     onSwitchVault,
     onClose,
 }: SettingsModalProps) {
     const {lang, setLanguage, t} = useI18n()
-    const [tab, setTab] = useState<'general' | 'vaults' | 'appearance' | 'about'>(initialTab)
+    const [tab, setTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>(initialTab)
 
     // Multi-Vault state
     const [vaults, setVaults] = useState<config.VaultEntry[]>([])
@@ -153,6 +159,15 @@ export function SettingsModal({
         SaveAppSettings(currentTheme, newLang).catch(() => {})
     }
 
+    function updateFilter(partial: Partial<config.FileFilterConfig>) {
+        const updated = new config.FileFilterConfig({
+            ...filterConfig,
+            ...partial,
+        })
+        onUpdateFilterConfig(updated)
+        SaveFileFilterConfig(updated).catch(() => {})
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div
@@ -186,6 +201,17 @@ export function SettingsModal({
                         >
                             <Home className="h-4 w-4 shrink-0" />
                             <span>{t('generalTab')}</span>
+                        </button>
+                        <button
+                            onClick={() => setTab('filter')}
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-left transition-colors ${
+                                tab === 'filter'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-neutral-200'
+                            }`}
+                        >
+                            <Filter className="h-4 w-4 shrink-0" />
+                            <span>{t('filterTab')}</span>
                         </button>
                         <button
                             onClick={() => setTab('vaults')}
@@ -275,7 +301,134 @@ export function SettingsModal({
                             </div>
                         )}
 
-                        {/* TAB 2: VAULT MANAGEMENT */}
+                        {/* TAB 2: FILE FILTER */}
+                        {tab === 'filter' && (
+                            <div className="space-y-5">
+                                <div>
+                                    <h3 className="mb-1 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('filterTitle')}</h3>
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                        {t('filterDesc')}
+                                    </p>
+                                </div>
+
+                                {/* Filter Enabled Toggle */}
+                                <div className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/20 p-3">
+                                    <div>
+                                        <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                                            {t('filterEnabledLabel')}
+                                        </div>
+                                        <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                                            {filterConfig.enabled ? t('filterActive') : t('filterInactive')}
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={filterConfig.enabled}
+                                            onChange={(e) => updateFilter({ enabled: e.target.checked })}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-neutral-300 peer-focus:outline-none rounded-full peer dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-neutral-600 peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+
+                                {/* Filter Mode Radio Buttons */}
+                                <div>
+                                    <h4 className="mb-2 text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                                        {t('filterMode')}
+                                    </h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <label className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors ${
+                                            filterConfig.mode === 'whitelist'
+                                                ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-500/60'
+                                                : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/30'
+                                        }`}>
+                                            <input
+                                                type="radio"
+                                                name="filterMode"
+                                                checked={filterConfig.mode === 'whitelist'}
+                                                onChange={() => updateFilter({ mode: 'whitelist' })}
+                                                className="accent-blue-600 mt-0.5"
+                                            />
+                                            <div className="text-xs">
+                                                <div className="font-semibold text-neutral-900 dark:text-neutral-100">
+                                                    {t('whitelist')}
+                                                </div>
+                                                <div className="text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
+                                                    {t('whitelistDesc')}
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        <label className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors ${
+                                            filterConfig.mode === 'blacklist'
+                                                ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/20 dark:border-blue-500/60'
+                                                : 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/30'
+                                        }`}>
+                                            <input
+                                                type="radio"
+                                                name="filterMode"
+                                                checked={filterConfig.mode === 'blacklist'}
+                                                onChange={() => updateFilter({ mode: 'blacklist' })}
+                                                className="accent-blue-600 mt-0.5"
+                                            />
+                                            <div className="text-xs">
+                                                <div className="font-semibold text-neutral-900 dark:text-neutral-100">
+                                                    {t('blacklist')}
+                                                </div>
+                                                <div className="text-neutral-500 dark:text-neutral-400 mt-1 leading-relaxed">
+                                                    {t('blacklistDesc')}
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Whitelist Extensions Section */}
+                                {filterConfig.mode === 'whitelist' && (
+                                    <ExtensionTagSection
+                                        title={t('whitelistExtensions')}
+                                        extensions={filterConfig.whitelist || []}
+                                        onAdd={(ext) => {
+                                            const current = filterConfig.whitelist || []
+                                            if (!current.includes(ext)) {
+                                                updateFilter({ whitelist: [...current, ext] })
+                                            }
+                                        }}
+                                        onRemove={(ext) => {
+                                            const current = filterConfig.whitelist || []
+                                            updateFilter({ whitelist: current.filter((item) => item !== ext) })
+                                        }}
+                                        placeholder={t('addExtensionPlaceholder')}
+                                        noExtensionsText={t('noExtensions')}
+                                        addText={t('addBtn')}
+                                    />
+                                )}
+
+                                {/* Blacklist Extensions Section */}
+                                {filterConfig.mode === 'blacklist' && (
+                                    <ExtensionTagSection
+                                        title={t('blacklistExtensions')}
+                                        extensions={filterConfig.blacklist || []}
+                                        onAdd={(ext) => {
+                                            const current = filterConfig.blacklist || []
+                                            if (!current.includes(ext)) {
+                                                updateFilter({ blacklist: [...current, ext] })
+                                            }
+                                        }}
+                                        onRemove={(ext) => {
+                                            const current = filterConfig.blacklist || []
+                                            updateFilter({ blacklist: current.filter((item) => item !== ext) })
+                                        }}
+                                        placeholder={t('addExtensionPlaceholder')}
+                                        noExtensionsText={t('noExtensions')}
+                                        addText={t('addBtn')}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* TAB 3: VAULT MANAGEMENT */}
                         {tab === 'vaults' && (
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
@@ -529,6 +682,101 @@ export function SettingsModal({
                     onClose={() => setEditingVault(null)}
                 />
             )}
+        </div>
+    )
+}
+
+interface ExtensionTagSectionProps {
+    title: string
+    extensions: string[]
+    onAdd: (extension: string) => void
+    onRemove: (extension: string) => void
+    placeholder: string
+    noExtensionsText: string
+    addText: string
+}
+
+function ExtensionTagSection({
+    title,
+    extensions,
+    onAdd,
+    onRemove,
+    placeholder,
+    noExtensionsText,
+    addText,
+}: ExtensionTagSectionProps) {
+    const [inputValue, setInputValue] = useState('')
+
+    function handleAdd() {
+        let val = inputValue.trim().toLowerCase()
+        if (!val) return
+        if (!val.startsWith('.')) {
+            val = '.' + val
+        }
+        if (val === '.') return
+        onAdd(val)
+        setInputValue('')
+    }
+
+    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleAdd()
+        }
+    }
+
+    return (
+        <div className="rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900/60 shadow-xs p-4 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                    {title}
+                </span>
+            </div>
+
+            {/* Input row */}
+            <div className="flex gap-2 mb-3">
+                <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={placeholder}
+                    className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 font-mono"
+                />
+                <button
+                    type="button"
+                    onClick={handleAdd}
+                    disabled={!inputValue.trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>{addText}</span>
+                </button>
+            </div>
+
+            {/* Badges / Tags list */}
+            <div className="flex flex-wrap gap-1.5 min-h-[32px] items-center p-2 rounded-md bg-neutral-100/60 dark:bg-neutral-950/40 border border-neutral-200/60 dark:border-neutral-800/60">
+                {extensions.length === 0 ? (
+                    <span className="text-xs text-neutral-400 italic">{noExtensionsText}</span>
+                ) : (
+                    extensions.map((ext) => (
+                        <span
+                            key={ext}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-mono font-medium bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 shadow-2xs group"
+                        >
+                            <span>{ext}</span>
+                            <button
+                                type="button"
+                                onClick={() => onRemove(ext)}
+                                className="text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-colors p-0.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 cursor-pointer"
+                                title="Remove"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </span>
+                    ))
+                )}
+            </div>
         </div>
     )
 }

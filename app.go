@@ -420,6 +420,25 @@ func (a *App) SaveAppSettings(theme, language string) error {
 	return config.Save(cfg)
 }
 
+// GetFileFilterConfig returns the file filtering configuration.
+func (a *App) GetFileFilterConfig() (config.FileFilterConfig, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.DefaultFileFilterConfig(), err
+	}
+	return cfg.FileFilter, nil
+}
+
+// SaveFileFilterConfig persists the file filter settings to config.json.
+func (a *App) SaveFileFilterConfig(filter config.FileFilterConfig) error {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Config{}
+	}
+	cfg.FileFilter = filter
+	return config.Save(cfg)
+}
+
 // GetTree returns the entire directory and file tree of the active Vault.
 func (a *App) GetTree() (*vault.Node, error) {
 	return a.vault.Tree()

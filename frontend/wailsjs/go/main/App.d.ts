@@ -18,6 +18,8 @@ export function DetectVaultInfo(arg1:string):Promise<config.VaultEntry>;
 
 export function GetAppSettings():Promise<config.Config>;
 
+export function GetFileFilterConfig():Promise<config.FileFilterConfig>;
+
 export function GetLanguage():Promise<string>;
 
 export function GetSyncSettings():Promise<main.SyncSettings>;
@@ -45,6 +47,8 @@ export function RenameEntry(arg1:string,arg2:string):Promise<string>;
 export function SaveAppSettings(arg1:string,arg2:string):Promise<void>;
 
 export function SaveAttachment(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SaveFileFilterConfig(arg1:config.FileFilterConfig):Promise<void>;
 
 export function SaveVault(arg1:config.VaultEntry,arg2:boolean):Promise<void>;
 

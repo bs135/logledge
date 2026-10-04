@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import type {DragEvent} from 'react'
-import {vault} from '../../wailsjs/go/models'
+import {config, vault} from '../../wailsjs/go/models'
 import {
     ChevronRight,
     ChevronDown,
@@ -14,20 +14,30 @@ import {
 } from 'lucide-react'
 import {useI18n} from '../i18n'
 
-const NOTE_EXTENSIONS = ['.md', '.markdown', '.txt']
-
-function isNoteFile(name: string): boolean {
+function shouldShowFile(name: string, filter: config.FileFilterConfig): boolean {
     const lower = name.toLowerCase()
-    return NOTE_EXTENSIONS.some((ext) => lower.endsWith(ext))
+    if (filter.mode === 'blacklist') {
+        const isBlacklisted = (filter.blacklist || []).some((ext) => {
+            const clean = ext.trim().toLowerCase()
+            return clean ? lower.endsWith(clean) : false
+        })
+        return !isBlacklisted
+    } else {
+        const isWhitelisted = (filter.whitelist || []).some((ext) => {
+            const clean = ext.trim().toLowerCase()
+            return clean ? lower.endsWith(clean) : false
+        })
+        return isWhitelisted
+    }
 }
 
-function filterNode(node: vault.Node, onlyNotes: boolean): vault.Node | null {
-    if (!onlyNotes) return node
+function filterNode(node: vault.Node, filter?: config.FileFilterConfig): vault.Node | null {
+    if (!filter || !filter.enabled) return node
     if (!node.isDir) {
-        return isNoteFile(node.name) ? node : null
+        return shouldShowFile(node.name, filter) ? node : null
     }
     const filteredChildren = (node.children || [])
-        .map((child) => filterNode(child, onlyNotes))
+        .map((child) => filterNode(child, filter))
         .filter((child): child is vault.Node => child !== null)
 
     return vault.Node.createFrom({
@@ -41,7 +51,7 @@ function filterNode(node: vault.Node, onlyNotes: boolean): vault.Node | null {
 interface FileTreeProps {
     root: vault.Node
     selectedPath: string | null
-    onlyNotes?: boolean
+    filter?: config.FileFilterConfig
     onSelectFile: (path: string) => void
     onCreateFile: (parentRelPath: string) => void
     onCreateFolder: (parentRelPath: string) => void
@@ -52,8 +62,8 @@ interface FileTreeProps {
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
 // folder collapse/expand, context menu (right-click), and drag-and-drop movement.
-export function FileTree({onlyNotes = true, ...props}: FileTreeProps) {
-    const filteredRoot = filterNode(props.root, onlyNotes) || props.root
+export function FileTree({filter, ...props}: FileTreeProps) {
+    const filteredRoot = filterNode(props.root, filter) || props.root
     return (
         <div className="select-none text-sm min-h-full">
             {filteredRoot.children?.map((child) => (
