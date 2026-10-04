@@ -2,6 +2,8 @@
 
 A desktop, local-first note-taking application based on plain `.md` files — synchronized across devices via GitHub. Built with [Wails v2](https://wails.io) (Go backend + React/TypeScript frontend).
 
+![Logledge Preview](docs/assets/screenshot.png)
+
 ## Objectives
 
 - **Data Sovereignty**: Every note is an independent `.md` file on disk, free from proprietary formats or server lock-in.
