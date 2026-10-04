@@ -95,6 +95,7 @@ export const translations = {
         settingsSyncDesc: 'Open Settings & Sync',
         saveTitleDesc: 'Save inline note title',
         closeModalsDesc: 'Close modals & menus',
+        resizeSidebar: 'Drag to resize sidebar (Double click to reset)',
     },
     vi: {
         appName: 'Logledge',
@@ -187,6 +188,7 @@ export const translations = {
         settingsSyncDesc: 'Mở Cài đặt & Đồng bộ',
         saveTitleDesc: 'Lưu tiêu đề & đổi tên file',
         closeModalsDesc: 'Đóng hộp thoại & menu',
+        resizeSidebar: 'Kéo để co giãn thanh bên (Nhấp đúp để đặt lại)',
     },
 }
 

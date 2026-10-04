@@ -16,6 +16,10 @@ import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 import {FilePlus, FolderPlus} from 'lucide-react'
 
+const DEFAULT_SIDEBAR_WIDTH = 256
+const MIN_SIDEBAR_WIDTH = 180
+const MAX_SIDEBAR_WIDTH = 700
+
 function App() {
     const vault = useVault()
     const {theme, setTheme} = useTheme()
@@ -27,6 +31,18 @@ function App() {
     const currentContentRef = useRef('')
     const isDirtyRef = useRef(false)
     const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('logledge:sidebarOpen') !== 'false')
+    const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+        const saved = localStorage.getItem('logledge:sidebarWidth')
+        if (saved) {
+            const parsed = parseInt(saved, 10)
+            if (!isNaN(parsed) && parsed >= MIN_SIDEBAR_WIDTH && parsed <= MAX_SIDEBAR_WIDTH) {
+                return parsed
+            }
+        }
+        return DEFAULT_SIDEBAR_WIDTH
+    })
+    const [isResizing, setIsResizing] = useState(false)
+    const containerRef = useRef<HTMLDivElement>(null)
     const [onlyNotes, setOnlyNotes] = useState(() => localStorage.getItem('logledge:onlyNotes') !== 'false')
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
@@ -128,6 +144,40 @@ function App() {
             offSync()
         }
     }, [selectedPath])
+
+    // Handle left sidebar resize via dragging right edge
+    useEffect(() => {
+        if (!isResizing) return
+
+        const prevUserSelect = document.body.style.userSelect
+        const prevCursor = document.body.style.cursor
+        document.body.style.userSelect = 'none'
+        document.body.style.cursor = 'col-resize'
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const containerLeft = containerRef.current?.getBoundingClientRect().left ?? 0
+            const maxAllowed = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 200))
+            const newWidth = Math.min(Math.max(e.clientX - containerLeft, MIN_SIDEBAR_WIDTH), maxAllowed)
+            setSidebarWidth(newWidth)
+        }
+
+        const handleMouseUp = () => {
+            setIsResizing(false)
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            document.body.style.userSelect = prevUserSelect
+            document.body.style.cursor = prevCursor
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isResizing])
+
+    useEffect(() => {
+        localStorage.setItem('logledge:sidebarWidth', String(sidebarWidth))
+    }, [sidebarWidth])
 
     // Keyboard shortcuts:
     // Ctrl+P: Quick Switcher
@@ -262,87 +312,142 @@ function App() {
                 onOpenHelp={() => setQuickHelpOpen(true)}
                 onVaultSwitched={handleVaultSwitched}
             />
-            <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
                 {sidebarOpen && (
-                    <aside className="w-64 shrink-0 overflow-hidden border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col">
-                        <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
-                            <span className="tracking-wider text-[11px]">{t('explorer')}</span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() =>
-                                        setOnlyNotes((n) => {
-                                            const next = !n
-                                            localStorage.setItem('logledge:onlyNotes', String(next))
-                                            return next
-                                        })
-                                    }
-                                    title={onlyNotes ? t('onlyNotes') : t('allFiles')}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-                                        onlyNotes
-                                            ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
-                                            : 'bg-neutral-200 text-neutral-700 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                                    }`}
-                                >
-                                    {onlyNotes ? '.md' : 'all'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const name = window.prompt(t('newNote') + ':')
-                                        if (name) vault.createFile('', name)
-                                    }}
-                                    title={t('newNote')}
-                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
-                                >
-                                    <FilePlus className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const name = window.prompt(t('newFolder') + ':')
-                                        if (name) vault.createFolder('', name)
-                                    }}
-                                    title={t('newFolder')}
-                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
-                                >
-                                    <FolderPlus className="h-3.5 w-3.5" />
-                                </button>
+                    <>
+                        <aside
+                            style={{
+                                width: `${sidebarWidth}px`,
+                                minWidth: `${MIN_SIDEBAR_WIDTH}px`,
+                                maxWidth: `min(${MAX_SIDEBAR_WIDTH}px, calc(100vw - 200px))`,
+                            }}
+                            className="shrink-0 overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col"
+                        >
+                            <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
+                                <span className="tracking-wider text-[11px]">{t('explorer')}</span>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() =>
+                                            setOnlyNotes((n) => {
+                                                const next = !n
+                                                localStorage.setItem('logledge:onlyNotes', String(next))
+                                                return next
+                                            })
+                                        }
+                                        title={onlyNotes ? t('onlyNotes') : t('allFiles')}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                                            onlyNotes
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
+                                                : 'bg-neutral-200 text-neutral-700 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
+                                        }`}
+                                    >
+                                        {onlyNotes ? '.md' : 'all'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const name = window.prompt(t('newNote') + ':')
+                                            if (name) vault.createFile('', name)
+                                        }}
+                                        title={t('newNote')}
+                                        className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                    >
+                                        <FilePlus className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const name = window.prompt(t('newFolder') + ':')
+                                            if (name) vault.createFolder('', name)
+                                        }}
+                                        title={t('newFolder')}
+                                        className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                    >
+                                        <FolderPlus className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                            {vault.tree && (
-                                <FileTree
-                                    root={vault.tree}
-                                    onlyNotes={onlyNotes}
-                                    selectedPath={selectedPath}
-                                    onSelectFile={openFile}
-                                    onCreateFile={(parent) => {
-                                        const name = window.prompt(t('newNote') + ':')
-                                        if (name) vault.createFile(parent, name)
-                                    }}
-                                    onCreateFolder={(parent) => {
-                                        const name = window.prompt(t('newFolder') + ':')
-                                        if (name) vault.createFolder(parent, name)
-                                    }}
-                                    onRename={async (path) => {
-                                        const name = window.prompt(t('rename') + ':', path.split('/').pop())
-                                        if (name) {
-                                            const newPath = await vault.rename(path, name)
-                                            if (newPath && selectedPath === path) {
-                                                setSelectedPath(newPath)
+                            <div className="flex-1 overflow-y-auto">
+                                {vault.tree && (
+                                    <FileTree
+                                        root={vault.tree}
+                                        onlyNotes={onlyNotes}
+                                        selectedPath={selectedPath}
+                                        onSelectFile={openFile}
+                                        onCreateFile={(parent) => {
+                                            const name = window.prompt(t('newNote') + ':')
+                                            if (name) vault.createFile(parent, name)
+                                        }}
+                                        onCreateFolder={(parent) => {
+                                            const name = window.prompt(t('newFolder') + ':')
+                                            if (name) vault.createFolder(parent, name)
+                                        }}
+                                        onRename={async (path) => {
+                                            const name = window.prompt(t('rename') + ':', path.split('/').pop())
+                                            if (name) {
+                                                const newPath = await vault.rename(path, name)
+                                                if (newPath && selectedPath === path) {
+                                                    setSelectedPath(newPath)
+                                                }
                                             }
-                                        }
-                                    }}
-                                    onDelete={(path) => {
-                                        if (window.confirm(`${t('moveToTrashConfirm')} "${path}"`)) {
-                                            vault.remove(path)
-                                            if (selectedPath === path) setSelectedPath(null)
-                                        }
-                                    }}
-                                    onMove={vault.move}
-                                />
-                            )}
-                        </div>
-                    </aside>
-                )}
+                                        }}
+                                        onDelete={(path) => {
+                                            if (window.confirm(`${t('moveToTrashConfirm')} "${path}"`)) {
+                                                vault.remove(path)
+                                                if (selectedPath === path) setSelectedPath(null)
+                                            }
+                                        }}
+                                        onMove={vault.move}
+                                    />
+                                )}
+                            </div>
+                        </aside>
+                    {/* Resize handle */}
+                    <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-valuenow={sidebarWidth}
+                        aria-valuemin={MIN_SIDEBAR_WIDTH}
+                        aria-valuemax={MAX_SIDEBAR_WIDTH}
+                        tabIndex={0}
+                        title={t('resizeSidebar')}
+                        onMouseDown={(e) => {
+                            if (e.button !== 0) return
+                            e.preventDefault()
+                            setIsResizing(true)
+                        }}
+                        onDoubleClick={() => {
+                            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowLeft') {
+                                e.preventDefault()
+                                setSidebarWidth((w) => Math.max(MIN_SIDEBAR_WIDTH, w - 16))
+                            } else if (e.key === 'ArrowRight') {
+                                e.preventDefault()
+                                const maxAllowed = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 200))
+                                setSidebarWidth((w) => Math.min(maxAllowed, w + 16))
+                            } else if (e.key === 'Home') {
+                                e.preventDefault()
+                                setSidebarWidth(MIN_SIDEBAR_WIDTH)
+                            } else if (e.key === 'End') {
+                                e.preventDefault()
+                                setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+                            }
+                        }}
+                        className="relative w-px shrink-0 select-none bg-neutral-200 dark:bg-neutral-800 cursor-col-resize group focus:outline-none"
+                    >
+                        {/* Invisible expanded hit area for easier grabbing */}
+                        <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-20 cursor-col-resize" />
+                        {/* Visual indicator on hover and active dragging */}
+                        <div
+                            className={`absolute inset-y-0 -left-[1px] w-[3px] transition-colors pointer-events-none ${
+                                isResizing
+                                    ? 'bg-blue-500 dark:bg-blue-500'
+                                    : 'group-hover:bg-blue-500/80 dark:group-hover:bg-blue-400/80'
+                            }`}
+                        />
+                    </div>
+                </>
+            )}
                 <main className="flex-1 overflow-hidden p-4 flex flex-col bg-white dark:bg-neutral-900">
                     {externalChangeNotice !== null && (
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
@@ -435,6 +540,7 @@ function App() {
                     onClose={() => setAddingVault(null)}
                 />
             )}
+            {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
         </div>
     )
 }
