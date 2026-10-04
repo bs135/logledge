@@ -406,7 +406,13 @@ function App() {
                         >
                             <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
                                 <span className="tracking-wider text-[11px]">{t('explorer')}</span>
-                                <div className="flex items-center gap-1" onContextMenu={(e) => e.stopPropagation()}>
+                                <div
+                                    className="flex items-center gap-1"
+                                    onContextMenu={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                    }}
+                                >
                                     <button
                                         onClick={() => {
                                             const updated = new config.FileFilterConfig({

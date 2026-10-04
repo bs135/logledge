@@ -5,9 +5,13 @@ import App from './App'
 import {I18nProvider} from './i18n'
 
 // Disable default browser/WebViewer context menu (Back, Forward, Reload, Save As, etc.)
-window.addEventListener('contextmenu', (e) => {
-    e.preventDefault()
-})
+window.addEventListener(
+    'contextmenu',
+    (e) => {
+        e.preventDefault()
+    },
+    {capture: true}
+)
 
 const container = document.getElementById('root')
 
