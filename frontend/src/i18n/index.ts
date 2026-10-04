@@ -117,6 +117,8 @@ export const translations = {
         newFolderPlaceholder: 'Folder name…',
         deleteModalTitle: 'Move to Trash?',
         deleteModalDesc: 'Are you sure you want to move this item to trash? You can restore it from the operating system recycle bin.',
+        renameShortcutDesc: 'Rename note or folder',
+        deleteShortcutDesc: 'Delete note or folder',
     },
     vi: {
         appName: 'Logledge',
@@ -231,6 +233,8 @@ export const translations = {
         newFolderPlaceholder: 'Tên thư mục…',
         deleteModalTitle: 'Chuyển vào thùng rác?',
         deleteModalDesc: 'Bạn có chắc chắn muốn chuyển mục này vào thùng rác không? Bạn có thể khôi phục lại từ thùng rác của hệ điều hành.',
+        renameShortcutDesc: 'Đổi tên ghi chú hoặc thư mục',
+        deleteShortcutDesc: 'Xóa ghi chú hoặc thư mục',
     },
 }
 

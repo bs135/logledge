@@ -178,8 +178,12 @@ function App() {
             }
             try {
                 const newPath = await vault.rename(action.targetPath, trimmed)
-                if (newPath && selectedPath === action.targetPath) {
-                    setSelectedPath(newPath)
+                if (newPath) {
+                    if (selectedPath === action.targetPath) {
+                        setSelectedPath(newPath)
+                    } else if (selectedPath && selectedPath.startsWith(action.targetPath + '/')) {
+                        setSelectedPath(newPath + selectedPath.slice(action.targetPath.length))
+                    }
                 }
             } catch (err) {
                 alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
@@ -192,7 +196,7 @@ function App() {
         const pathToDelete = deleteTarget
         setDeleteTarget(null)
         await vault.remove(pathToDelete)
-        if (selectedPath === pathToDelete) {
+        if (selectedPath === pathToDelete || (selectedPath && selectedPath.startsWith(pathToDelete + '/'))) {
             setSelectedPath(null)
         }
     }

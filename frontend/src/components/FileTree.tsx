@@ -56,6 +56,17 @@ function filterNode(node: vault.Node, filter?: config.FileFilterConfig): vault.N
     })
 }
 
+function findNode(node: vault.Node, path: string): vault.Node | null {
+    if (node.path === path) return node
+    if (node.children) {
+        for (const child of node.children) {
+            const found = findNode(child, path)
+            if (found) return found
+        }
+    }
+    return null
+}
+
 export interface FileTreeProps {
     root: vault.Node
     selectedPath: string | null
@@ -73,7 +84,7 @@ export interface FileTreeProps {
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
 // folder collapse/expand, context menu (right-click), drag-and-drop movement,
-// and inline input for creating notes/folders and renaming entries.
+// inline input for creating/renaming notes and folders, and keyboard shortcuts (F2 to rename, Del to delete).
 export function FileTree({
     filter,
     inlineAction,
@@ -82,13 +93,73 @@ export function FileTree({
     ...props
 }: FileTreeProps) {
     const {t} = useI18n()
+    const containerRef = useRef<HTMLDivElement>(null)
+    const [activePath, setActivePath] = useState<string | null>(props.selectedPath)
     const filteredRoot = filterNode(props.root, filter) || props.root
     const isCreatingAtRoot = Boolean(
         inlineAction && inlineAction.type !== 'rename' && inlineAction.targetPath === ''
     )
 
+    useEffect(() => {
+        if (props.selectedPath) {
+            setActivePath(props.selectedPath)
+        }
+    }, [props.selectedPath])
+
+    useEffect(() => {
+        if (activePath && !findNode(props.root, activePath)) {
+            setActivePath(props.selectedPath || null)
+        }
+    }, [props.root, activePath, props.selectedPath])
+
+    function handleKeyDown(e: React.KeyboardEvent) {
+        const target = e.target as HTMLElement
+        if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) {
+            return
+        }
+        if (inlineAction) {
+            return
+        }
+
+        if (e.key === 'F2') {
+            if (activePath) {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onRename(activePath)
+            }
+        } else if (e.key === 'Delete' || ((e.ctrlKey || e.metaKey) && e.key === 'Backspace')) {
+            if (activePath) {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onDelete(activePath)
+            }
+        }
+    }
+
+    const handleCommit = (action: InlineAction, name: string) => {
+        if (action.type === 'rename') {
+            const parent = action.targetPath.includes('/')
+                ? action.targetPath.slice(0, action.targetPath.lastIndexOf('/'))
+                : ''
+            const newPath = parent ? `${parent}/${name}` : name
+            setActivePath(newPath)
+        } else if (action.type === 'create-folder') {
+            const newPath = action.targetPath ? `${action.targetPath}/${name}` : name
+            setActivePath(newPath)
+        }
+        onCommitInlineAction(action, name)
+    }
+
     return (
-        <div className="select-none text-sm min-h-full">
+        <div
+            ref={containerRef}
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            onClick={() => {
+                containerRef.current?.focus()
+            }}
+            className="select-none text-sm min-h-full outline-none focus:outline-none"
+        >
             {isCreatingAtRoot && (
                 <InlineInputRow
                     type={inlineAction!.type === 'create-folder' ? 'folder' : 'file'}
@@ -98,7 +169,7 @@ export function FileTree({
                             ? t('newFolderPlaceholder')
                             : t('newNotePlaceholder')
                     }
-                    onCommit={(name) => onCommitInlineAction(inlineAction!, name)}
+                    onCommit={(name) => handleCommit(inlineAction!, name)}
                     onCancel={onCancelInlineAction}
                 />
             )}
@@ -109,7 +180,9 @@ export function FileTree({
                     depth={0}
                     rootPath={filteredRoot.path}
                     inlineAction={inlineAction}
-                    onCommitInlineAction={onCommitInlineAction}
+                    activePath={activePath}
+                    onSetActive={setActivePath}
+                    onCommitInlineAction={handleCommit}
                     onCancelInlineAction={onCancelInlineAction}
                     {...props}
                 />
@@ -122,6 +195,8 @@ interface TreeEntryProps extends Omit<FileTreeProps, 'root'> {
     node: vault.Node
     depth: number
     rootPath: string
+    activePath: string | null
+    onSetActive: (path: string) => void
 }
 
 function TreeEntry({
@@ -129,6 +204,8 @@ function TreeEntry({
     depth,
     rootPath,
     selectedPath,
+    activePath,
+    onSetActive,
     inlineAction,
     onSelectFile,
     onCreateFile,
@@ -144,7 +221,16 @@ function TreeEntry({
     const [menuPos, setMenuPos] = useState<{x: number; y: number} | null>(null)
     const [dragOver, setDragOver] = useState(false)
 
-    const isSelected = !node.isDir && node.path === selectedPath
+    const isActive = node.path === activePath
+    const isCurrentOpenNote = !node.isDir && node.path === selectedPath
+
+    let selectionClass = ''
+    if (isActive) {
+        selectionClass = 'bg-neutral-200 dark:bg-neutral-700 font-medium text-neutral-900 dark:text-white'
+    } else if (isCurrentOpenNote) {
+        selectionClass = 'bg-neutral-100 dark:bg-neutral-800/70 font-medium text-neutral-800 dark:text-neutral-200'
+    }
+
     const isRenaming = Boolean(
         inlineAction && inlineAction.type === 'rename' && inlineAction.targetPath === node.path
     )
@@ -166,6 +252,7 @@ function TreeEntry({
     }, [inlineAction, node.path, node.isDir])
 
     function handleClick() {
+        onSetActive(node.path)
         if (node.isDir) {
             setOpen((o) => !o)
         } else {
@@ -224,6 +311,8 @@ function TreeEntry({
                                 depth={depth + 1}
                                 rootPath={rootPath}
                                 selectedPath={selectedPath}
+                                activePath={activePath}
+                                onSetActive={onSetActive}
                                 inlineAction={inlineAction}
                                 onSelectFile={onSelectFile}
                                 onCreateFile={onCreateFile}
@@ -244,6 +333,7 @@ function TreeEntry({
     return (
         <div>
             <div
+                tabIndex={-1}
                 draggable
                 onDragStart={handleDragStart}
                 onDragOver={(e) => {
@@ -254,14 +344,21 @@ function TreeEntry({
                 }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                onClick={handleClick}
+                onClick={(e) => {
+                    const el = e.currentTarget as HTMLElement
+                    el.focus()
+                    handleClick()
+                }}
                 onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
+                    const el = e.currentTarget as HTMLElement
+                    el.focus()
+                    onSetActive(node.path)
                     setMenuPos({x: e.clientX, y: e.clientY})
                 }}
-                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors ${
-                    isSelected ? 'bg-neutral-200 dark:bg-neutral-700 font-medium text-neutral-900 dark:text-white' : ''
+                className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 transition-colors outline-none focus:outline-none ${
+                    selectionClass || 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60'
                 } ${dragOver ? 'outline outline-1 outline-blue-500' : ''}`}
                 style={{paddingLeft: `${depth * 14 + 8}px`}}
             >
@@ -284,9 +381,9 @@ function TreeEntry({
 
             {menuPos && (
                 <ContextMenu
+                    node={node}
                     position={menuPos}
                     onClose={() => setMenuPos(null)}
-                    node={node}
                     onCreateFile={onCreateFile}
                     onCreateFolder={onCreateFolder}
                     onRename={onRename}
@@ -316,6 +413,8 @@ function TreeEntry({
                             depth={depth + 1}
                             rootPath={rootPath}
                             selectedPath={selectedPath}
+                            activePath={activePath}
+                            onSetActive={onSetActive}
                             inlineAction={inlineAction}
                             onSelectFile={onSelectFile}
                             onCreateFile={onCreateFile}
@@ -502,11 +601,13 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
                 />
                 <MenuItem
                     label={t('rename')}
+                    shortcut="F2"
                     icon={<Edit3 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     onClick={() => act(() => onRename(node.path))}
                 />
                 <MenuItem
                     label={t('delete')}
+                    shortcut="Del"
                     icon={<Trash2 className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />}
                     onClick={() => act(() => onDelete(node.path))}
                     destructive
@@ -518,24 +619,33 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
 
 function MenuItem({
     label,
+    shortcut,
     icon,
     onClick,
     destructive,
 }: {
     label: string
+    shortcut?: string
     icon?: React.ReactNode
     onClick: () => void
     destructive?: boolean
 }) {
     return (
         <button
-            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+            className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
                 destructive ? 'text-red-600 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'
             }`}
             onClick={onClick}
         >
-            {icon && <span className="shrink-0">{icon}</span>}
-            <span>{label}</span>
+            <div className="flex items-center gap-2 min-w-0">
+                {icon && <span className="shrink-0">{icon}</span>}
+                <span className="truncate">{label}</span>
+            </div>
+            {shortcut && (
+                <span className="shrink-0 text-[10px] text-neutral-400 dark:text-neutral-500 font-mono">
+                    {shortcut}
+                </span>
+            )}
         </button>
     )
 }

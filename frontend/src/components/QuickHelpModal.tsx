@@ -69,6 +69,8 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                             <ShortcutItem keys="Ctrl + Shift + F" desc={t('globalSearchDesc')} />
                             <ShortcutItem keys="Ctrl + B" desc={t('toggleSidebarDesc')} />
                             <ShortcutItem keys="Ctrl + ," desc={t('settingsSyncDesc')} />
+                            <ShortcutItem keys="F2" desc={t('renameShortcutDesc')} />
+                            <ShortcutItem keys="Delete" desc={t('deleteShortcutDesc')} />
                             <ShortcutItem keys="Enter / Blur" desc={t('saveTitleDesc')} />
                             <ShortcutItem keys="Esc" desc={t('closeModalsDesc')} />
                         </div>
