@@ -1,9 +1,9 @@
-import {useEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
-import {FileTree} from './components/FileTree'
+import {FileTree, InlineAction} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -11,10 +11,16 @@ import {SyncStatusBar} from './components/SyncStatusBar'
 import {SettingsModal} from './components/SettingsModal'
 import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
-import {DetectVaultInfo, PickVaultFolder, ReadFile, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
+import {ConfirmModal} from './components/ConfirmModal'
+import {SidebarContextMenu} from './components/SidebarContextMenu'
+import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
-import {FilePlus, FolderPlus} from 'lucide-react'
+import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
+
+const DEFAULT_SIDEBAR_WIDTH = 256
+const MIN_SIDEBAR_WIDTH = 180
+const MAX_SIDEBAR_WIDTH = 700
 
 function App() {
     const vault = useVault()
@@ -27,13 +33,48 @@ function App() {
     const currentContentRef = useRef('')
     const isDirtyRef = useRef(false)
     const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('logledge:sidebarOpen') !== 'false')
-    const [onlyNotes, setOnlyNotes] = useState(() => localStorage.getItem('logledge:onlyNotes') !== 'false')
+    const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+        const saved = localStorage.getItem('logledge:sidebarWidth')
+        if (saved) {
+            const parsed = parseInt(saved, 10)
+            if (!isNaN(parsed) && parsed >= MIN_SIDEBAR_WIDTH && parsed <= MAX_SIDEBAR_WIDTH) {
+                return parsed
+            }
+        }
+        return DEFAULT_SIDEBAR_WIDTH
+    })
+    const [isResizing, setIsResizing] = useState(false)
+    const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const lastResizeMouseDownTimeRef = useRef(0)
+    const isDraggingSidebarRef = useRef(false)
+    const dragStartXRef = useRef(0)
+    const [filterConfig, setFilterConfig] = useState<config.FileFilterConfig>(() => {
+        return new config.FileFilterConfig({
+            enabled: true,
+            mode: 'whitelist',
+            whitelist: ['.md', '.markdown', '.txt'],
+            blacklist: ['.exe', '.bin', '.dll', '.logledge'],
+        })
+    })
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settingsTab, setSettingsTab] = useState<'general' | 'vaults' | 'appearance' | 'about'>('general')
+    const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
     const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+    const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+    useEffect(() => {
+        GetFileFilterConfig()
+            .then((cfg) => {
+                if (cfg) {
+                    setFilterConfig(cfg)
+                }
+            })
+            .catch(() => {})
+    }, [])
 
     async function handleOpenVaultFolder() {
         try {
@@ -95,6 +136,71 @@ function App() {
         vault.reload()
     }
 
+    function handleCreateNote(parent = '') {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({type: 'create-file', targetPath: parent})
+    }
+
+    function handleCreateFolder(parent = '') {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({type: 'create-folder', targetPath: parent})
+    }
+
+    function handleStartRename(path: string) {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({
+            type: 'rename',
+            targetPath: path,
+            initialValue: path.split('/').pop() || '',
+        })
+    }
+
+    async function handleCommitInlineAction(action: InlineAction, name: string) {
+        const trimmed = name.trim()
+        if (!trimmed) {
+            setInlineAction(null)
+            return
+        }
+
+        if (action.type === 'create-file') {
+            setInlineAction(null)
+            const newPath = await vault.createFile(action.targetPath, trimmed)
+            if (newPath) {
+                openFile(newPath)
+            }
+        } else if (action.type === 'create-folder') {
+            setInlineAction(null)
+            await vault.createFolder(action.targetPath, trimmed)
+        } else if (action.type === 'rename') {
+            setInlineAction(null)
+            if (trimmed === action.initialValue) {
+                return
+            }
+            try {
+                const newPath = await vault.rename(action.targetPath, trimmed)
+                if (newPath) {
+                    if (selectedPath === action.targetPath) {
+                        setSelectedPath(newPath)
+                    } else if (selectedPath && selectedPath.startsWith(action.targetPath + '/')) {
+                        setSelectedPath(newPath + selectedPath.slice(action.targetPath.length))
+                    }
+                }
+            } catch (err) {
+                alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
+            }
+        }
+    }
+
+    async function handleConfirmDelete() {
+        if (!deleteTarget) return
+        const pathToDelete = deleteTarget
+        setDeleteTarget(null)
+        await vault.remove(pathToDelete)
+        if (selectedPath === pathToDelete || (selectedPath && selectedPath.startsWith(pathToDelete + '/'))) {
+            setSelectedPath(null)
+        }
+    }
+
     // Auto-refresh active note if changed externally or after git sync
     useEffect(() => {
         if (!selectedPath) return
@@ -128,6 +234,78 @@ function App() {
             offSync()
         }
     }, [selectedPath])
+
+    const handleResetSidebarWidth = useCallback(() => {
+        setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+    }, [])
+
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+
+        const now = Date.now()
+        const timeDiff = now - lastResizeMouseDownTimeRef.current
+        if (timeDiff <= 500 && timeDiff > 0) {
+            handleResetSidebarWidth()
+            lastResizeMouseDownTimeRef.current = 0
+            isDraggingSidebarRef.current = false
+            setIsResizing(false)
+            return
+        }
+        lastResizeMouseDownTimeRef.current = now
+
+        dragStartXRef.current = e.clientX
+        isDraggingSidebarRef.current = false
+
+        const prevUserSelect = document.body.style.userSelect
+        const prevCursor = document.body.style.cursor
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            if (!isDraggingSidebarRef.current) {
+                if (Math.abs(moveEvent.clientX - dragStartXRef.current) >= 3) {
+                    isDraggingSidebarRef.current = true
+                    lastResizeMouseDownTimeRef.current = 0
+                    setIsResizing(true)
+                    document.body.style.userSelect = 'none'
+                    document.body.style.cursor = 'col-resize'
+                } else {
+                    return
+                }
+            }
+
+            const containerLeft = containerRef.current?.getBoundingClientRect().left ?? 0
+            const maxAllowed = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 200))
+            const newWidth = Math.min(Math.max(moveEvent.clientX - containerLeft, MIN_SIDEBAR_WIDTH), maxAllowed)
+            setSidebarWidth(newWidth)
+        }
+
+        const handleMouseUp = () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+            window.removeEventListener('blur', handleMouseUp)
+            if (isDraggingSidebarRef.current) {
+                isDraggingSidebarRef.current = false
+                setIsResizing(false)
+                document.body.style.userSelect = prevUserSelect
+                document.body.style.cursor = prevCursor
+            }
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+        window.addEventListener('blur', handleMouseUp)
+    }, [handleResetSidebarWidth])
+
+    useEffect(() => {
+        return () => {
+            document.body.style.userSelect = ''
+            document.body.style.cursor = ''
+        }
+    }, [])
+
+    useEffect(() => {
+        localStorage.setItem('logledge:sidebarWidth', String(sidebarWidth))
+    }, [sidebarWidth])
 
     // Keyboard shortcuts:
     // Ctrl+P: Quick Switcher
@@ -218,6 +396,8 @@ function App() {
                         initialTab={settingsTab}
                         currentVaultPath={vault.vaultPath}
                         currentTheme={theme}
+                        filterConfig={filterConfig}
+                        onUpdateFilterConfig={setFilterConfig}
                         onSetTheme={setTheme}
                         onSwitchVault={handleVaultSwitched}
                         onClose={() => setSettingsOpen(false)}
@@ -262,87 +442,136 @@ function App() {
                 onOpenHelp={() => setQuickHelpOpen(true)}
                 onVaultSwitched={handleVaultSwitched}
             />
-            <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
                 {sidebarOpen && (
-                    <aside className="w-64 shrink-0 overflow-hidden border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col">
-                        <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
-                            <span className="tracking-wider text-[11px]">{t('explorer')}</span>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() =>
-                                        setOnlyNotes((n) => {
-                                            const next = !n
-                                            localStorage.setItem('logledge:onlyNotes', String(next))
-                                            return next
-                                        })
-                                    }
-                                    title={onlyNotes ? t('onlyNotes') : t('allFiles')}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-                                        onlyNotes
-                                            ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
-                                            : 'bg-neutral-200 text-neutral-700 hover:text-neutral-900 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                                    }`}
-                                >
-                                    {onlyNotes ? '.md' : 'all'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const name = window.prompt(t('newNote') + ':')
-                                        if (name) vault.createFile('', name)
+                    <>
+                        <aside
+                            style={{
+                                width: `${sidebarWidth}px`,
+                                minWidth: `${MIN_SIDEBAR_WIDTH}px`,
+                                maxWidth: `min(${MAX_SIDEBAR_WIDTH}px, calc(100vw - 200px))`,
+                            }}
+                            className="shrink-0 overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/40 p-2 flex flex-col"
+                            onContextMenu={(e) => {
+                                e.preventDefault()
+                                setSidebarContextMenuPos({x: e.clientX, y: e.clientY})
+                            }}
+                        >
+                            <div className="flex items-center justify-between px-2 py-1 mb-1 text-xs text-neutral-500 dark:text-neutral-400 font-medium select-none">
+                                <span className="tracking-wider text-[11px]">{t('explorer')}</span>
+                                <div
+                                    className="flex items-center gap-1"
+                                    onContextMenu={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
                                     }}
-                                    title={t('newNote')}
-                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                 >
-                                    <FilePlus className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const name = window.prompt(t('newFolder') + ':')
-                                        if (name) vault.createFolder('', name)
-                                    }}
-                                    title={t('newFolder')}
-                                    className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
-                                >
-                                    <FolderPlus className="h-3.5 w-3.5" />
-                                </button>
+                                    <button
+                                        onClick={() => {
+                                            const updated = new config.FileFilterConfig({
+                                                ...filterConfig,
+                                                enabled: !filterConfig.enabled,
+                                            })
+                                            setFilterConfig(updated)
+                                            SaveFileFilterConfig(updated).catch(() => {})
+                                        }}
+                                        title={filterConfig.enabled ? t('filterActive') : t('filterInactive')}
+                                        className={`p-1 rounded transition-colors ${
+                                            filterConfig.enabled
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
+                                                : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200'
+                                        }`}
+                                    >
+                                        {filterConfig.enabled ? (
+                                            <Filter className="h-3.5 w-3.5" />
+                                        ) : (
+                                            <FilterX className="h-3.5 w-3.5" />
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleCreateNote('')}
+                                        title={t('newNote')}
+                                        className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                    >
+                                        <FilePlus className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleCreateFolder('')}
+                                        title={t('newFolder')}
+                                        className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                    >
+                                        <FolderPlus className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                            {vault.tree && (
-                                <FileTree
-                                    root={vault.tree}
-                                    onlyNotes={onlyNotes}
-                                    selectedPath={selectedPath}
-                                    onSelectFile={openFile}
-                                    onCreateFile={(parent) => {
-                                        const name = window.prompt(t('newNote') + ':')
-                                        if (name) vault.createFile(parent, name)
-                                    }}
-                                    onCreateFolder={(parent) => {
-                                        const name = window.prompt(t('newFolder') + ':')
-                                        if (name) vault.createFolder(parent, name)
-                                    }}
-                                    onRename={async (path) => {
-                                        const name = window.prompt(t('rename') + ':', path.split('/').pop())
-                                        if (name) {
-                                            const newPath = await vault.rename(path, name)
-                                            if (newPath && selectedPath === path) {
-                                                setSelectedPath(newPath)
-                                            }
-                                        }
-                                    }}
-                                    onDelete={(path) => {
-                                        if (window.confirm(`${t('moveToTrashConfirm')} "${path}"`)) {
-                                            vault.remove(path)
-                                            if (selectedPath === path) setSelectedPath(null)
-                                        }
-                                    }}
-                                    onMove={vault.move}
-                                />
-                            )}
-                        </div>
-                    </aside>
-                )}
+                            <div className="flex-1 overflow-y-auto">
+                                {vault.tree && (
+                                    <FileTree
+                                        root={vault.tree}
+                                        filter={filterConfig}
+                                        selectedPath={selectedPath}
+                                        inlineAction={inlineAction}
+                                        onSelectFile={openFile}
+                                        onCreateFile={handleCreateNote}
+                                        onCreateFolder={handleCreateFolder}
+                                        onRename={handleStartRename}
+                                        onDelete={(path) => setDeleteTarget(path)}
+                                        onMove={vault.move}
+                                        onCommitInlineAction={handleCommitInlineAction}
+                                        onCancelInlineAction={() => setInlineAction(null)}
+                                    />
+                                )}
+                            </div>
+                        </aside>
+                    {/* Resize handle */}
+                    <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-valuenow={sidebarWidth}
+                        aria-valuemin={MIN_SIDEBAR_WIDTH}
+                        aria-valuemax={MAX_SIDEBAR_WIDTH}
+                        tabIndex={0}
+                        title={t('resizeSidebar')}
+                        onContextMenu={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                        }}
+                        onMouseDown={handleResizeMouseDown}
+                        onDoubleClick={handleResetSidebarWidth}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowLeft') {
+                                e.preventDefault()
+                                setSidebarWidth((w) => Math.max(MIN_SIDEBAR_WIDTH, w - 16))
+                            } else if (e.key === 'ArrowRight') {
+                                e.preventDefault()
+                                const maxAllowed = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 200))
+                                setSidebarWidth((w) => Math.min(maxAllowed, w + 16))
+                            } else if (e.key === 'Home') {
+                                e.preventDefault()
+                                setSidebarWidth(MIN_SIDEBAR_WIDTH)
+                            } else if (e.key === 'End') {
+                                e.preventDefault()
+                                handleResetSidebarWidth()
+                            }
+                        }}
+                        className="relative w-px shrink-0 select-none bg-neutral-200 dark:bg-neutral-800 cursor-col-resize group focus:outline-none"
+                    >
+                        {/* Invisible expanded hit area for easier grabbing */}
+                        <div
+                            className="absolute inset-y-0 -left-1.5 -right-1.5 z-20 cursor-col-resize"
+                            onDoubleClick={handleResetSidebarWidth}
+                        />
+                        {/* Visual indicator on hover and active dragging */}
+                        <div
+                            className={`absolute inset-y-0 -left-[1px] w-[3px] transition-colors pointer-events-none ${
+                                isResizing
+                                    ? 'bg-blue-500 dark:bg-blue-500'
+                                    : 'group-hover:bg-blue-500/80 dark:group-hover:bg-blue-400/80'
+                            }`}
+                        />
+                    </div>
+                </>
+            )}
                 <main className="flex-1 overflow-hidden p-4 flex flex-col bg-white dark:bg-neutral-900">
                     {externalChangeNotice !== null && (
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
@@ -420,6 +649,8 @@ function App() {
                     initialTab={settingsTab}
                     currentVaultPath={vault.vaultPath}
                     currentTheme={theme}
+                    filterConfig={filterConfig}
+                    onUpdateFilterConfig={setFilterConfig}
                     onSetTheme={setTheme}
                     onSwitchVault={handleVaultSwitched}
                     onClose={() => setSettingsOpen(false)}
@@ -435,6 +666,23 @@ function App() {
                     onClose={() => setAddingVault(null)}
                 />
             )}
+            {sidebarContextMenuPos && (
+                <SidebarContextMenu
+                    position={sidebarContextMenuPos}
+                    onClose={() => setSidebarContextMenuPos(null)}
+                    onCreateFile={() => handleCreateNote('')}
+                    onCreateFolder={() => handleCreateFolder('')}
+                />
+            )}
+            <ConfirmModal
+                isOpen={deleteTarget !== null}
+                title={t('deleteModalTitle')}
+                message={t('deleteModalDesc')}
+                itemName={deleteTarget ? deleteTarget.split('/').pop() : undefined}
+                onConfirm={handleConfirmDelete}
+                onClose={() => setDeleteTarget(null)}
+            />
+            {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
         </div>
     )
 }

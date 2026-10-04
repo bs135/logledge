@@ -26,6 +26,12 @@ func TestConfigJSONSerialization(t *testing.T) {
 		},
 		Theme:    "dark",
 		Language: "vi",
+		FileFilter: FileFilterConfig{
+			Enabled:   true,
+			Mode:      "whitelist",
+			Whitelist: []string{".md", ".markdown", ".txt"},
+			Blacklist: []string{".exe", ".bin", ".dll", ".logledge"},
+		},
 	}
 
 	data, err := json.Marshal(cfg)
@@ -58,5 +64,27 @@ func TestConfigJSONSerialization(t *testing.T) {
 	}
 	if parsed.Language != "vi" {
 		t.Errorf("expected Language vi, got %q", parsed.Language)
+	}
+	if !parsed.FileFilter.Enabled || parsed.FileFilter.Mode != "whitelist" {
+		t.Errorf("unexpected FileFilter: %+v", parsed.FileFilter)
+	}
+	if len(parsed.FileFilter.Whitelist) != 3 || len(parsed.FileFilter.Blacklist) != 4 {
+		t.Errorf("unexpected filter lists: %+v", parsed.FileFilter)
+	}
+}
+
+func TestDefaultFileFilterConfig(t *testing.T) {
+	d := DefaultFileFilterConfig()
+	if !d.Enabled {
+		t.Errorf("expected Enabled to be true")
+	}
+	if d.Mode != "whitelist" {
+		t.Errorf("expected Mode to be whitelist, got %q", d.Mode)
+	}
+	if len(d.Whitelist) != 3 || d.Whitelist[0] != ".md" {
+		t.Errorf("unexpected default Whitelist: %v", d.Whitelist)
+	}
+	if len(d.Blacklist) != 4 || d.Blacklist[0] != ".exe" {
+		t.Errorf("unexpected default Blacklist: %v", d.Blacklist)
 	}
 }

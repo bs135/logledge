@@ -20,8 +20,29 @@ func TestDetectGitInfo_NonGitDirectory(t *testing.T) {
 	if info.Branch != "main" {
 		t.Errorf("expected branch main, got %q", info.Branch)
 	}
-	if info.AuthMethod != AuthPAT {
-		t.Errorf("expected AuthPAT, got %q", info.AuthMethod)
+	if info.AuthMethod != AuthNone {
+		t.Errorf("expected AuthNone, got %q", info.AuthMethod)
+	}
+}
+
+func TestDetectGitInfo_GitWithoutRemote(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "logledge-detect-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	gitDir := filepath.Join(tempDir, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	info := DetectGitInfo(tempDir)
+	if info.RepoURL != "" {
+		t.Errorf("expected empty RepoURL, got %q", info.RepoURL)
+	}
+	if info.AuthMethod != AuthNone {
+		t.Errorf("expected AuthNone, got %q", info.AuthMethod)
 	}
 }
 

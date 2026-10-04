@@ -26,6 +26,10 @@ export function GetAppSettings() {
   return window['go']['main']['App']['GetAppSettings']();
 }
 
+export function GetFileFilterConfig() {
+  return window['go']['main']['App']['GetFileFilterConfig']();
+}
+
 export function GetLanguage() {
   return window['go']['main']['App']['GetLanguage']();
 }
@@ -80,6 +84,10 @@ export function SaveAppSettings(arg1, arg2) {
 
 export function SaveAttachment(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveAttachment'](arg1, arg2, arg3);
+}
+
+export function SaveFileFilterConfig(arg1) {
+  return window['go']['main']['App']['SaveFileFilterConfig'](arg1);
 }
 
 export function SaveVault(arg1, arg2) {

@@ -1,5 +1,23 @@
 export namespace config {
 	
+	export class FileFilterConfig {
+	    enabled: boolean;
+	    mode: string;
+	    whitelist: string[];
+	    blacklist: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FileFilterConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.mode = source["mode"];
+	        this.whitelist = source["whitelist"];
+	        this.blacklist = source["blacklist"];
+	    }
+	}
 	export class VaultEntry {
 	    path: string;
 	    name: string;
@@ -28,6 +46,7 @@ export namespace config {
 	    gitRepoUrl?: string;
 	    gitBranch?: string;
 	    gitAuthMethod?: string;
+	    fileFilter: FileFilterConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -42,6 +61,7 @@ export namespace config {
 	        this.gitRepoUrl = source["gitRepoUrl"];
 	        this.gitBranch = source["gitBranch"];
 	        this.gitAuthMethod = source["gitAuthMethod"];
+	        this.fileFilter = this.convertValues(source["fileFilter"], FileFilterConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -62,6 +82,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 
 }
 

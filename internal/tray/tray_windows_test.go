@@ -3,6 +3,7 @@
 package tray
 
 import (
+	"context"
 	"encoding/binary"
 	"testing"
 )
@@ -44,3 +45,27 @@ func TestGetMenuLabels(t *testing.T) {
 		t.Errorf("Unexpected fallback labels: %s, %s, %s", showDef, syncDef, quitDef)
 	}
 }
+
+func TestTrayStartAndCleanup(t *testing.T) {
+	cleanup := Start(context.Background(), nil)
+	if cleanup == nil {
+		t.Fatal("Start returned nil cleanup function")
+	}
+	cleanup()
+	// Calling cleanup a second time should be safe and no-op
+	cleanup()
+}
+
+func TestTrayIdempotentStart(t *testing.T) {
+	cleanup1 := Start(context.Background(), nil)
+	if cleanup1 == nil {
+		t.Fatal("First Start returned nil cleanup function")
+	}
+	// Calling Start again while active should replace and clean up the previous instance
+	cleanup2 := Start(context.Background(), nil)
+	if cleanup2 == nil {
+		t.Fatal("Second Start returned nil cleanup function")
+	}
+	cleanup2()
+}
+
