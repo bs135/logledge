@@ -113,6 +113,8 @@ export const translations = {
         saveTitleDesc: 'Save inline note title',
         closeModalsDesc: 'Close modals & menus',
         resizeSidebar: 'Drag to resize sidebar (Double click to reset)',
+        newNotePlaceholder: 'Note name…',
+        newFolderPlaceholder: 'Folder name…',
     },
     vi: {
         appName: 'Logledge',
@@ -223,6 +225,8 @@ export const translations = {
         saveTitleDesc: 'Lưu tiêu đề & đổi tên file',
         closeModalsDesc: 'Đóng hộp thoại & menu',
         resizeSidebar: 'Kéo để co giãn thanh bên (Nhấp đúp để đặt lại)',
+        newNotePlaceholder: 'Tên ghi chú…',
+        newFolderPlaceholder: 'Tên thư mục…',
     },
 }
 

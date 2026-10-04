@@ -3,7 +3,7 @@ import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
-import {FileTree} from './components/FileTree'
+import {FileTree, InlineAction} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -62,6 +62,7 @@ function App() {
     const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
     const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+    const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
 
     useEffect(() => {
         GetFileFilterConfig()
@@ -133,19 +134,55 @@ function App() {
         vault.reload()
     }
 
-    async function handleCreateNote(parent = '') {
-        const name = window.prompt(t('newNote') + ':')
-        if (!name) return
-        const newPath = await vault.createFile(parent, name)
-        if (newPath) {
-            openFile(newPath)
-        }
+    function handleCreateNote(parent = '') {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({type: 'create-file', targetPath: parent})
     }
 
-    async function handleCreateFolder(parent = '') {
-        const name = window.prompt(t('newFolder') + ':')
-        if (!name) return
-        await vault.createFolder(parent, name)
+    function handleCreateFolder(parent = '') {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({type: 'create-folder', targetPath: parent})
+    }
+
+    function handleStartRename(path: string) {
+        if (!sidebarOpen) setSidebarOpen(true)
+        setInlineAction({
+            type: 'rename',
+            targetPath: path,
+            initialValue: path.split('/').pop() || '',
+        })
+    }
+
+    async function handleCommitInlineAction(action: InlineAction, name: string) {
+        const trimmed = name.trim()
+        if (!trimmed) {
+            setInlineAction(null)
+            return
+        }
+
+        if (action.type === 'create-file') {
+            setInlineAction(null)
+            const newPath = await vault.createFile(action.targetPath, trimmed)
+            if (newPath) {
+                openFile(newPath)
+            }
+        } else if (action.type === 'create-folder') {
+            setInlineAction(null)
+            await vault.createFolder(action.targetPath, trimmed)
+        } else if (action.type === 'rename') {
+            setInlineAction(null)
+            if (trimmed === action.initialValue) {
+                return
+            }
+            try {
+                const newPath = await vault.rename(action.targetPath, trimmed)
+                if (newPath && selectedPath === action.targetPath) {
+                    setSelectedPath(newPath)
+                }
+            } catch (err) {
+                alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
+            }
+        }
     }
 
     // Auto-refresh active note if changed externally or after git sync
@@ -457,18 +494,11 @@ function App() {
                                         root={vault.tree}
                                         filter={filterConfig}
                                         selectedPath={selectedPath}
+                                        inlineAction={inlineAction}
                                         onSelectFile={openFile}
                                         onCreateFile={handleCreateNote}
                                         onCreateFolder={handleCreateFolder}
-                                        onRename={async (path) => {
-                                            const name = window.prompt(t('rename') + ':', path.split('/').pop())
-                                            if (name) {
-                                                const newPath = await vault.rename(path, name)
-                                                if (newPath && selectedPath === path) {
-                                                    setSelectedPath(newPath)
-                                                }
-                                            }
-                                        }}
+                                        onRename={handleStartRename}
                                         onDelete={(path) => {
                                             if (window.confirm(`${t('moveToTrashConfirm')} "${path}"`)) {
                                                 vault.remove(path)
@@ -476,6 +506,8 @@ function App() {
                                             }
                                         }}
                                         onMove={vault.move}
+                                        onCommitInlineAction={handleCommitInlineAction}
+                                        onCancelInlineAction={() => setInlineAction(null)}
                                     />
                                 )}
                             </div>

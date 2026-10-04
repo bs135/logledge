@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import type {DragEvent} from 'react'
 import {config, vault} from '../../wailsjs/go/models'
 import {
@@ -13,6 +13,14 @@ import {
     Trash2,
 } from 'lucide-react'
 import {useI18n} from '../i18n'
+
+export type InlineActionType = 'create-file' | 'create-folder' | 'rename'
+
+export interface InlineAction {
+    type: InlineActionType
+    targetPath: string
+    initialValue?: string
+}
 
 function shouldShowFile(name: string, filter: config.FileFilterConfig): boolean {
     const lower = name.toLowerCase()
@@ -48,26 +56,63 @@ function filterNode(node: vault.Node, filter?: config.FileFilterConfig): vault.N
     })
 }
 
-interface FileTreeProps {
+export interface FileTreeProps {
     root: vault.Node
     selectedPath: string | null
     filter?: config.FileFilterConfig
+    inlineAction?: InlineAction | null
     onSelectFile: (path: string) => void
     onCreateFile: (parentRelPath: string) => void
     onCreateFolder: (parentRelPath: string) => void
     onRename: (relPath: string) => void
     onDelete: (relPath: string) => void
     onMove: (srcRelPath: string, destParentRelPath: string) => void
+    onCommitInlineAction: (action: InlineAction, name: string) => void
+    onCancelInlineAction: () => void
 }
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
-// folder collapse/expand, context menu (right-click), and drag-and-drop movement.
-export function FileTree({filter, ...props}: FileTreeProps) {
+// folder collapse/expand, context menu (right-click), drag-and-drop movement,
+// and inline input for creating notes/folders and renaming entries.
+export function FileTree({
+    filter,
+    inlineAction,
+    onCommitInlineAction,
+    onCancelInlineAction,
+    ...props
+}: FileTreeProps) {
+    const {t} = useI18n()
     const filteredRoot = filterNode(props.root, filter) || props.root
+    const isCreatingAtRoot = Boolean(
+        inlineAction && inlineAction.type !== 'rename' && inlineAction.targetPath === ''
+    )
+
     return (
         <div className="select-none text-sm min-h-full">
+            {isCreatingAtRoot && (
+                <InlineInputRow
+                    type={inlineAction!.type === 'create-folder' ? 'folder' : 'file'}
+                    depth={0}
+                    placeholder={
+                        inlineAction!.type === 'create-folder'
+                            ? t('newFolderPlaceholder')
+                            : t('newNotePlaceholder')
+                    }
+                    onCommit={(name) => onCommitInlineAction(inlineAction!, name)}
+                    onCancel={onCancelInlineAction}
+                />
+            )}
             {filteredRoot.children?.map((child) => (
-                <TreeEntry key={child.path} node={child} depth={0} rootPath={filteredRoot.path} {...props} />
+                <TreeEntry
+                    key={child.path}
+                    node={child}
+                    depth={0}
+                    rootPath={filteredRoot.path}
+                    inlineAction={inlineAction}
+                    onCommitInlineAction={onCommitInlineAction}
+                    onCancelInlineAction={onCancelInlineAction}
+                    {...props}
+                />
             ))}
         </div>
     )
@@ -79,12 +124,46 @@ interface TreeEntryProps extends Omit<FileTreeProps, 'root'> {
     rootPath: string
 }
 
-function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateFile, onCreateFolder, onRename, onDelete, onMove}: TreeEntryProps) {
+function TreeEntry({
+    node,
+    depth,
+    rootPath,
+    selectedPath,
+    inlineAction,
+    onSelectFile,
+    onCreateFile,
+    onCreateFolder,
+    onRename,
+    onDelete,
+    onMove,
+    onCommitInlineAction,
+    onCancelInlineAction,
+}: TreeEntryProps) {
+    const {t} = useI18n()
     const [open, setOpen] = useState(depth < 1)
     const [menuPos, setMenuPos] = useState<{x: number; y: number} | null>(null)
     const [dragOver, setDragOver] = useState(false)
 
     const isSelected = !node.isDir && node.path === selectedPath
+    const isRenaming = Boolean(
+        inlineAction && inlineAction.type === 'rename' && inlineAction.targetPath === node.path
+    )
+    const isCreatingHere = Boolean(
+        node.isDir &&
+        inlineAction &&
+        inlineAction.type !== 'rename' &&
+        inlineAction.targetPath === node.path
+    )
+
+    useEffect(() => {
+        if (!inlineAction || !node.isDir) return
+        const isTargetDescendant = inlineAction.targetPath.startsWith(node.path + '/')
+        const isCreatingInside =
+            inlineAction.type !== 'rename' && inlineAction.targetPath === node.path
+        if (isTargetDescendant || isCreatingInside) {
+            setOpen(true)
+        }
+    }, [inlineAction, node.path, node.isDir])
 
     function handleClick() {
         if (node.isDir) {
@@ -106,6 +185,60 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
         if (!srcPath || srcPath === node.path) return
         const destParent = node.isDir ? node.path : rootPath
         onMove(srcPath, destParent)
+    }
+
+    if (isRenaming) {
+        return (
+            <div>
+                <div
+                    className="flex items-center gap-1.5 rounded px-2 py-0.5 text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 my-0.5"
+                    style={{paddingLeft: `${depth * 14 + 8}px`}}
+                >
+                    <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
+                        {node.isDir ? (
+                            open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />
+                        ) : null}
+                    </span>
+                    {node.isDir ? (
+                        open ? (
+                            <FolderOpen className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                        ) : (
+                            <Folder className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                        )
+                    ) : (
+                        <FileText className="h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" />
+                    )}
+                    <InlineInput
+                        initialValue={node.name}
+                        isDir={node.isDir}
+                        onCommit={(name) => onCommitInlineAction(inlineAction!, name)}
+                        onCancel={onCancelInlineAction}
+                    />
+                </div>
+                {node.isDir && open && (
+                    <div>
+                        {node.children?.map((child) => (
+                            <TreeEntry
+                                key={child.path}
+                                node={child}
+                                depth={depth + 1}
+                                rootPath={rootPath}
+                                selectedPath={selectedPath}
+                                inlineAction={inlineAction}
+                                onSelectFile={onSelectFile}
+                                onCreateFile={onCreateFile}
+                                onCreateFolder={onCreateFolder}
+                                onRename={onRename}
+                                onDelete={onDelete}
+                                onMove={onMove}
+                                onCommitInlineAction={onCommitInlineAction}
+                                onCancelInlineAction={onCancelInlineAction}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        )
     }
 
     return (
@@ -161,22 +294,167 @@ function TreeEntry({node, depth, rootPath, selectedPath, onSelectFile, onCreateF
                 />
             )}
 
-            {node.isDir && open && node.children?.map((child) => (
-                <TreeEntry
-                    key={child.path}
-                    node={child}
-                    depth={depth + 1}
-                    rootPath={rootPath}
-                    selectedPath={selectedPath}
-                    onSelectFile={onSelectFile}
-                    onCreateFile={onCreateFile}
-                    onCreateFolder={onCreateFolder}
-                    onRename={onRename}
-                    onDelete={onDelete}
-                    onMove={onMove}
-                />
-            ))}
+            {node.isDir && open && (
+                <div>
+                    {isCreatingHere && (
+                        <InlineInputRow
+                            type={inlineAction!.type === 'create-folder' ? 'folder' : 'file'}
+                            depth={depth + 1}
+                            placeholder={
+                                inlineAction!.type === 'create-folder'
+                                    ? t('newFolderPlaceholder')
+                                    : t('newNotePlaceholder')
+                            }
+                            onCommit={(name) => onCommitInlineAction(inlineAction!, name)}
+                            onCancel={onCancelInlineAction}
+                        />
+                    )}
+                    {node.children?.map((child) => (
+                        <TreeEntry
+                            key={child.path}
+                            node={child}
+                            depth={depth + 1}
+                            rootPath={rootPath}
+                            selectedPath={selectedPath}
+                            inlineAction={inlineAction}
+                            onSelectFile={onSelectFile}
+                            onCreateFile={onCreateFile}
+                            onCreateFolder={onCreateFolder}
+                            onRename={onRename}
+                            onDelete={onDelete}
+                            onMove={onMove}
+                            onCommitInlineAction={onCommitInlineAction}
+                            onCancelInlineAction={onCancelInlineAction}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
+    )
+}
+
+interface InlineInputRowProps {
+    type: 'file' | 'folder'
+    depth: number
+    placeholder?: string
+    onCommit: (name: string) => void
+    onCancel: () => void
+}
+
+function InlineInputRow({
+    type,
+    depth,
+    placeholder,
+    onCommit,
+    onCancel,
+}: InlineInputRowProps) {
+    return (
+        <div
+            className="flex items-center gap-1.5 rounded px-2 py-0.5 text-neutral-800 dark:text-neutral-200 bg-neutral-100/90 dark:bg-neutral-800/90 my-0.5"
+            style={{paddingLeft: `${depth * 14 + 8}px`}}
+            onClick={(e) => e.stopPropagation()}
+        >
+            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500" />
+            {type === 'folder' ? (
+                <Folder className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+            ) : (
+                <FileText className="h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" />
+            )}
+            <InlineInput
+                placeholder={placeholder}
+                isDir={type === 'folder'}
+                onCommit={onCommit}
+                onCancel={onCancel}
+            />
+        </div>
+    )
+}
+
+interface InlineInputProps {
+    initialValue?: string
+    placeholder?: string
+    isDir?: boolean
+    onCommit: (name: string) => void
+    onCancel: () => void
+}
+
+function InlineInput({
+    initialValue = '',
+    placeholder = '',
+    isDir = false,
+    onCommit,
+    onCancel,
+}: InlineInputProps) {
+    const [val, setVal] = useState(initialValue)
+    const inputRef = useRef<HTMLInputElement>(null)
+    const handledRef = useRef(false)
+
+    useEffect(() => {
+        if (!inputRef.current) return
+        inputRef.current.focus()
+        inputRef.current.scrollIntoView({block: 'nearest', behavior: 'smooth'})
+        if (initialValue) {
+            if (!isDir) {
+                const dotIdx = initialValue.lastIndexOf('.')
+                if (dotIdx > 0) {
+                    inputRef.current.setSelectionRange(0, dotIdx)
+                    return
+                }
+            }
+            inputRef.current.select()
+        }
+    }, [initialValue, isDir])
+
+    function handleFinish(shouldCommit: boolean) {
+        if (handledRef.current) return
+        handledRef.current = true
+
+        if (shouldCommit) {
+            let trimmed = val.trim()
+            if (trimmed) {
+                // Sanitize invalid filename characters: / \ : * ? " < > |
+                trimmed = trimmed.replace(/[<>:"/\\|?*]/g, '_')
+                let finalName = trimmed
+                if (!isDir && initialValue && !finalName.includes('.')) {
+                    const originalExt = initialValue.includes('.')
+                        ? initialValue.slice(initialValue.lastIndexOf('.'))
+                        : ''
+                    if (originalExt) {
+                        finalName += originalExt
+                    }
+                }
+                onCommit(finalName)
+                return
+            }
+        }
+        onCancel()
+    }
+
+    return (
+        <input
+            ref={inputRef}
+            type="text"
+            value={val}
+            placeholder={placeholder}
+            onChange={(e) => setVal(e.target.value)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleFinish(true)
+                } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleFinish(false)
+                }
+            }}
+            onBlur={() => {
+                handleFinish(true)
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.stopPropagation()}
+            className="flex-1 min-w-0 h-6 rounded border border-blue-500 bg-white dark:bg-neutral-900 px-1.5 py-0 text-xs text-neutral-900 dark:text-neutral-100 outline-none shadow-sm focus:ring-1 focus:ring-blue-500"
+        />
     )
 }
 
@@ -261,3 +539,4 @@ function MenuItem({
         </button>
     )
 }
+
