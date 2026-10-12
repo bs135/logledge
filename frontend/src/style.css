@@ -141,6 +141,57 @@ html.dark .cm-editor .cm-cursor {
 
 /* Code block line styling */
 .cm-codeblock-line {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
+
+.cm-codeblock-first {
+    padding-top: 0.5rem;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+}
+
+.cm-codeblock-last {
+    padding-bottom: 0.5rem;
+    border-bottom-left-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+}
+
+/* Syntax Highlighting Tokens (Light mode: GitHub Primer Light) */
+.cm-token-keyword { color: #cf222e; font-weight: 600; }
+.cm-token-operator { color: #cf222e; }
+.cm-token-variable { color: #24292f; }
+.cm-token-def { color: #953800; }
+.cm-token-function { color: #8250df; }
+.cm-token-string { color: #0a3069; }
+.cm-token-number { color: #0550ae; }
+.cm-token-atom { color: #0550ae; }
+.cm-token-type { color: #953800; font-weight: 600; }
+.cm-token-property { color: #116329; }
+.cm-token-tag { color: #116329; }
+.cm-token-attribute { color: #8250df; }
+.cm-token-regexp { color: #0a3069; }
+.cm-token-meta { color: #8250df; }
+.cm-token-comment { color: #6e7781; font-style: italic; }
+.cm-token-punctuation { color: #57606a; }
+.cm-token-invalid { color: #cf222e; text-decoration: underline wavy #cf222e; }
+
+/* Syntax Highlighting Tokens (Dark mode: GitHub Primer Dark) */
+html.dark .cm-token-keyword { color: #ff7b72; font-weight: 600; }
+html.dark .cm-token-operator { color: #ff7b72; }
+html.dark .cm-token-variable { color: #e6edf3; }
+html.dark .cm-token-def { color: #ffa657; }
+html.dark .cm-token-function { color: #d2a8ff; }
+html.dark .cm-token-string { color: #a5d6ff; }
+html.dark .cm-token-number { color: #79c0ff; }
+html.dark .cm-token-atom { color: #79c0ff; }
+html.dark .cm-token-type { color: #ffa657; font-weight: 600; }
+html.dark .cm-token-property { color: #7ee787; }
+html.dark .cm-token-tag { color: #7ee787; }
+html.dark .cm-token-attribute { color: #d2a8ff; }
+html.dark .cm-token-regexp { color: #a5d6ff; }
+html.dark .cm-token-meta { color: #d2a8ff; }
+html.dark .cm-token-comment { color: #8b949e; font-style: italic; }
+html.dark .cm-token-punctuation { color: #8b949e; }
+html.dark .cm-token-invalid { color: #ff7b72; text-decoration: underline wavy #ff7b72; }

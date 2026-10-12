@@ -446,19 +446,36 @@ export class LivePreviewPlugin {
                             const curLine = doc.line(l)
                             if (!visitedCodeblockLines.has(curLine.from)) {
                                 visitedCodeblockLines.add(curLine.from)
+                                let extraClasses = ''
+                                if (l === startLine.number) {
+                                    extraClasses += ' cm-codeblock-first rounded-t-md'
+                                }
+                                if (l === endLine.number) {
+                                    extraClasses += ' cm-codeblock-last rounded-b-md'
+                                }
                                 decorations.push(
                                     Decoration.line({
-                                        class: 'cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50',
+                                        class: `cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50${extraClasses}`,
                                     }).range(curLine.from)
                                 )
                             }
                         }
                         return
                     }
+
+                    // 12. Code Block Marker & Info (``` and language info)
+                    if (name === 'CodeMark' || name === 'CodeInfo') {
+                        decorations.push(
+                            Decoration.mark({
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                            }).range(nodeFrom, nodeTo)
+                        )
+                        return
+                    }
                 },
             })
 
-            // 12. WikiLinks [[Note Name]]
+            // 13. WikiLinks [[Note Name]]
             const chunkText = doc.sliceString(range.from, range.to)
             const wikiRegex = /\[\[([^\]]+)\]\]/g
             let wikiMatch: RegExpExecArray | null

@@ -9,6 +9,7 @@ import {SaveAttachment} from '../../wailsjs/go/main/App'
 import {BrowserOpenURL} from '../../wailsjs/runtime'
 import {EditorContextMenu} from './EditorContextMenu'
 import {livePreview} from './livePreview'
+import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -136,8 +137,10 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 EditorView.lineWrapping,
                 markdown({
                     base: markdownLanguage,
+                    codeLanguages: resolveCodeLanguage,
                     extensions: [GFM, Table, TaskList, Strikethrough],
                 }),
+                syntaxHighlightExtension,
                 syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
                 livePreview,
                 customKeymap,

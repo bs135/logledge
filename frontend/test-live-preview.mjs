@@ -195,3 +195,53 @@ test('WikiLinks: hides [[ and ]] when cursor away, reveals syntax when cursor is
     })
     assert.strictEqual(visibleDelims >= 2, true, 'Delimiters [[ and ]] should be visible when cursor is inside')
 })
+
+test('Fenced Code Block: applies codeblock line decorations and formatting marks', () => {
+    const doc = '```typescript\nconst greeting = "hello";\n```'
+
+    const view = createTestView(doc, 0)
+    const plugin = new LivePreviewPlugin(view)
+    let foundFirstLine = false
+    let foundLastLine = false
+    let foundCodeMarks = 0
+
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-codeblock-first')) foundFirstLine = true
+        if (val.spec?.class?.includes('cm-codeblock-last')) foundLastLine = true
+        if (val.spec?.class?.includes('cm-formatting') && val.spec?.class?.includes('font-mono')) {
+            foundCodeMarks++
+        }
+    })
+
+    assert.strictEqual(foundFirstLine, true, 'First line should have cm-codeblock-first')
+    assert.strictEqual(foundLastLine, true, 'Last line should have cm-codeblock-last')
+    assert.strictEqual(foundCodeMarks >= 2, true, 'Opening and closing code marks should have formatting decoration')
+})
+
+test('Language Resolution: correctly maps aliases and standard names', async () => {
+    // Compile and import syntaxHighlight.ts using esbuild
+    const res = esbuild.buildSync({
+        entryPoints: ['src/components/syntaxHighlight.ts'],
+        bundle: true,
+        format: 'cjs',
+        write: false,
+        external: ['@codemirror/*', '@lezer/*'],
+    })
+    const mod2 = {exports: {}}
+    const runFn2 = new Function('require', 'exports', 'module', res.outputFiles[0].text)
+    runFn2(require, mod2.exports, mod2)
+    const {resolveCodeLanguage, markdownHighlightStyle} = mod2.exports
+
+    assert.strictEqual(resolveCodeLanguage('javascript')?.name, 'JavaScript')
+    assert.strictEqual(resolveCodeLanguage('js')?.name, 'JavaScript')
+    assert.strictEqual(resolveCodeLanguage('py')?.name, 'Python')
+    assert.strictEqual(resolveCodeLanguage('golang')?.name, 'Go')
+    assert.strictEqual(resolveCodeLanguage('rs')?.name, 'Rust')
+    assert.strictEqual(resolveCodeLanguage('sh')?.name, 'Shell')
+    assert.strictEqual(resolveCodeLanguage('bash')?.name, 'Shell')
+    assert.strictEqual(resolveCodeLanguage('yml')?.name, 'YAML')
+    assert.strictEqual(resolveCodeLanguage('ts')?.name, 'TypeScript')
+
+    // Verify markdownHighlightStyle is defined
+    assert.ok(markdownHighlightStyle, 'markdownHighlightStyle should be defined')
+})
