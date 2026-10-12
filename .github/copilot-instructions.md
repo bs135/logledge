@@ -112,13 +112,13 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 All git commit messages must be written in **English** and strictly follow this template:
 
 ```
-type: commit title
+type(scope): commit title
 
  - commit body line 1
  - commit body line 2
 ```
 
-Where `type` is one of: `feat`, `fix`, `refactor`, `perf`, `docs`, `style`, `test`, `chore`.
+Where `type` is one of: `feat`, `fix`, `refactor`, `perf`, `docs`, `style`, `test`, `chore`. `scope` should be a concise description of the area of the codebase affected by the commit (e.g., `backend`, `frontend`, `api`).
 
 ---
 
