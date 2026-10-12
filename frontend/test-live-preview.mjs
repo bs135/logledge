@@ -196,26 +196,116 @@ test('WikiLinks: hides [[ and ]] when cursor away, reveals syntax when cursor is
     assert.strictEqual(visibleDelims >= 2, true, 'Delimiters [[ and ]] should be visible when cursor is inside')
 })
 
-test('Fenced Code Block: applies codeblock line decorations and formatting marks', () => {
-    const doc = '```typescript\nconst greeting = "hello";\n```'
+test('Fenced Code Block: Live Preview reveals on cursor, renders header & collapses footer when cursor away', () => {
+    const doc = '```typescript\nconst greeting = "hello";\n```\nSome trailing text'
+    // startLine: 0..13 (```typescript)
+    // middle: 14..39 (const greeting = "hello";)
+    // endLine: 40..43 (```)
+    // trailing text: 44..62 (Some trailing text)
 
-    const view = createTestView(doc, 0)
-    const plugin = new LivePreviewPlugin(view)
-    let foundFirstLine = false
-    let foundLastLine = false
-    let foundCodeMarks = 0
+    // Case 1: Cursor away at position 50 (on trailing text)
+    const view1 = createTestView(doc, 50)
+    const plugin1 = new LivePreviewPlugin(view1)
+    let headerWidget = null
+    let hasHeaderLineClass = false
+    let hasFooterLineClass = false
+    let hasFooterReplace = false
 
-    plugin.decorations.between(0, doc.length, (from, to, val) => {
-        if (val.spec?.class?.includes('cm-codeblock-first')) foundFirstLine = true
-        if (val.spec?.class?.includes('cm-codeblock-last')) foundLastLine = true
-        if (val.spec?.class?.includes('cm-formatting') && val.spec?.class?.includes('font-mono')) {
-            foundCodeMarks++
+    plugin1.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
+            headerWidget = val.spec.widget
+        }
+        if (val.spec?.class?.includes('cm-codeblock-header-line')) {
+            hasHeaderLineClass = true
+        }
+        if (val.spec?.class?.includes('cm-codeblock-footer')) {
+            hasFooterLineClass = true
+        }
+        if (from === 40 && to === 43 && !val.spec?.class && !val.spec?.widget) {
+            hasFooterReplace = true
         }
     })
 
-    assert.strictEqual(foundFirstLine, true, 'First line should have cm-codeblock-first')
-    assert.strictEqual(foundLastLine, true, 'Last line should have cm-codeblock-last')
-    assert.strictEqual(foundCodeMarks >= 2, true, 'Opening and closing code marks should have formatting decoration')
+    assert.ok(headerWidget, 'CodeBlockHeaderWidget should replace start line when cursor is away')
+    assert.strictEqual(headerWidget.lang, 'typescript', 'Header widget should extract language name')
+    assert.strictEqual(headerWidget.code, 'const greeting = "hello";', 'Header widget should extract code content')
+    assert.strictEqual(hasHeaderLineClass, true, 'Start line should have cm-codeblock-header-line when inactive')
+    assert.strictEqual(hasFooterLineClass, true, 'End line should have cm-codeblock-footer when inactive')
+    assert.strictEqual(hasFooterReplace, true, 'End line should have replacement decoration when inactive')
+
+    // Case 2: Cursor on startLine at position 0
+    const view2 = createTestView(doc, 0)
+    const plugin2 = new LivePreviewPlugin(view2)
+    let startLineRevealed = true
+    let foundStartFenceMark = false
+    let foundLangMark = false
+
+    plugin2.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
+            startLineRevealed = false
+        }
+        if (from === 0 && to === 3 && val.spec?.class?.includes('cm-formatting')) {
+            foundStartFenceMark = true
+        }
+        if (from === 3 && to === 13 && val.spec?.class?.includes('cm-formatting')) {
+            foundLangMark = true
+        }
+    })
+
+    assert.strictEqual(startLineRevealed, true, 'Start line should NOT be replaced by widget when cursor is on it')
+    assert.strictEqual(foundStartFenceMark, true, 'Opening ``` should have formatting mark when cursor is on it')
+    assert.strictEqual(foundLangMark, true, 'Language name should have formatting mark when cursor is on it')
+
+    // Case 3: Cursor on endLine at position 41
+    const view3 = createTestView(doc, 41)
+    const plugin3 = new LivePreviewPlugin(view3)
+    let endLineHidden = false
+    let foundEndFenceMark = false
+
+    plugin3.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 40 && to === 43 && !val.spec?.class && !val.spec?.widget) {
+            endLineHidden = true
+        }
+        if (from === 40 && to === 43 && val.spec?.class?.includes('cm-formatting')) {
+            foundEndFenceMark = true
+        }
+    })
+
+    assert.strictEqual(endLineHidden, false, 'End line should NOT be hidden when cursor is on it')
+    assert.strictEqual(foundEndFenceMark, true, 'Closing ``` should be revealed with formatting mark when cursor is on it')
+
+    // Case 4: Cursor on code line at position 20
+    const view4 = createTestView(doc, 20)
+    const plugin4 = new LivePreviewPlugin(view4)
+    let headerActive = false
+    let footerCollapsed = false
+
+    plugin4.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
+            headerActive = true
+        }
+        if (val.spec?.class?.includes('cm-codeblock-footer')) {
+            footerCollapsed = true
+        }
+    })
+
+    assert.strictEqual(headerActive, true, 'Header should remain in preview mode when editing code line')
+    assert.strictEqual(footerCollapsed, true, 'Footer should remain collapsed when editing code line')
+})
+
+test('Fenced Code Block: unclosed block does not collapse code lines as footer', () => {
+    const doc = '```python\nprint("hello")'
+    const view = createTestView(doc, 0)
+    const plugin = new LivePreviewPlugin(view)
+    let hasFooterClass = false
+
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-codeblock-footer')) {
+            hasFooterClass = true
+        }
+    })
+
+    assert.strictEqual(hasFooterClass, false, 'Unclosed block should not collapse last line as footer')
 })
 
 test('Language Resolution: correctly maps aliases and standard names', async () => {

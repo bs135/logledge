@@ -144,18 +144,57 @@ html.dark .cm-editor .cm-cursor {
     padding-left: 1rem;
     padding-right: 1rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    border-left: 1px solid rgba(229, 231, 235, 0.8);
+    border-right: 1px solid rgba(229, 231, 235, 0.8);
+}
+
+html.dark .cm-codeblock-line {
+    border-left: 1px solid rgba(64, 64, 64, 0.6);
+    border-right: 1px solid rgba(64, 64, 64, 0.6);
 }
 
 .cm-codeblock-first {
-    padding-top: 0.5rem;
+    border-top: 1px solid rgba(229, 231, 235, 0.8);
     border-top-left-radius: 0.375rem;
     border-top-right-radius: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+html.dark .cm-codeblock-first {
+    border-top: 1px solid rgba(64, 64, 64, 0.6);
 }
 
 .cm-codeblock-last {
-    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(229, 231, 235, 0.8);
     border-bottom-left-radius: 0.375rem;
     border-bottom-right-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+
+html.dark .cm-codeblock-last {
+    border-bottom: 1px solid rgba(64, 64, 64, 0.6);
+}
+
+.cm-codeblock-header-line {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.cm-codeblock-header {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+}
+
+.cm-codeblock-footer {
+    height: 0.5rem;
+    min-height: 0.5rem;
+    max-height: 0.5rem;
+    line-height: 0.5rem;
+    font-size: 0;
+    overflow: hidden;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }
 
 /* Syntax Highlighting Tokens (Light mode: GitHub Primer Light) */
