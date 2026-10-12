@@ -1,13 +1,16 @@
 import {useEffect} from 'react'
 import {Scissors, Copy, Clipboard, CheckSquare, Undo2, Redo2} from 'lucide-react'
+import {EditorView} from '@codemirror/view'
+import {undo, redo, selectAll} from '@codemirror/commands'
 import {useI18n} from '../i18n'
 
 interface EditorContextMenuProps {
     position: {x: number; y: number}
     onClose: () => void
+    view?: EditorView | null
 }
 
-export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
+export function EditorContextMenu({position, onClose, view}: EditorContextMenuProps) {
     const {t} = useI18n()
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
@@ -28,17 +31,38 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
     }
 
     async function handleCopy() {
-        const sel = window.getSelection()?.toString()
-        if (sel) {
-            await navigator.clipboard.writeText(sel)
+        if (view) {
+            const sel = view.state.sliceDoc(
+                view.state.selection.main.from,
+                view.state.selection.main.to
+            )
+            if (sel) {
+                await navigator.clipboard.writeText(sel)
+            }
+        } else {
+            const sel = window.getSelection()?.toString()
+            if (sel) {
+                await navigator.clipboard.writeText(sel)
+            }
         }
     }
 
     async function handleCut() {
-        const sel = window.getSelection()?.toString()
-        if (sel) {
-            await navigator.clipboard.writeText(sel)
-            document.execCommand('delete')
+        if (view) {
+            const sel = view.state.sliceDoc(
+                view.state.selection.main.from,
+                view.state.selection.main.to
+            )
+            if (sel) {
+                await navigator.clipboard.writeText(sel)
+                view.dispatch(view.state.replaceSelection(''))
+            }
+        } else {
+            const sel = window.getSelection()?.toString()
+            if (sel) {
+                await navigator.clipboard.writeText(sel)
+                document.execCommand('delete')
+            }
         }
     }
 
@@ -46,11 +70,38 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
         try {
             const text = await navigator.clipboard.readText()
             if (text) {
-                document.execCommand('insertText', false, text)
+                if (view) {
+                    view.dispatch(view.state.replaceSelection(text))
+                } else {
+                    document.execCommand('insertText', false, text)
+                }
             }
         } catch {
-            // fallback
             document.execCommand('paste')
+        }
+    }
+
+    function handleSelectAll() {
+        if (view) {
+            selectAll(view)
+        } else {
+            document.execCommand('selectAll')
+        }
+    }
+
+    function handleUndo() {
+        if (view) {
+            undo(view)
+        } else {
+            document.execCommand('undo')
+        }
+    }
+
+    function handleRedo() {
+        if (view) {
+            redo(view)
+        } else {
+            document.execCommand('redo')
         }
     }
 
@@ -91,20 +142,20 @@ export function EditorContextMenu({position, onClose}: EditorContextMenuProps) {
                     label={t('selectAll')}
                     icon={<CheckSquare className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+A"
-                    onClick={() => triggerAction(() => document.execCommand('selectAll'))}
+                    onClick={() => triggerAction(handleSelectAll)}
                 />
                 <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
                 <ContextMenuItem
                     label={t('undo')}
                     icon={<Undo2 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+Z"
-                    onClick={() => triggerAction(() => document.execCommand('undo'))}
+                    onClick={() => triggerAction(handleUndo)}
                 />
                 <ContextMenuItem
                     label={t('redo')}
                     icon={<Redo2 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
                     shortcut="Ctrl+Y"
-                    onClick={() => triggerAction(() => document.execCommand('redo'))}
+                    onClick={() => triggerAction(handleRedo)}
                 />
             </div>
         </div>

@@ -36,58 +36,111 @@ html.dark body {
     color: #e5e5e5;
 }
 
-/* Ensure all Crepe editor headings use Sans-serif */
-.milkdown {
-    --crepe-font-title: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif !important;
+/* Ensure all editor headings and content use Sans-serif */
+.cm-editor {
+    height: 100%;
+    outline: none !important;
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+    font-size: 1rem;
+    line-height: 1.7;
 }
 
-.milkdown h1,
-.milkdown h2,
-.milkdown h3,
-.milkdown h4,
-.milkdown h5,
-.milkdown h6 {
+.cm-editor .cm-scroller {
+    font-family: inherit;
+    padding: 1.5rem 2rem;
+    line-height: 1.7;
+}
+
+.cm-editor .cm-content {
+    caret-color: #0f172a;
+    padding: 0;
+}
+
+html.dark .cm-editor .cm-content {
+    caret-color: #f8fafc;
+}
+
+.cm-editor.cm-focused {
+    outline: none !important;
+}
+
+/* Headings in CodeMirror */
+.cm-heading {
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif !important;
+    font-weight: 700;
+    color: #0f172a;
 }
 
-/* Dark mode theme variables for Crepe */
-html.dark .milkdown {
-    --crepe-color-background: #171717;
-    --crepe-color-on-background: #e5e5e5;
-    --crepe-color-surface: #171717;
-    --crepe-color-surface-low: #262626;
-    --crepe-color-on-surface: #d4d4d4;
-    --crepe-color-on-surface-variant: #a3a3a3;
-    --crepe-color-outline: #525252;
-    --crepe-color-primary: #a3a3a3;
-    --crepe-color-secondary: #404040;
-    --crepe-color-on-secondary: #d4d4d4;
-    --crepe-color-inverse: #e5e5e5;
-    --crepe-color-on-inverse: #262626;
-    --crepe-color-inline-code: #f87171;
-    --crepe-color-error: #ef4444;
-    --crepe-color-hover: #262626;
-    --crepe-color-selected: #404040;
-    --crepe-color-inline-area: #262626;
+html.dark .cm-heading {
+    color: #f8fafc;
 }
 
-/* Light mode theme variables for Crepe */
-html.light .milkdown {
-    --crepe-color-background: #ffffff;
-    --crepe-color-on-background: #1e293b;
-    --crepe-color-surface: #ffffff;
-    --crepe-color-surface-low: #f8fafc;
-    --crepe-color-on-surface: #1e293b;
-    --crepe-color-on-surface-variant: #64748b;
-    --crepe-color-outline: #cbd5e1;
-    --crepe-color-primary: #0f172a;
-    --crepe-color-secondary: #e2e8f0;
-    --crepe-color-on-secondary: #0f172a;
-    --crepe-color-inverse: #0f172a;
-    --crepe-color-on-inverse: #f8fafc;
-    --crepe-color-inline-code: #e11d48;
-    --crepe-color-error: #ef4444;
-    --crepe-color-hover: #f1f5f9;
-    --crepe-color-selected: #e2e8f0;
-    --crepe-color-inline-area: #e2e8f0;
+.cm-heading-1 {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+    padding-top: 1rem;
+    padding-bottom: 0.25rem;
+}
+
+.cm-heading-2 {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+    padding-top: 0.75rem;
+    padding-bottom: 0.25rem;
+}
+
+.cm-heading-3 {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+    padding-top: 0.5rem;
+    padding-bottom: 0.25rem;
+}
+
+.cm-heading-4 {
+    font-size: 1.125rem !important;
+    line-height: 1.5rem !important;
+    padding-top: 0.25rem;
+}
+
+.cm-heading-5 {
+    font-size: 1rem !important;
+    line-height: 1.5rem !important;
+}
+
+.cm-heading-6 {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+}
+
+html.dark .cm-heading-6 {
+    color: #94a3b8;
+}
+
+/* Selection and Cursor */
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+    background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+html.dark .cm-editor .cm-selectionBackground,
+html.dark .cm-editor.cm-focused .cm-selectionBackground {
+    background-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+.cm-editor .cm-cursor {
+    border-left-color: #0f172a;
+    border-left-width: 2px;
+}
+
+html.dark .cm-editor .cm-cursor {
+    border-left-color: #f8fafc;
+}
+
+/* Code block line styling */
+.cm-codeblock-line {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
 }

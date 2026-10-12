@@ -1,9 +1,14 @@
 import {useEffect, useRef, useState} from 'react'
-import {Crepe} from '@milkdown/crepe'
-import '@milkdown/crepe/theme/common/style.css'
-import '@milkdown/crepe/theme/frame-dark.css'
+import {EditorState} from '@codemirror/state'
+import {EditorView, keymap} from '@codemirror/view'
+import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands'
+import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
+import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
+import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {SaveAttachment} from '../../wailsjs/go/main/App'
+import {BrowserOpenURL} from '../../wailsjs/runtime'
 import {EditorContextMenu} from './EditorContextMenu'
+import {livePreview} from './livePreview'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -18,12 +23,45 @@ interface EditorProps {
     onRename?: (newName: string) => void
 }
 
-// Editor wraps Milkdown Crepe — an Obsidian-style WYSIWYG Live Preview editor,
-// with out-of-the-box CommonMark+GFM support (tables, task lists, strikethrough),
-// code block syntax highlighting (CodeMirror), and image paste/drag-and-drop into .attachments/.
+function toggleWrap(view: EditorView, before: string, after: string = before): boolean {
+    const sel = view.state.selection.main
+    const text = view.state.sliceDoc(sel.from, sel.to)
+    if (text.startsWith(before) && text.endsWith(after) && text.length >= before.length + after.length) {
+        // Unwrap
+        view.dispatch({
+            changes: {
+                from: sel.from,
+                to: sel.to,
+                insert: text.slice(before.length, text.length - after.length),
+            },
+            selection: {
+                anchor: sel.from,
+                head: sel.to - before.length - after.length,
+            },
+        })
+    } else {
+        // Wrap
+        view.dispatch({
+            changes: {
+                from: sel.from,
+                to: sel.to,
+                insert: `${before}${text}${after}`,
+            },
+            selection: {
+                anchor: sel.from + before.length,
+                head: sel.to + before.length,
+            },
+        })
+    }
+    return true
+}
+
+// Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
+// preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
+// and debounced auto-save at 600ms.
 export function Editor({path, initialContent, onContentChange, onChange, onRename}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const crepeRef = useRef<Crepe | null>(null)
+    const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
     onChangeRef.current = onChange
     const onContentChangeRef = useRef(onContentChange)
@@ -54,41 +92,137 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
 
     useEffect(() => {
         if (!containerRef.current) return
-        let disposed = false
 
-        const crepe = new Crepe({
-            root: containerRef.current,
-            defaultValue: initialContent,
-            featureConfigs: {
-                [Crepe.Feature.ImageBlock]: {
-                    onUpload: async (file: File) => {
-                        const base64 = await fileToBase64(file)
-                        return await SaveAttachment(pathRef.current, file.name, base64)
-                    },
-                },
+        const editorTheme = EditorView.theme({
+            '&': {
+                height: '100%',
+                backgroundColor: 'transparent',
+            },
+            '.cm-scroller': {
+                overflow: 'auto',
+                fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
             },
         })
 
-        crepe.create().then(() => {
-            if (disposed) {
-                crepe.destroy()
-                return
+        const customKeymap = keymap.of([
+            {
+                key: 'Mod-b',
+                run: (view) => toggleWrap(view, '**'),
+            },
+            {
+                key: 'Mod-i',
+                run: (view) => toggleWrap(view, '*'),
+            },
+            ...defaultKeymap,
+            ...historyKeymap,
+            indentWithTab,
+        ])
+
+        const updateListener = EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+                const markdownText = update.state.doc.toString()
+                onContentChangeRef.current?.(markdownText)
+                if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+                saveTimerRef.current = setTimeout(() => {
+                    onChangeRef.current(markdownText)
+                }, 600)
             }
-            crepe.on((listener) => {
-                listener.markdownUpdated((_ctx, markdown) => {
-                    onContentChangeRef.current?.(markdown)
-                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-                    saveTimerRef.current = setTimeout(() => onChangeRef.current(markdown), 600)
-                })
-            })
-            crepeRef.current = crepe
         })
 
+        const state = EditorState.create({
+            doc: initialContent,
+            extensions: [
+                history(),
+                EditorView.lineWrapping,
+                markdown({
+                    base: markdownLanguage,
+                    extensions: [GFM, Table, TaskList, Strikethrough],
+                }),
+                syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+                livePreview,
+                customKeymap,
+                editorTheme,
+                updateListener,
+            ],
+        })
+
+        const view = new EditorView({
+            state,
+            parent: containerRef.current,
+        })
+        viewRef.current = view
+
+        // Handle image paste into editor
+        async function onPaste(e: ClipboardEvent) {
+            const items = e.clipboardData?.items
+            if (!items) return
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i]
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault()
+                    const file = item.getAsFile()
+                    if (!file) continue
+                    try {
+                        const base64 = await fileToBase64(file)
+                        const fileName = file.name || `image-${Date.now()}.png`
+                        const relPath = await SaveAttachment(pathRef.current, fileName, base64)
+                        const markdownImage = `![${fileName}](${relPath})\n`
+                        view.dispatch(view.state.replaceSelection(markdownImage))
+                    } catch (err) {
+                        console.error('Failed to save pasted attachment:', err)
+                    }
+                    break
+                }
+            }
+        }
+
+        // Handle image drag & drop into editor
+        async function onDrop(e: DragEvent) {
+            const files = e.dataTransfer?.files
+            if (!files || files.length === 0) return
+            let handled = false
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i]
+                if (file.type.startsWith('image/')) {
+                    handled = true
+                    try {
+                        const base64 = await fileToBase64(file)
+                        const relPath = await SaveAttachment(pathRef.current, file.name, base64)
+                        const markdownImage = `![${file.name}](${relPath})\n`
+                        view.dispatch(view.state.replaceSelection(markdownImage))
+                    } catch (err) {
+                        console.error('Failed to save dropped attachment:', err)
+                    }
+                }
+            }
+            if (handled) {
+                e.preventDefault()
+            }
+        }
+
+        function onEditorClick(e: MouseEvent) {
+            if (e.ctrlKey || e.metaKey) {
+                const target = (e.target as HTMLElement)?.closest?.('.cm-link') as HTMLElement | null
+                const url = target?.getAttribute('data-url')
+                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                    e.preventDefault()
+                    BrowserOpenURL(url)
+                }
+            }
+        }
+
+        const dom = view.dom
+        dom.addEventListener('paste', onPaste)
+        dom.addEventListener('drop', onDrop)
+        dom.addEventListener('click', onEditorClick)
+
         return () => {
-            disposed = true
+            dom.removeEventListener('paste', onPaste)
+            dom.removeEventListener('drop', onDrop)
+            dom.removeEventListener('click', onEditorClick)
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-            crepeRef.current?.destroy()
-            crepeRef.current = null
+            view.destroy()
+            viewRef.current = null
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [path])
@@ -118,10 +252,11 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                     className="w-full bg-transparent text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
                 />
             </div>
-            <div ref={containerRef} className="milkdown-container flex-1 overflow-y-auto" />
+            <div ref={containerRef} className="flex-1 overflow-hidden" />
             {contextMenuPos && (
                 <EditorContextMenu
                     position={contextMenuPos}
+                    view={viewRef.current}
                     onClose={() => setContextMenuPos(null)}
                 />
             )}

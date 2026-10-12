@@ -30,7 +30,7 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 ### Frontend (Node.js 24+, React 19, TypeScript)
 - **Framework & Bundler**: React 19, TypeScript 5.6+, Vite 7.
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), CSS custom variants for dark mode, custom fonts (`Nunito`).
-- **Markdown Editor**: [Milkdown Crepe](https://milkdown.dev) (`@milkdown/crepe`) in WYSIWYG Live Preview mode.
+- **Markdown Editor**: [CodeMirror 6](https://codemirror.net) with custom Obsidian-style Live Preview (inline markdown editing).
 - **Icons**: `lucide-react`.
 - **Internationalization (i18n)**: English (`en`) and Vietnamese (`vi`) in `frontend/src/i18n/index.ts`.
 
@@ -82,9 +82,9 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 
 ### 4.2 Frontend (React & TypeScript)
 1. **Auto-save debouncing**:
-   - Changes in the Milkdown Crepe editor are saved automatically to disk after a debounced interval (~600ms). There is no manual `Ctrl+S` requirement.
+   - Changes in the CodeMirror 6 editor are saved automatically to disk after a debounced interval (~600ms). There is no manual `Ctrl+S` requirement.
 2. **Typography & Styling**:
-   - Milkdown Crepe heading fonts must be overridden to Sans-serif (`Nunito, sans-serif`) to maintain visual consistency with the rest of the application.
+   - CodeMirror 6 heading fonts and content use Sans-serif (`Nunito, sans-serif`) to maintain visual consistency with the rest of the application.
 3. **i18n completeness**:
    - Whenever introducing new user-facing strings, add translation keys to both `en` and `vi` in `frontend/src/i18n/index.ts`.
 4. **Wails IPC bindings**:
