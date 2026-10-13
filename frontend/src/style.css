@@ -157,7 +157,7 @@ html.dark .cm-codeblock-line {
     border-top: 1px solid rgba(229, 231, 235, 0.8);
     border-top-left-radius: 0.375rem;
     border-top-right-radius: 0.375rem;
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
 }
 
 html.dark .cm-codeblock-first {
@@ -168,7 +168,7 @@ html.dark .cm-codeblock-first {
     border-bottom: 1px solid rgba(229, 231, 235, 0.8);
     border-bottom-left-radius: 0.375rem;
     border-bottom-right-radius: 0.375rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 html.dark .cm-codeblock-last {
@@ -176,21 +176,32 @@ html.dark .cm-codeblock-last {
 }
 
 .cm-codeblock-header-line {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
 }
 
 .cm-codeblock-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    box-sizing: border-box;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+    font-size: 11px;
+    line-height: 1;
 }
 
 .cm-codeblock-footer {
-    height: 0.5rem;
-    min-height: 0.5rem;
-    max-height: 0.5rem;
-    line-height: 0.5rem;
+    height: 0.25rem;
+    min-height: 0.25rem;
+    max-height: 0.25rem;
+    line-height: 0.25rem;
     font-size: 0;
     overflow: hidden;
     padding-top: 0 !important;

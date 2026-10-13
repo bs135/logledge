@@ -233,12 +233,14 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
     assert.strictEqual(hasFooterLineClass, true, 'End line should have cm-codeblock-footer when inactive')
     assert.strictEqual(hasFooterReplace, true, 'End line should have replacement decoration when inactive')
 
-    // Case 2: Cursor on startLine at position 0
+    // Case 2: Cursor on startLine at position 0 (reveals entire code block in code mode)
     const view2 = createTestView(doc, 0)
     const plugin2 = new LivePreviewPlugin(view2)
     let startLineRevealed = true
     let foundStartFenceMark = false
     let foundLangMark = false
+    let endLineHiddenCase2 = false
+    let foundEndFenceMarkCase2 = false
 
     plugin2.decorations.between(0, doc.length, (from, to, val) => {
         if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
@@ -250,19 +252,31 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
         if (from === 3 && to === 13 && val.spec?.class?.includes('cm-formatting')) {
             foundLangMark = true
         }
+        if (from === 40 && to === 43 && !val.spec?.class && !val.spec?.widget) {
+            endLineHiddenCase2 = true
+        }
+        if (from === 40 && to === 43 && val.spec?.class?.includes('cm-formatting')) {
+            foundEndFenceMarkCase2 = true
+        }
     })
 
-    assert.strictEqual(startLineRevealed, true, 'Start line should NOT be replaced by widget when cursor is on it')
-    assert.strictEqual(foundStartFenceMark, true, 'Opening ``` should have formatting mark when cursor is on it')
-    assert.strictEqual(foundLangMark, true, 'Language name should have formatting mark when cursor is on it')
+    assert.strictEqual(startLineRevealed, true, 'Start line should NOT be replaced by widget when cursor is on start line')
+    assert.strictEqual(foundStartFenceMark, true, 'Opening ``` should have formatting mark when cursor is on start line')
+    assert.strictEqual(foundLangMark, true, 'Language name should have formatting mark when cursor is on start line')
+    assert.strictEqual(endLineHiddenCase2, false, 'End line should NOT be hidden when cursor is on start line')
+    assert.strictEqual(foundEndFenceMarkCase2, true, 'Closing ``` should be revealed when cursor is on start line')
 
-    // Case 3: Cursor on endLine at position 41
+    // Case 3: Cursor on endLine at position 41 (reveals entire code block in code mode)
     const view3 = createTestView(doc, 41)
     const plugin3 = new LivePreviewPlugin(view3)
+    let startLineRevealedCase3 = true
     let endLineHidden = false
     let foundEndFenceMark = false
 
     plugin3.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
+            startLineRevealedCase3 = false
+        }
         if (from === 40 && to === 43 && !val.spec?.class && !val.spec?.widget) {
             endLineHidden = true
         }
@@ -271,26 +285,37 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
         }
     })
 
-    assert.strictEqual(endLineHidden, false, 'End line should NOT be hidden when cursor is on it')
-    assert.strictEqual(foundEndFenceMark, true, 'Closing ``` should be revealed with formatting mark when cursor is on it')
+    assert.strictEqual(startLineRevealedCase3, true, 'Start line should NOT be replaced by widget when cursor is on end line')
+    assert.strictEqual(endLineHidden, false, 'End line should NOT be hidden when cursor is on end line')
+    assert.strictEqual(foundEndFenceMark, true, 'Closing ``` should be revealed with formatting mark when cursor is on end line')
 
-    // Case 4: Cursor on code line at position 20
+    // Case 4: Cursor on intermediate code line at position 20 (reveals entire code block in code mode)
     const view4 = createTestView(doc, 20)
     const plugin4 = new LivePreviewPlugin(view4)
-    let headerActive = false
-    let footerCollapsed = false
+    let startLineRevealedCase4 = true
+    let foundStartFenceMarkCase4 = false
+    let endLineHiddenCase4 = false
+    let foundEndFenceMarkCase4 = false
 
     plugin4.decorations.between(0, doc.length, (from, to, val) => {
         if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
-            headerActive = true
+            startLineRevealedCase4 = false
         }
-        if (val.spec?.class?.includes('cm-codeblock-footer')) {
-            footerCollapsed = true
+        if (from === 0 && to === 3 && val.spec?.class?.includes('cm-formatting')) {
+            foundStartFenceMarkCase4 = true
+        }
+        if (from === 40 && to === 43 && !val.spec?.class && !val.spec?.widget) {
+            endLineHiddenCase4 = true
+        }
+        if (from === 40 && to === 43 && val.spec?.class?.includes('cm-formatting')) {
+            foundEndFenceMarkCase4 = true
         }
     })
 
-    assert.strictEqual(headerActive, true, 'Header should remain in preview mode when editing code line')
-    assert.strictEqual(footerCollapsed, true, 'Footer should remain collapsed when editing code line')
+    assert.strictEqual(startLineRevealedCase4, true, 'Start line should be revealed when cursor is on code line')
+    assert.strictEqual(foundStartFenceMarkCase4, true, 'Opening ``` should have formatting mark when cursor is on code line')
+    assert.strictEqual(endLineHiddenCase4, false, 'End line should NOT be hidden when cursor is on code line')
+    assert.strictEqual(foundEndFenceMarkCase4, true, 'Closing ``` should be revealed when cursor is on code line')
 })
 
 test('Fenced Code Block: unclosed block does not collapse code lines as footer', () => {

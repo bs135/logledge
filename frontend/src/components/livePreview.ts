@@ -129,33 +129,34 @@ export class CodeBlockHeaderWidget extends WidgetType {
     toDOM(view: EditorView) {
         const header = document.createElement('div')
         header.className =
-            'cm-codeblock-header flex items-center justify-between w-full select-none text-xs py-1 px-3 border-b border-neutral-200/80 dark:border-neutral-700/60 rounded-t-md bg-neutral-200/40 dark:bg-neutral-900/40 text-neutral-500 dark:text-neutral-400 font-sans'
+            'cm-codeblock-header flex items-center justify-between w-full select-none py-[2px] px-2 border-b border-neutral-200/60 dark:border-neutral-700/40 rounded-t-md text-neutral-400 dark:text-neutral-500 font-sans leading-none'
 
         // Language label badge
         const leftWrap = document.createElement('div')
-        leftWrap.className = 'flex items-center gap-2'
+        leftWrap.className = 'flex items-center gap-1.5 leading-none'
 
-        const langBadge = document.createElement('span')
-        langBadge.className =
-            'font-mono text-[11px] font-semibold tracking-wider uppercase text-neutral-600 dark:text-neutral-300'
-        langBadge.textContent = this.lang || 'Code'
-        leftWrap.appendChild(langBadge)
-
+        if (this.lang) {
+            const langBadge = document.createElement('span')
+            langBadge.className =
+                'font-mono text-[10px] font-medium tracking-wider uppercase text-neutral-400 dark:text-neutral-500 leading-none select-none'
+            langBadge.textContent = this.lang
+            leftWrap.appendChild(langBadge)
+        }
         header.appendChild(leftWrap)
 
         // Copy button
         const copyBtn = document.createElement('button')
         copyBtn.type = 'button'
         copyBtn.className =
-            'cm-codeblock-copy-btn flex items-center gap-1.5 px-2 py-0.5 rounded transition-all duration-150 hover:bg-neutral-300/60 dark:hover:bg-neutral-700/60 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer font-sans text-xs'
+            'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[10px] leading-none'
         copyBtn.title = 'Copy code'
 
         copyBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                 <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
             </svg>
-            <span class="cm-copy-text">Copy</span>
+            <span class="cm-copy-text leading-none">Copy</span>
         `
 
         let copyTimeout: ReturnType<typeof setTimeout> | null = null
@@ -167,20 +168,20 @@ export class CodeBlockHeaderWidget extends WidgetType {
             copyToClipboard(this.code).then(() => {
                 copyBtn.classList.add('text-emerald-600', 'dark:text-emerald-400')
                 copyBtn.innerHTML = `
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M20 6 9 17l-5-5"/>
                     </svg>
-                    <span class="cm-copy-text">Copied!</span>
+                    <span class="cm-copy-text leading-none">Copied!</span>
                 `
                 if (copyTimeout) clearTimeout(copyTimeout)
                 copyTimeout = setTimeout(() => {
                     copyBtn.classList.remove('text-emerald-600', 'dark:text-emerald-400')
                     copyBtn.innerHTML = `
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                             <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
                         </svg>
-                        <span class="cm-copy-text">Copy</span>
+                        <span class="cm-copy-text leading-none">Copy</span>
                     `
                 }, 1500)
             }).catch((err) => {
@@ -576,11 +577,12 @@ export class LivePreviewPlugin {
                         const hasClosingFence =
                             endLine.number > startLine.number && Boolean(endMatch)
 
-                        const isStartLineActive =
-                            selFrom <= startLine.to && selTo >= startLine.from
-                        const isEndLineActive =
-                            hasClosingFence &&
-                            selFrom <= endLine.to && selTo >= endLine.from
+                        // The entire block is in Code Mode if unclosed or if cursor/selection intersects ANYWHERE inside this block
+                        const isBlockActive =
+                            !hasClosingFence ||
+                            view.state.selection.ranges.some(
+                                (r) => r.from <= endLine.to && r.to >= startLine.from
+                            )
 
                         // Extract language and fence marks from start line
                         const fenceMatch = startLine.text.match(
@@ -608,10 +610,10 @@ export class LivePreviewPlugin {
                         if (!visitedCodeblockLines.has(startLine.from)) {
                             visitedCodeblockLines.add(startLine.from)
 
-                            if (!isStartLineActive && (hasClosingFence || endLine.number > startLine.number)) {
+                            if (!isBlockActive) {
                                 decorations.push(
                                     Decoration.line({
-                                        class: 'cm-codeblock-line cm-codeblock-first cm-codeblock-header-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50',
+                                        class: 'cm-codeblock-line cm-codeblock-first cm-codeblock-header-line bg-neutral-100/70 dark:bg-neutral-800/50',
                                     }).range(startLine.from)
                                 )
                                 decorations.push(
@@ -622,7 +624,7 @@ export class LivePreviewPlugin {
                             } else {
                                 decorations.push(
                                     Decoration.line({
-                                        class: `cm-codeblock-line cm-codeblock-first font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-1${
+                                        class: `cm-codeblock-line cm-codeblock-first font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5${
                                             startLine.number === endLine.number ? ' cm-codeblock-last' : ''
                                         }`,
                                     }).range(startLine.from)
@@ -666,7 +668,7 @@ export class LivePreviewPlugin {
                                 visitedCodeblockLines.add(curLine.from)
                                 decorations.push(
                                     Decoration.line({
-                                        class: `cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50${
+                                        class: `cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5${
                                             !hasClosingFence && l === endLine.number ? ' cm-codeblock-last' : ''
                                         }`,
                                     }).range(curLine.from)
@@ -678,7 +680,7 @@ export class LivePreviewPlugin {
                         if (hasClosingFence && !visitedCodeblockLines.has(endLine.from)) {
                             visitedCodeblockLines.add(endLine.from)
 
-                            if (!isEndLineActive) {
+                            if (!isBlockActive) {
                                 decorations.push(
                                     Decoration.line({
                                         class: 'cm-codeblock-line cm-codeblock-last cm-codeblock-footer font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50',
@@ -690,7 +692,7 @@ export class LivePreviewPlugin {
                             } else {
                                 decorations.push(
                                     Decoration.line({
-                                        class: 'cm-codeblock-line cm-codeblock-last font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-1',
+                                        class: 'cm-codeblock-line cm-codeblock-last font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5',
                                     }).range(endLine.from)
                                 )
                                 if (endMatch) {
