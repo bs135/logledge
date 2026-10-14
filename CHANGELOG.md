@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/bs135/logledge/compare/v0.2.0...v0.3.0) (2026-10-14)
+
+
+### Features
+
+* **editor:** add Obsidian-style interactive code block widgets ([5168c1b](https://github.com/bs135/logledge/commit/5168c1b86d6141622df54164f44b4d151f135f4b))
+* **editor:** add syntax highlighting for fenced code blocks ([e630526](https://github.com/bs135/logledge/commit/e630526ceeefaaa159e490759a8a2464dbcf427c))
+* **editor:** implement interactive code block widget with copy action ([b3d9727](https://github.com/bs135/logledge/commit/b3d9727540fbac803fcb7f3237ea4a37bb05fb55))
+* **editor:** switch to CodeMirror 6 with Obsidian-style Live Preview ([f4bed02](https://github.com/bs135/logledge/commit/f4bed02e7f59b777c1058d956d859c9771e211af))
+* **editor:** upgrade markdown editor with Obsidian-style Live Preview ([687f370](https://github.com/bs135/logledge/commit/687f3704cdd8e6c4443a797fe0b0ee44fae3efd4))
+
+
+### Bug Fixes
+
+* address code review findings on Live Preview editor ([96dbd91](https://github.com/bs135/logledge/commit/96dbd919de783222be98af9f52232e5a903730a1))
+* **editor:** resolve cursor drift and navigation jumping in live preview ([3925574](https://github.com/bs135/logledge/commit/39255740551fdfcc016ba7a412e7156984a07ee1))
+
 ## [0.2.0](https://github.com/bs135/logledge/compare/v0.1.3...v0.2.0) (2026-10-04)
 
 
