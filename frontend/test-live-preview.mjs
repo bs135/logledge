@@ -133,6 +133,42 @@ test('Task Checkbox: replaces [ ] with checkbox widget when cursor away, reveals
     assert.strictEqual(rawMarkerRevealed, true, 'Raw marker [ ] should be revealed when cursor is on it')
 })
 
+test('Task Checkbox: exposes an accessible label derived from the task text', () => {
+    const doc = '- [ ] Buy groceries'
+    const view = createTestView(doc, 10)
+    const plugin = new LivePreviewPlugin(view)
+    let checkboxWidget = null
+
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.widget?.constructor?.name === 'CheckboxWidget') {
+            checkboxWidget = val.spec.widget
+        }
+    })
+
+    assert.ok(checkboxWidget, 'Checkbox widget should be present')
+    assert.strictEqual(checkboxWidget.label, 'Buy groceries', 'Checkbox widget should carry the task text as its accessible label')
+})
+
+test('Inline Code: hides the full delimiter run for multi-backtick spans', () => {
+    const doc = 'Use ``code ` span`` here'
+    // Opening delimiter "``" is at 4..6, closing delimiter "``" is at 18..20.
+
+    const view = createTestView(doc, 0)
+    const plugin = new LivePreviewPlugin(view)
+    let hiddenOpen = false
+    let hiddenClose = false
+
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (!val.spec?.class && !val.spec?.widget && doc.slice(from, to) === '``') {
+            if (from < 10) hiddenOpen = true
+            else hiddenClose = true
+        }
+    })
+
+    assert.strictEqual(hiddenOpen, true, 'Entire opening `` delimiter should be hidden, not just one backtick')
+    assert.strictEqual(hiddenClose, true, 'Entire closing `` delimiter should be hidden, not just one backtick')
+})
+
 test('Links: hides delimiters when cursor is away, reveals syntax when cursor is on link', () => {
     const doc = 'Check this [documentation](https://logledge.dev) for details'
     // Link starts at 11, ends at 48.
@@ -196,6 +232,18 @@ test('WikiLinks: hides [[ and ]] when cursor away, reveals syntax when cursor is
     assert.strictEqual(visibleDelims >= 2, true, 'Delimiters [[ and ]] should be visible when cursor is inside')
 })
 
+test('WikiLinks: a raw "[[...]]" example inside a fenced code block is not styled as a link', () => {
+    const doc = '```\n[[Not A Link]]\n```'
+    const view = createTestView(doc, 0)
+    const plugin = new LivePreviewPlugin(view)
+    let wikiLinkMark = false
+
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-wikilink')) wikiLinkMark = true
+    })
+    assert.strictEqual(wikiLinkMark, false, 'WikiLink styling should not apply to "[[...]]" text inside fenced code')
+})
+
 test('Fenced Code Block: Live Preview reveals on cursor, renders header & collapses footer when cursor away', () => {
     const doc = '```typescript\nconst greeting = "hello";\n```\nSome trailing text'
     // startLine: 0..13 (```typescript)
@@ -207,16 +255,12 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
     const view1 = createTestView(doc, 50)
     const plugin1 = new LivePreviewPlugin(view1)
     let headerWidget = null
-    let hasHeaderLineClass = false
     let hasFooterLineClass = false
     let hasFooterReplace = false
 
     plugin1.decorations.between(0, doc.length, (from, to, val) => {
         if (from === 0 && to === 13 && val.spec?.widget?.constructor?.name === 'CodeBlockHeaderWidget') {
             headerWidget = val.spec.widget
-        }
-        if (val.spec?.class?.includes('cm-codeblock-header-line')) {
-            hasHeaderLineClass = true
         }
         if (val.spec?.class?.includes('cm-codeblock-footer')) {
             hasFooterLineClass = true
@@ -229,7 +273,6 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
     assert.ok(headerWidget, 'CodeBlockHeaderWidget should replace start line when cursor is away')
     assert.strictEqual(headerWidget.lang, 'typescript', 'Header widget should extract language name')
     assert.strictEqual(headerWidget.code, 'const greeting = "hello";', 'Header widget should extract code content')
-    assert.strictEqual(hasHeaderLineClass, true, 'Start line should have cm-codeblock-header-line when inactive')
     assert.strictEqual(hasFooterLineClass, true, 'End line should have cm-codeblock-footer when inactive')
     assert.strictEqual(hasFooterReplace, true, 'End line should have replacement decoration when inactive')
 

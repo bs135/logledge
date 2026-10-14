@@ -8,7 +8,7 @@ import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {SaveAttachment} from '../../wailsjs/go/main/App'
 import {BrowserOpenURL} from '../../wailsjs/runtime'
 import {EditorContextMenu} from './EditorContextMenu'
-import {livePreview} from './livePreview'
+import {livePreview, notePathFacet} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 
 interface EditorProps {
@@ -142,6 +142,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 }),
                 syntaxHighlightExtension,
                 syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+                notePathFacet.of(path),
                 livePreview,
                 customKeymap,
                 editorTheme,
@@ -169,7 +170,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                         const base64 = await fileToBase64(file)
                         const fileName = file.name || `image-${Date.now()}.png`
                         const relPath = await SaveAttachment(pathRef.current, fileName, base64)
-                        const markdownImage = `![${fileName}](${relPath})\n`
+                        const markdownImage = `![${fileName}](${encodeMarkdownPath(relPath)})\n`
                         view.dispatch(view.state.replaceSelection(markdownImage))
                     } catch (err) {
                         console.error('Failed to save pasted attachment:', err)
@@ -179,27 +180,24 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             }
         }
 
-        // Handle image drag & drop into editor
+        // Handle image drag & drop into editor. preventDefault() must run synchronously
+        // (before any await) so the browser/CodeMirror default drop action never fires
+        // once the image files are detected, instead of racing with the async save below.
         async function onDrop(e: DragEvent) {
             const files = e.dataTransfer?.files
             if (!files || files.length === 0) return
-            let handled = false
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i]
-                if (file.type.startsWith('image/')) {
-                    handled = true
-                    try {
-                        const base64 = await fileToBase64(file)
-                        const relPath = await SaveAttachment(pathRef.current, file.name, base64)
-                        const markdownImage = `![${file.name}](${relPath})\n`
-                        view.dispatch(view.state.replaceSelection(markdownImage))
-                    } catch (err) {
-                        console.error('Failed to save dropped attachment:', err)
-                    }
+            const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
+            if (imageFiles.length === 0) return
+            e.preventDefault()
+            for (const file of imageFiles) {
+                try {
+                    const base64 = await fileToBase64(file)
+                    const relPath = await SaveAttachment(pathRef.current, file.name, base64)
+                    const markdownImage = `![${file.name}](${encodeMarkdownPath(relPath)})\n`
+                    view.dispatch(view.state.replaceSelection(markdownImage))
+                } catch (err) {
+                    console.error('Failed to save dropped attachment:', err)
                 }
-            }
-            if (handled) {
-                e.preventDefault()
             }
         }
 
@@ -278,4 +276,11 @@ function fileToBase64(file: File): Promise<string> {
         reader.onerror = () => reject(reader.error)
         reader.readAsDataURL(file)
     })
+}
+
+// Percent-encodes each path segment (keeping "/" separators) so filenames containing
+// spaces or other CommonMark-unsafe characters (e.g. "screen shot.png") still produce a
+// valid Markdown image/link destination.
+function encodeMarkdownPath(relPath: string): string {
+    return relPath.split('/').map(encodeURIComponent).join('/')
 }

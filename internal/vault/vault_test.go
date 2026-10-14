@@ -165,3 +165,47 @@ func TestSaveAttachmentReturnsRelativeLink(t *testing.T) {
 		t.Fatalf("expected exactly 1 attachment file, got %d", len(entries))
 	}
 }
+
+func TestReadAttachmentDataURLResolvesRelativeToNote(t *testing.T) {
+	svc, _ := newTestService(t)
+	if _, err := svc.CreateFolder("", "projects"); err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+	if _, err := svc.CreateFile("projects", "note"); err != nil {
+		t.Fatalf("CreateFile: %v", err)
+	}
+
+	original := "fake-png-bytes"
+	data := base64.StdEncoding.EncodeToString([]byte(original))
+	link, err := svc.SaveAttachment("projects/note.md", "screenshot.png", data)
+	if err != nil {
+		t.Fatalf("SaveAttachment: %v", err)
+	}
+
+	dataURL, err := svc.ReadAttachmentDataURL("projects/note.md", link)
+	if err != nil {
+		t.Fatalf("ReadAttachmentDataURL: %v", err)
+	}
+	if !strings.HasPrefix(dataURL, "data:image/png;base64,") {
+		t.Fatalf("unexpected data URL prefix: %q", dataURL)
+	}
+	encoded := strings.TrimPrefix(dataURL, "data:image/png;base64,")
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("decode data URL payload: %v", err)
+	}
+	if string(decoded) != original {
+		t.Fatalf("expected %q, got %q", original, string(decoded))
+	}
+}
+
+func TestReadAttachmentDataURLRejectsPathEscapingVault(t *testing.T) {
+	svc, _ := newTestService(t)
+	if _, err := svc.CreateFile("", "note"); err != nil {
+		t.Fatalf("CreateFile: %v", err)
+	}
+
+	if _, err := svc.ReadAttachmentDataURL("note.md", "../../etc/passwd"); err == nil {
+		t.Fatal("expected error for path escaping the vault root, got nil")
+	}
+}

@@ -4,19 +4,32 @@ import {
     EditorView,
     WidgetType,
 } from '@codemirror/view'
-import { EditorState, Range, StateField } from '@codemirror/state'
+import { EditorState, Facet, Range, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
+import { ReadAttachmentDataURL } from '../../wailsjs/go/main/App'
+import { translate } from '../i18n'
+
+// Carries the active note's Vault-relative path into the StateField so the Image
+// decoration can resolve local attachment sources (see ImageWidget/resolveAttachmentSrc).
+export const notePathFacet = Facet.define<string, string>({
+    combine: (values) => values[0] ?? '',
+})
 
 class CheckboxWidget extends WidgetType {
     constructor(
         readonly checked: boolean,
-        readonly pos: number
+        readonly pos: number,
+        readonly label: string
     ) {
         super()
     }
 
     eq(other: CheckboxWidget) {
-        return this.checked === other.checked && this.pos === other.pos
+        return (
+            this.checked === other.checked &&
+            this.pos === other.pos &&
+            this.label === other.label
+        )
     }
 
     toDOM(view: EditorView) {
@@ -25,6 +38,9 @@ class CheckboxWidget extends WidgetType {
         const input = document.createElement('input')
         input.type = 'checkbox'
         input.checked = this.checked
+        if (this.label) {
+            input.setAttribute('aria-label', this.label)
+        }
         input.className =
             'cm-task-checkbox h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary focus:ring-0 cursor-pointer accent-neutral-800 dark:accent-neutral-200'
         input.addEventListener('click', (e) => {
@@ -61,16 +77,43 @@ class HrWidget extends WidgetType {
     }
 }
 
+// Matches an absolute URL (http:, https:, data:, etc.) or a protocol-relative "//" URL.
+// Anything else is treated as a Vault-relative path that the embedded AssetServer
+// cannot resolve directly and must be read from disk instead (see resolveAttachmentSrc).
+const absoluteOrDataUrlPattern = /^([a-z][a-z0-9+.-]*:|\/\/)/i
+
+// Caches in-flight/completed attachment reads so the same image is not re-read from
+// disk every time its decoration is recreated (e.g. on cursor movement elsewhere).
+const attachmentDataUrlCache = new Map<string, Promise<string>>()
+
+function resolveAttachmentSrc(notePath: string, src: string): Promise<string> {
+    const cacheKey = `${notePath}\u0000${src}`
+    let pending = attachmentDataUrlCache.get(cacheKey)
+    if (!pending) {
+        pending = ReadAttachmentDataURL(notePath, src).catch((err) => {
+            attachmentDataUrlCache.delete(cacheKey)
+            throw err
+        })
+        attachmentDataUrlCache.set(cacheKey, pending)
+    }
+    return pending
+}
+
 class ImageWidget extends WidgetType {
     constructor(
         readonly src: string,
-        readonly alt: string
+        readonly alt: string,
+        readonly notePath: string
     ) {
         super()
     }
 
     eq(other: ImageWidget) {
-        return this.src === other.src && this.alt === other.alt
+        return (
+            this.src === other.src &&
+            this.alt === other.alt &&
+            this.notePath === other.notePath
+        )
     }
 
     toDOM() {
@@ -79,11 +122,24 @@ class ImageWidget extends WidgetType {
         const wrap = document.createElement('div')
         wrap.className = 'cm-image-widget py-2 block'
         const img = document.createElement('img')
-        img.src = this.src
         img.alt = this.alt
         img.className =
             'max-w-full max-h-[450px] rounded-md border border-neutral-200 dark:border-neutral-700/60 shadow-sm object-contain'
         img.loading = 'lazy'
+        if (absoluteOrDataUrlPattern.test(this.src)) {
+            img.src = this.src
+        } else {
+            // Vault-relative path (e.g. "../.attachments/foo.png"): the embedded
+            // AssetServer only serves bundled frontend assets, so resolve it through
+            // the backend as a data: URL instead of assigning it as an HTTP src.
+            resolveAttachmentSrc(this.notePath, this.src)
+                .then((dataUrl) => {
+                    img.src = dataUrl
+                })
+                .catch((err) => {
+                    console.error('Failed to resolve local attachment image:', err)
+                })
+        }
         wrap.appendChild(img)
         return wrap
     }
@@ -155,14 +211,14 @@ export class CodeBlockHeaderWidget extends WidgetType {
         copyBtn.type = 'button'
         copyBtn.className =
             'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[10px] leading-none'
-        copyBtn.title = 'Copy code'
+        copyBtn.title = translate('codeCopyTitle')
 
         copyBtn.innerHTML = `
             <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                 <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
             </svg>
-            <span class="cm-copy-text leading-none">Copy</span>
+            <span class="cm-copy-text leading-none">${translate('copy')}</span>
         `
 
         let copyTimeout: ReturnType<typeof setTimeout> | null = null
@@ -177,7 +233,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
                     <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M20 6 9 17l-5-5"/>
                     </svg>
-                    <span class="cm-copy-text leading-none">Copied!</span>
+                    <span class="cm-copy-text leading-none">${translate('codeCopied')}</span>
                 `
                 if (copyTimeout) clearTimeout(copyTimeout)
                 copyTimeout = setTimeout(() => {
@@ -187,7 +243,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
                             <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                             <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
                         </svg>
-                        <span class="cm-copy-text leading-none">Copy</span>
+                        <span class="cm-copy-text leading-none">${translate('copy')}</span>
                     `
                 }, 1500)
             }).catch((err) => {
@@ -218,21 +274,52 @@ export class CodeBlockHeaderWidget extends WidgetType {
     }
 }
 
+// A node range whose rendering toggles between "rendered" and "raw markdown" depending
+// on whether the cursor/selection currently overlaps it (see buildDecorations below).
+interface InteractiveRange {
+    from: number
+    to: number
+}
+
+interface BuildResult {
+    decorations: DecorationSet
+    // Every selection-sensitive range built this pass, used by the StateField to decide
+    // whether a selection-only update can reuse the previous decorations unchanged.
+    interactiveRanges: InteractiveRange[]
+}
+
+function rangesOverlap(ranges: InteractiveRange[], from: number, to: number): boolean {
+    for (const r of ranges) {
+        if (r.from <= to && r.to >= from) return true
+    }
+    return false
+}
+
 // Decorations are computed in a StateField (rather than a ViewPlugin) because several of
 // them (horizontal rules, standalone images, fenced-code headers) are block-level widgets
 // that replace an entire line. CodeMirror throws a RangeError ("Block decorations may not
 // be specified via plugins") for `block: true` decorations supplied by a ViewPlugin, and
 // treating them as inline instead desyncs the view's line-height/position model from the
 // actual rendered DOM -- which is what caused clicks and Up/Down navigation to land on the
-// wrong line. A StateField has no `view.visibleRanges` to limit scanning to, so decorations
-// are built for the whole document; this is fine for note-sized Markdown files.
-function buildDecorations(state: EditorState): DecorationSet {
+// wrong line. A StateField has no `view.visibleRanges` to limit scanning to, so this walks
+// the whole document on every doc change. To keep cursor-only movement cheap despite that,
+// buildDecorations also returns every selection-sensitive node range (`interactiveRanges`);
+// the StateField's `update` skips rebuilding entirely when the old and new selection
+// overlap the exact same set of those ranges (see livePreview below), which covers the
+// common case of moving the cursor through plain prose.
+function buildDecorations(state: EditorState): BuildResult {
     const doc = state.doc
     const selection = state.selection.main
     const selFrom = selection.from
     const selTo = selection.to
+    const notePath = state.facet(notePathFacet)
 
     const decorations: Range<Decoration>[] = []
+    const interactiveRanges: InteractiveRange[] = []
+    // Ranges recognized as "code" (inline code spans and fenced code blocks), used to
+    // keep the raw-text WikiLink scan below from decorating "[[...]]" examples that
+    // appear inside code rather than as actual prose links.
+    const codeRanges: InteractiveRange[] = []
     const visitedHeadingLines = new Set<number>()
     const visitedBlockquoteLines = new Set<number>()
     const visitedCodeblockLines = new Set<number>()
@@ -267,6 +354,7 @@ function buildDecorations(state: EditorState): DecorationSet {
                             const prefixFrom = line.from
                             const prefixTo = line.from + prefixLen
                             const isLineActive = selFrom <= line.to && selTo >= line.from
+                            interactiveRanges.push({ from: line.from, to: line.to })
 
                             if (!isLineActive) {
                                 decorations.push(
@@ -289,6 +377,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             if (name === 'StrongEmphasis') {
                 if (nodeTo - nodeFrom >= 4) {
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorInside) {
                         decorations.push(
                             Decoration.replace({}).range(nodeFrom, nodeFrom + 2)
@@ -326,6 +415,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             if (name === 'Emphasis') {
                 if (nodeTo - nodeFrom >= 2) {
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorInside) {
                         decorations.push(
                             Decoration.replace({}).range(nodeFrom, nodeFrom + 1)
@@ -363,6 +453,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             if (name === 'Strikethrough') {
                 if (nodeTo - nodeFrom >= 4) {
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorInside) {
                         decorations.push(
                             Decoration.replace({}).range(nodeFrom, nodeFrom + 2)
@@ -396,37 +487,49 @@ function buildDecorations(state: EditorState): DecorationSet {
                 return
             }
 
-            // 5. Inline Code (`code`)
+            // 5. Inline Code (`code`, or multi-backtick spans like ``a ` b``)
             if (name === 'InlineCode') {
-                if (nodeTo - nodeFrom >= 2) {
+                const text = doc.sliceString(nodeFrom, nodeTo)
+                let openLen = 0
+                while (openLen < text.length && text[openLen] === '`') openLen++
+                let closeLen = 0
+                while (
+                    closeLen < text.length - openLen &&
+                    text[text.length - 1 - closeLen] === '`'
+                ) {
+                    closeLen++
+                }
+                if (openLen > 0 && closeLen > 0 && nodeTo - nodeFrom > openLen + closeLen) {
+                    codeRanges.push({ from: nodeFrom, to: nodeTo })
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
                     if (!isCursorInside) {
                         decorations.push(
-                            Decoration.replace({}).range(nodeFrom, nodeFrom + 1)
+                            Decoration.replace({}).range(nodeFrom, nodeFrom + openLen)
                         )
                         decorations.push(
                             Decoration.mark({
                                 class: 'cm-inline-code font-mono text-[0.875em] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-red-500 dark:text-red-400 border border-neutral-200 dark:border-neutral-700/60',
-                            }).range(nodeFrom + 1, nodeTo - 1)
+                            }).range(nodeFrom + openLen, nodeTo - closeLen)
                         )
                         decorations.push(
-                            Decoration.replace({}).range(nodeTo - 1, nodeTo)
+                            Decoration.replace({}).range(nodeTo - closeLen, nodeTo)
                         )
                     } else {
                         decorations.push(
                             Decoration.mark({
                                 class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
-                            }).range(nodeFrom, nodeFrom + 1)
+                            }).range(nodeFrom, nodeFrom + openLen)
                         )
                         decorations.push(
                             Decoration.mark({
                                 class: 'cm-inline-code font-mono text-[0.875em] bg-neutral-100/50 dark:bg-neutral-800/50 text-red-500 dark:text-red-400',
-                            }).range(nodeFrom + 1, nodeTo - 1)
+                            }).range(nodeFrom + openLen, nodeTo - closeLen)
                         )
                         decorations.push(
                             Decoration.mark({
                                 class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
-                            }).range(nodeTo - 1, nodeTo)
+                            }).range(nodeTo - closeLen, nodeTo)
                         )
                     }
                 }
@@ -437,6 +540,7 @@ function buildDecorations(state: EditorState): DecorationSet {
             if (name === 'HorizontalRule') {
                 const line = doc.lineAt(nodeFrom)
                 const isLineActive = selFrom <= line.to && selTo >= line.from
+                interactiveRanges.push({ from: line.from, to: line.to })
                 if (!isLineActive) {
                     decorations.push(
                         Decoration.replace({
@@ -458,12 +562,15 @@ function buildDecorations(state: EditorState): DecorationSet {
             if (name === 'TaskMarker') {
                 if (nodeTo - nodeFrom === 3) {
                     const isCursorOnMarker = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorOnMarker) {
                         const text = doc.sliceString(nodeFrom, nodeTo)
                         const isChecked = text.toLowerCase() === '[x]'
+                        const line = doc.lineAt(nodeFrom)
+                        const label = line.text.slice(nodeTo - line.from).trim()
                         decorations.push(
                             Decoration.replace({
-                                widget: new CheckboxWidget(isChecked, nodeFrom),
+                                widget: new CheckboxWidget(isChecked, nodeFrom, label),
                             }).range(nodeFrom, nodeTo)
                         )
                     } else {
@@ -485,6 +592,7 @@ function buildDecorations(state: EditorState): DecorationSet {
                     const labelEnd = nodeFrom + splitIdx
                     const url = linkStr.slice(splitIdx + 2, -1)
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorInside) {
                         // Hide [
                         decorations.push(
@@ -533,6 +641,7 @@ function buildDecorations(state: EditorState): DecorationSet {
                     const alt = match[1]
                     const src = match[2]
                     const isCursorInside = selFrom <= nodeTo && selTo >= nodeFrom
+                    interactiveRanges.push({ from: nodeFrom, to: nodeTo })
                     if (!isCursorInside) {
                         // An image that is the sole content of its line is rendered as a
                         // block widget (it visually occupies the whole line anyway); an
@@ -541,7 +650,7 @@ function buildDecorations(state: EditorState): DecorationSet {
                         const isStandalone = line.text.trim() === imgStr
                         decorations.push(
                             Decoration.replace({
-                                widget: new ImageWidget(src, alt),
+                                widget: new ImageWidget(src, alt, notePath),
                                 block: isStandalone,
                             }).range(
                                 isStandalone ? line.from : nodeFrom,
@@ -593,6 +702,8 @@ function buildDecorations(state: EditorState): DecorationSet {
                     state.selection.ranges.some(
                         (r) => r.from <= endLine.to && r.to >= startLine.from
                     )
+                codeRanges.push({ from: startLine.from, to: endLine.to })
+                interactiveRanges.push({ from: startLine.from, to: endLine.to })
 
                 // Extract language and fence marks from start line
                 const fenceMatch = startLine.text.match(
@@ -728,6 +839,10 @@ function buildDecorations(state: EditorState): DecorationSet {
     while ((wikiMatch = wikiRegex.exec(fullText)) !== null) {
         const matchFrom = wikiMatch.index
         const matchTo = matchFrom + wikiMatch[0].length
+        // Skip "[[...]]" examples that appear inside inline code or fenced code blocks;
+        // those are literal text, not WikiLinks.
+        if (rangesOverlap(codeRanges, matchFrom, matchTo)) continue
+        interactiveRanges.push({ from: matchFrom, to: matchTo })
         const isCursorInside = selFrom <= matchTo && selTo >= matchFrom
         if (!isCursorInside) {
             decorations.push(
@@ -760,18 +875,60 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
     }
 
-    return Decoration.set(decorations, true)
+    return {
+        decorations: Decoration.set(decorations, true),
+        interactiveRanges,
+    }
 }
 
-export const livePreview = StateField.define<DecorationSet>({
+// Test-only seam: exposes buildDecorations behind a small plugin-shaped wrapper so
+// test-live-preview.mjs can exercise the real decoration logic without depending on
+// the StateField/view machinery (see test harness for usage).
+export class LivePreviewPlugin {
+    decorations: DecorationSet
+
+    constructor(view: { state: EditorState }) {
+        this.decorations = buildDecorations(view.state).decorations
+    }
+}
+
+// Caches the selection-sensitive ranges alongside the computed decorations so that a
+// selection-only transaction can cheaply tell whether anything it affects actually
+// changed (see livePreview.update below).
+interface LivePreviewState {
+    decorations: DecorationSet
+    interactiveRanges: InteractiveRange[]
+    selFrom: number
+    selTo: number
+}
+
+function buildState(state: EditorState): LivePreviewState {
+    const { decorations, interactiveRanges } = buildDecorations(state)
+    const sel = state.selection.main
+    return { decorations, interactiveRanges, selFrom: sel.from, selTo: sel.to }
+}
+
+export const livePreview = StateField.define<LivePreviewState>({
     create(state) {
-        return buildDecorations(state)
+        return buildState(state)
     },
     update(value, tr) {
-        if (tr.docChanged || tr.selection) {
-            return buildDecorations(tr.state)
+        if (tr.docChanged) {
+            return buildState(tr.state)
         }
-        return value.map(tr.changes)
+        if (tr.selection) {
+            const sel = tr.state.selection.main
+            // If neither the old nor the new selection touches any node whose rendering
+            // depends on cursor position, the decoration set is unchanged: skip the full
+            // document rebuild entirely instead of recomputing it on every cursor move.
+            const touchedBefore = rangesOverlap(value.interactiveRanges, value.selFrom, value.selTo)
+            const touchedAfter = rangesOverlap(value.interactiveRanges, sel.from, sel.to)
+            if (!touchedBefore && !touchedAfter) {
+                return { ...value, selFrom: sel.from, selTo: sel.to }
+            }
+            return buildState(tr.state)
+        }
+        return { ...value, decorations: value.decorations.map(tr.changes) }
     },
-    provide: (f) => EditorView.decorations.from(f),
+    provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
 })

@@ -21,7 +21,7 @@ Logledge currently uses **Milkdown Crepe** (`@milkdown/crepe`), which is built o
 - **Architecture**:
   - The underlying state is 100% plain text (lossless, preserves exact user formatting, indentation, and frontmatter).
   - CodeMirror 6's `@lezer/markdown` incrementally parses the syntax tree.
-  - A custom `ViewPlugin` applies decorations (`Decoration.mark`, `Decoration.replace`, `Decoration.widget`):
+  - A custom `StateField` applies decorations (`Decoration.mark`, `Decoration.replace`, `Decoration.widget`):
     - When the cursor or selection is **outside** a syntax element, decorations hide syntax markers and apply rich styling (headings, bold, italics, links, pills).
     - When the cursor **touches or enters** the element's character range or line, the hiding decoration is bypassed, revealing the raw Markdown characters in-place.
 - **Performance Benefits**:
@@ -38,25 +38,32 @@ Logledge currently uses **Milkdown Crepe** (`@milkdown/crepe`), which is built o
 - `@codemirror/state` & `@codemirror/view`: Core CM6 state and DOM rendering pipeline.
 - `@codemirror/language` & `@codemirror/lang-markdown`: Markdown language support with Lezer parser.
 - `@lezer/markdown` & `@lezer/highlight`: AST inspection for headings, bold, italic, links, code blocks, task lists, tables.
-- `@codemirror/commands` & `@codemirror/history`: Undo/redo history, standard keyboard navigation.
+- `@codemirror/commands`: Undo/redo history (`history`/`historyKeymap`) and standard keyboard navigation.
 
 ### Key Components to Implement
-1. **`livePreviewPlugin` (CM6 ViewPlugin)**:
-   - Queries `view.visibleRanges` and the Lezer syntax tree.
+1. **`livePreview` (CM6 `StateField<DecorationSet>`)**:
+   - A `StateField`, not a `ViewPlugin`, is required here: several decorations (horizontal
+     rules, standalone images, fenced-code headers) are block-level widgets, and CodeMirror
+     throws a `RangeError` for `block: true` decorations supplied by a `ViewPlugin`. As a
+     consequence the field has no `view.visibleRanges` to limit itself to and walks the
+     whole document's Lezer syntax tree on every doc change; on a selection-only change it
+     only rebuilds when the old or new selection actually overlaps a node whose rendering
+     is cursor-dependent (cached as `interactiveRanges`), keeping ordinary cursor movement
+     through prose cheap.
    - Compares node ranges against `view.state.selection.main` (cursor position).
    - If cursor intersects: omit decoration -> raw syntax is visible.
    - If cursor outside:
      - **Headings**: Hide `# ` prefix with `Decoration.replace`, apply font-size and weight classes to line.
-     - **Bold / Italic / Strikethrough**: Hide `**`, `*`, `~~` markers with `Decoration.replace({ filter: false })`, wrap inner text with styled mark.
-     - **Inline Code**: Hide backticks, wrap in styled code badge.
+     - **Bold / Italic / Strikethrough**: Hide `**`, `*`, `~~` markers with `Decoration.replace`, wrap inner text with styled mark.
+     - **Inline Code**: Hide the full backtick delimiter run (including multi-backtick spans), wrap in styled code badge.
      - **Links**: Hide `[` and `](url)` delimiters, style link text with primary color & underline.
      - **Horizontal Rule**: Replace `---` with `<hr>` divider widget.
-     - **Task Lists**: Replace `[ ]` / `[x]` with an interactive checkbox widget (clicking directly toggles `[ ]` <-> `[x]` in text).
+     - **Task Lists**: Replace `[ ]` / `[x]` with an interactive checkbox widget (clicking directly toggles `[ ]` <-> `[x]` in text; the checkbox carries an `aria-label` derived from the task text).
 2. **Block Widgets**:
    - **Fenced Code Blocks**: Syntax highlighted container with language label; reveals backticks when focused.
-   - **Images**: Render inline image preview widget when cursor is away; reveals `![alt](url)` when cursor is placed on the line.
+   - **Images**: Render inline image preview widget when cursor is away; reveals `![alt](url)` when cursor is placed on the line. Local Vault-relative sources are resolved through the Go backend (`ReadAttachmentDataURL`) as a `data:` URL, since the embedded AssetServer only serves bundled frontend assets.
 3. **Logledge Integrations**:
-   - **Attachment Handling**: Paste & drag-and-drop listener that extracts image files, calls Go backend `SaveAttachment`, and inserts `![alt](.attachments/...)` into the document.
+   - **Attachment Handling**: Paste & drag-and-drop listener that extracts image files, calls Go backend `SaveAttachment`, and inserts a percent-encoded `![alt](.attachments/...)` link into the document.
    - **Auto-Save**: CM6 `EditorView.updateListener` triggered on document changes, debounced at 600ms matching Logledge's existing auto-save contract.
    - **Context Menu**: Re-bind existing `EditorContextMenu` actions (cut, copy, paste, select all, undo, redo) to CM6 dispatch commands.
    - **Theming & Typography**: Native Tailwind CSS v4 variables and Nunito font overrides seamlessly applied to `.cm-editor` classes.
@@ -72,7 +79,7 @@ Logledge currently uses **Milkdown Crepe** (`@milkdown/crepe`), which is built o
 - Wire debounced auto-save (600ms) and note title rename handler.
 
 ### Phase 2: Live Preview Decoration Engine (Inline Syntax)
-- Build `livePreviewExtension` using CM6 `ViewPlugin`.
+- Build the `livePreview` extension as a CM6 `StateField<DecorationSet>` (block decorations such as horizontal rules and standalone images cannot be supplied by a `ViewPlugin`).
 - Implement cursor-aware decoration hiding for:
   - Headings (H1 to H6)
   - Bold (`**` / `__`), Italic (`*` / `_`), Strikethrough (`~~`)
