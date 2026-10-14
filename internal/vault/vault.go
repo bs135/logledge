@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -342,4 +343,30 @@ func (s *Service) SaveAttachment(noteRelPath, filename, base64Data string) (stri
 		rel = filepath.Join(".attachments", unique)
 	}
 	return filepath.ToSlash(rel), nil
+}
+
+// ReadAttachmentDataURL reads a local image referenced by a Markdown image link
+// (e.g. "../.attachments/foo.png") and returns it as a "data:" URL. This exists
+// because the AssetServer only serves embedded frontend assets, not arbitrary
+// Vault files, so Live Preview cannot resolve a relative src through an HTTP URL.
+// imgRelPath is resolved relative to the directory of noteRelPath.
+func (s *Service) ReadAttachmentDataURL(noteRelPath, imgRelPath string) (string, error) {
+	if !s.isOpen() {
+		return "", errors.New("chưa mở vault nào")
+	}
+	noteDir := filepath.Dir(filepath.FromSlash(noteRelPath))
+	joined := filepath.ToSlash(filepath.Join(noteDir, filepath.FromSlash(imgRelPath)))
+	abs, err := s.resolve(joined)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", err
+	}
+	mimeType := mime.TypeByExtension(filepath.Ext(abs))
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }

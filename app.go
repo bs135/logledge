@@ -485,6 +485,13 @@ func (a *App) SaveAttachment(noteRelPath, filename, base64Data string) (string, 
 	return a.vault.SaveAttachment(noteRelPath, filename, base64Data)
 }
 
+// ReadAttachmentDataURL reads a local image referenced by a note's Markdown and
+// returns it as a "data:" URL so the Live Preview editor can render it (the
+// AssetServer only serves embedded frontend assets, not Vault files).
+func (a *App) ReadAttachmentDataURL(noteRelPath, imgRelPath string) (string, error) {
+	return a.vault.ReadAttachmentDataURL(noteRelPath, imgRelPath)
+}
+
 // SearchNotes executes a full-text search (Ctrl+Shift+F) across the Vault,
 // returning highlighted contextual snippets.
 func (a *App) SearchNotes(query string) ([]search.Result, error) {

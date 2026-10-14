@@ -66,6 +66,10 @@ export function QuickSwitch(arg1) {
   return window['go']['main']['App']['QuickSwitch'](arg1);
 }
 
+export function ReadAttachmentDataURL(arg1, arg2) {
+  return window['go']['main']['App']['ReadAttachmentDataURL'](arg1, arg2);
+}
+
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }

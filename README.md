@@ -32,11 +32,11 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+B`) to toggle visibility.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `fsnotify` with debounce (300ms) and self-write suppression.
 
-### Markdown WYSIWYG Live Preview Editor
-- **Milkdown Crepe Live Preview**: Seamless WYSIWYG editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, link tooltips).
+### Markdown Live Preview Editor (Obsidian-Style)
+- **CodeMirror 6 Live Preview**: Seamless hybrid editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, links, WikiLinks `[[note]]`). Delimiters hide when viewing and reveal in-place on cursor focus.
 - **Code Syntax Highlighting**: Multi-language syntax highlighting powered by CodeMirror.
-- **LaTeX / KaTeX Math Support**: Inline and block mathematical equation rendering (`$E=mc^2$`).
 - **Sans-Serif Typography**: Clean, modern `Nunito` sans-serif typography across all headings and editor body.
+- **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.
 - **Dedicated Inline Title Bar**: Synchronizes note filename with input on blur/Enter, with automatic sanitization of invalid OS characters.
 - **Debounced Auto-Save**: Background auto-save (600ms debounce) with no manual `Ctrl+S` required.
 - **Attachment Handling**: Paste images from clipboard or drag-and-drop into notes; saved automatically to `.attachments/` at the Vault root with relative markdown links.
@@ -235,13 +235,13 @@ Contributions, issues, and feature requests are welcome!
 All commit messages must be written in **English** and follow this template:
 
 ```
-type: commit title
+type(scope): commit title
 
  - commit body line 1
  - commit body line 2
 ```
 
-Where `type` is one of: `feat`, `fix`, `refactor`, `perf`, `docs`, `style`, `test`, `chore`.
+Where `type` is one of: `feat`, `fix`, `refactor`, `perf`, `docs`, `style`, `test`, `chore`. `scope` should be a concise description of the area of the codebase affected by the commit (e.g., `backend`, `frontend`, `api`).
 
 ### Branching Model
 - `main`: Production-ready release branch managed by Release-Please.

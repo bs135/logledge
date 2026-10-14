@@ -119,6 +119,8 @@ export const translations = {
         deleteModalDesc: 'Are you sure you want to move this item to trash? You can restore it from the operating system recycle bin.',
         renameShortcutDesc: 'Rename note or folder',
         deleteShortcutDesc: 'Delete note or folder',
+        codeCopyTitle: 'Copy code',
+        codeCopied: 'Copied!',
     },
     vi: {
         appName: 'Logledge',
@@ -235,10 +237,25 @@ export const translations = {
         deleteModalDesc: 'Bạn có chắc chắn muốn chuyển mục này vào thùng rác không? Bạn có thể khôi phục lại từ thùng rác của hệ điều hành.',
         renameShortcutDesc: 'Đổi tên ghi chú hoặc thư mục',
         deleteShortcutDesc: 'Xóa ghi chú hoặc thư mục',
+        codeCopyTitle: 'Sao chép mã',
+        codeCopied: 'Đã sao chép!',
     },
 }
 
 export type TranslationKey = keyof typeof translations.en
+
+/** Reads the persisted UI language outside of React (e.g. from CodeMirror widgets). */
+export function getStoredLanguage(): Language {
+    if (typeof localStorage === 'undefined') return 'vi'
+    const saved = localStorage.getItem('logledge:lang') as Language
+    return saved === 'en' || saved === 'vi' ? saved : 'vi'
+}
+
+/** Translates a key using the persisted UI language, for non-React call sites. */
+export function translate(key: TranslationKey): string {
+    const lang = getStoredLanguage()
+    return translations[lang]?.[key] || translations.en[key] || key
+}
 
 interface I18nContextType {
     lang: Language
