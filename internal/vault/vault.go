@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"path/filepath"
@@ -289,6 +290,135 @@ func (s *Service) Move(srcRelPath, destParentRelPath string) (string, error) {
 		return "", err
 	}
 	return s.relFromAbs(destAbs), nil
+}
+
+// AbsPath returns the absolute, OS-native path on disk of the entry at relPath.
+func (s *Service) AbsPath(relPath string) (string, error) {
+	if !s.isOpen() {
+		return "", errors.New("chưa mở vault nào")
+	}
+	return s.resolve(relPath)
+}
+
+// NativeRelPath returns relPath (relative to the Vault root) using the OS-native
+// path separator, e.g. "folder\Note.md" on Windows.
+func (s *Service) NativeRelPath(relPath string) (string, error) {
+	abs, err := s.AbsPath(relPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(s.root, abs)
+	if err != nil {
+		return "", err
+	}
+	return rel, nil
+}
+
+// copyName returns the first name not yet present in dir for a copy of name:
+// "Note.md" -> "Note copy.md" -> "Note copy (1).md" -> "Note copy (2).md"...
+// Folder names keep any dots intact ("v1.2" -> "v1.2 copy").
+func copyName(dir, name string, isDir bool) string {
+	ext := ""
+	if !isDir {
+		ext = filepath.Ext(name)
+		if ext == name {
+			ext = "" // dotfile without a real extension, e.g. ".env"
+		}
+	}
+	base := strings.TrimSuffix(name, ext)
+	candidate := base + " copy" + ext
+	for i := 1; ; i++ {
+		if _, err := os.Lstat(filepath.Join(dir, candidate)); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s copy (%d)%s", base, i, ext)
+	}
+}
+
+// Duplicate creates a copy of the file or folder at relPath next to the original,
+// naming it with a " copy" suffix (plus a counter when that name is taken), and
+// returns the relative path of the copy. Folders are copied recursively.
+func (s *Service) Duplicate(relPath string) (string, error) {
+	if !s.isOpen() {
+		return "", errors.New("chưa mở vault nào")
+	}
+	srcAbs, err := s.resolve(relPath)
+	if err != nil {
+		return "", err
+	}
+	if srcAbs == s.root {
+		return "", errors.New("không thể sao chép thư mục gốc của vault")
+	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
+
+	info, err := os.Stat(srcAbs)
+	if err != nil {
+		return "", fmt.Errorf("không thể sao chép: %w", err)
+	}
+	destAbs := filepath.Join(filepath.Dir(srcAbs), copyName(filepath.Dir(srcAbs), filepath.Base(srcAbs), info.IsDir()))
+
+	if info.IsDir() {
+		err = s.copyDir(srcAbs, destAbs)
+	} else {
+		err = s.copyFile(srcAbs, destAbs, info.Mode().Perm())
+	}
+	if err != nil {
+		_ = os.RemoveAll(destAbs)
+		return "", fmt.Errorf("không thể sao chép: %w", err)
+	}
+	return s.relFromAbs(destAbs), nil
+}
+
+// copyFile copies a single regular file, failing if dst already exists.
+func (s *Service) copyFile(src, dst string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	s.suppress(dst)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// copyDir recursively copies the directory tree at src into the new directory dst.
+// Symlinks and other non-regular files are skipped. Created directories are
+// intentionally not suppressed so the watcher picks them up and watches them.
+func (s *Service) copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		switch {
+		case d.IsDir():
+			if rel == "." {
+				return os.Mkdir(target, info.Mode().Perm())
+			}
+			return os.MkdirAll(target, info.Mode().Perm())
+		case info.Mode().IsRegular():
+			return s.copyFile(path, target, info.Mode().Perm())
+		default:
+			return nil
+		}
+	})
 }
 
 // Delete moves the file/folder at relPath to the OS recycle bin (non-permanent

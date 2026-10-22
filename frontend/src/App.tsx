@@ -13,9 +13,9 @@ import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
-import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
+import {DetectVaultInfo, GetAbsolutePath, GetFileFilterConfig, GetNativeRelativePath, PickVaultFolder, ReadFile, RevealInExplorer, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
-import {EventsOn} from '../wailsjs/runtime/runtime'
+import {ClipboardSetText, EventsOn} from '../wailsjs/runtime/runtime'
 import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
@@ -225,6 +225,34 @@ function App() {
             } catch (err) {
                 alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
             }
+        }
+    }
+
+    async function handleDuplicate(path: string) {
+        try {
+            await vault.duplicate(path)
+        } catch (err) {
+            alert(t('duplicateFailed') + String(err))
+        }
+    }
+
+    async function copyToClipboard(getText: () => Promise<string>) {
+        try {
+            const text = await getText()
+            const ok = await ClipboardSetText(text)
+            if (!ok) {
+                await navigator.clipboard.writeText(text)
+            }
+        } catch (err) {
+            alert(t('copyPathFailed') + String(err))
+        }
+    }
+
+    async function handleReveal(path: string) {
+        try {
+            await RevealInExplorer(path)
+        } catch (err) {
+            alert(t('revealFailed') + String(err))
         }
     }
 
@@ -562,6 +590,10 @@ function App() {
                                         onCreateFolder={handleCreateFolder}
                                         onRename={handleStartRename}
                                         onDelete={(path) => setDeleteTarget(path)}
+                                        onDuplicate={handleDuplicate}
+                                        onCopyPath={(path) => copyToClipboard(() => GetAbsolutePath(path))}
+                                        onCopyRelativePath={(path) => copyToClipboard(() => GetNativeRelativePath(path))}
+                                        onReveal={handleReveal}
                                         onMove={vault.move}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}

@@ -11,6 +11,9 @@ import {
     FolderPlus,
     Edit3,
     Trash2,
+    Copy,
+    ClipboardCopy,
+    FolderSearch,
 } from 'lucide-react'
 import {useI18n} from '../i18n'
 
@@ -77,6 +80,10 @@ export interface FileTreeProps {
     onCreateFolder: (parentRelPath: string) => void
     onRename: (relPath: string) => void
     onDelete: (relPath: string) => void
+    onDuplicate: (relPath: string) => void
+    onCopyPath: (relPath: string) => void
+    onCopyRelativePath: (relPath: string) => void
+    onReveal: (relPath: string) => void
     onMove: (srcRelPath: string, destParentRelPath: string) => void
     onCommitInlineAction: (action: InlineAction, name: string) => void
     onCancelInlineAction: () => void
@@ -212,6 +219,10 @@ function TreeEntry({
     onCreateFolder,
     onRename,
     onDelete,
+    onDuplicate,
+    onCopyPath,
+    onCopyRelativePath,
+    onReveal,
     onMove,
     onCommitInlineAction,
     onCancelInlineAction,
@@ -319,6 +330,10 @@ function TreeEntry({
                                 onCreateFolder={onCreateFolder}
                                 onRename={onRename}
                                 onDelete={onDelete}
+                                onDuplicate={onDuplicate}
+                                onCopyPath={onCopyPath}
+                                onCopyRelativePath={onCopyRelativePath}
+                                onReveal={onReveal}
                                 onMove={onMove}
                                 onCommitInlineAction={onCommitInlineAction}
                                 onCancelInlineAction={onCancelInlineAction}
@@ -388,6 +403,10 @@ function TreeEntry({
                     onCreateFolder={onCreateFolder}
                     onRename={onRename}
                     onDelete={onDelete}
+                    onDuplicate={onDuplicate}
+                    onCopyPath={onCopyPath}
+                    onCopyRelativePath={onCopyRelativePath}
+                    onReveal={onReveal}
                 />
             )}
 
@@ -421,6 +440,10 @@ function TreeEntry({
                             onCreateFolder={onCreateFolder}
                             onRename={onRename}
                             onDelete={onDelete}
+                            onDuplicate={onDuplicate}
+                            onCopyPath={onCopyPath}
+                            onCopyRelativePath={onCopyRelativePath}
+                            onReveal={onReveal}
                             onMove={onMove}
                             onCommitInlineAction={onCommitInlineAction}
                             onCancelInlineAction={onCancelInlineAction}
@@ -565,9 +588,25 @@ interface ContextMenuProps {
     onCreateFolder: (parentRelPath: string) => void
     onRename: (relPath: string) => void
     onDelete: (relPath: string) => void
+    onDuplicate: (relPath: string) => void
+    onCopyPath: (relPath: string) => void
+    onCopyRelativePath: (relPath: string) => void
+    onReveal: (relPath: string) => void
 }
 
-function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onRename, onDelete}: ContextMenuProps) {
+function ContextMenu({
+    node,
+    position,
+    onClose,
+    onCreateFile,
+    onCreateFolder,
+    onRename,
+    onDelete,
+    onDuplicate,
+    onCopyPath,
+    onCopyRelativePath,
+    onReveal,
+}: ContextMenuProps) {
     const {t} = useI18n()
     const parent = node.isDir ? node.path : node.path.split('/').slice(0, -1).join('/')
 
@@ -577,10 +616,11 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
     }
 
     // Keep menu within viewport
-    const menuWidth = 160
-    const menuHeight = 160
+    const menuWidth = 220
+    const menuHeight = 290
     const left = Math.max(10, Math.min(position.x, window.innerWidth - menuWidth - 10))
     const top = Math.max(10, Math.min(position.y, window.innerHeight - menuHeight - 10))
+    const iconClass = 'h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400'
 
     return (
         <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }}>
@@ -591,18 +631,40 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
             >
                 <MenuItem
                     label={t('newNote')}
-                    icon={<FilePlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    icon={<FilePlus className={iconClass} />}
                     onClick={() => act(() => onCreateFile(parent))}
                 />
                 <MenuItem
                     label={t('newFolder')}
-                    icon={<FolderPlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    icon={<FolderPlus className={iconClass} />}
                     onClick={() => act(() => onCreateFolder(parent))}
                 />
                 <MenuItem
+                    label={t('makeACopy')}
+                    icon={<Copy className={iconClass} />}
+                    onClick={() => act(() => onDuplicate(node.path))}
+                />
+                <MenuSeparator />
+                <MenuItem
+                    label={t('copyPath')}
+                    icon={<ClipboardCopy className={iconClass} />}
+                    onClick={() => act(() => onCopyPath(node.path))}
+                />
+                <MenuItem
+                    label={t('copyRelativePath')}
+                    icon={<ClipboardCopy className={iconClass} />}
+                    onClick={() => act(() => onCopyRelativePath(node.path))}
+                />
+                <MenuItem
+                    label={t('showInSystemExplorer')}
+                    icon={<FolderSearch className={iconClass} />}
+                    onClick={() => act(() => onReveal(node.path))}
+                />
+                <MenuSeparator />
+                <MenuItem
                     label={t('rename')}
                     shortcut="F2"
-                    icon={<Edit3 className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />}
+                    icon={<Edit3 className={iconClass} />}
                     onClick={() => act(() => onRename(node.path))}
                 />
                 <MenuItem
@@ -615,6 +677,10 @@ function ContextMenu({node, position, onClose, onCreateFile, onCreateFolder, onR
             </div>
         </div>
     )
+}
+
+function MenuSeparator() {
+    return <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-700" role="separator" />
 }
 
 function MenuItem({

@@ -27,7 +27,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Drag-and-Drop Organization**: Move files and folders smoothly across the hierarchy.
 - **Inline Creation & Renaming**: Create notes/folders and rename entries directly in the tree without modal interruptions.
 - **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) with quick toggle support.
-- **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Rename, Delete).
+- **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via pure Go (`wastebasket`), preserving undo capabilities.
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+B`) to toggle visibility.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `fsnotify` with debounce (300ms) and self-write suppression.
@@ -119,7 +119,7 @@ Pre-built packages are published on [GitHub Releases](https://github.com/bs135/l
 | `Esc` | Modals / Menus | Close active modal, dropdown, or context menu |
 | `Ctrl + Click Close (X)` | Title Bar | Force quit application (skips minimize to tray) |
 | `Double-Click Handle` | Sidebar Resize | Reset sidebar width to default (256px) |
-| `Right-Click` | File Tree / Sidebar | Open context menu (New note, New folder, Rename, Delete) |
+| `Right-Click` | File Tree / Sidebar | Open context menu (New note, New folder, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete) |
 | `Drag-and-Drop` | File Tree | Relocate file or folder into target folder |
 
 *Note: All note edits are automatically saved to disk (debounced at ~600ms). There is no manual `Ctrl + S` required.*

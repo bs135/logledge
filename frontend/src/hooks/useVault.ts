@@ -3,6 +3,7 @@ import {
     CreateFile,
     CreateFolder,
     DeleteEntry,
+    DuplicateEntry,
     GetTree,
     InitVault,
     MoveEntry,
@@ -24,6 +25,7 @@ export interface UseVaultResult {
     rename: (relPath: string, newName: string) => Promise<string | undefined>
     move: (srcRelPath: string, destParentRelPath: string) => Promise<void>
     remove: (relPath: string) => Promise<void>
+    duplicate: (relPath: string) => Promise<string>
 }
 
 // useVault manages all state for the active Vault: directory path, file tree,
@@ -150,6 +152,14 @@ export function useVault(): UseVaultResult {
         [wrap],
     )
     const remove = useCallback((relPath: string) => wrap(() => DeleteEntry(relPath))(), [wrap])
+    const duplicate = useCallback(
+        async (relPath: string): Promise<string> => {
+            const newPath = await DuplicateEntry(relPath)
+            refresh()
+            return newPath
+        },
+        [refresh],
+    )
 
-    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove}
+    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove, duplicate}
 }
