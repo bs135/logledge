@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -193,5 +194,205 @@ func TestSync_RenamesLocalOnTrueConflict(t *testing.T) {
 	// Sync should successfully push merge commit to remote (no longer diverged).
 	if err := svc.Sync(); err != nil {
 		t.Fatalf("follow-up Sync should be a no-op: %v", err)
+	}
+}
+
+// hookLocker simulates VaultService's worktree lock. The optional beforeLock
+// hook runs right before the lock is acquired — i.e., after Sync has fetched —
+// which lets tests emulate an editor auto-save landing while fetch is in flight.
+type hookLocker struct {
+	sync.Mutex
+	beforeLock func()
+}
+
+func (h *hookLocker) Lock() {
+	if f := h.beforeLock; f != nil {
+		h.beforeLock = nil
+		f()
+	}
+	h.Mutex.Lock()
+}
+
+func findConflictFile(t *testing.T, root, prefix string) string {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read root: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix+".conflict.") {
+			return e.Name()
+		}
+	}
+	t.Fatalf("expected a %s.conflict.* file, got entries: %v", prefix, entries)
+	return ""
+}
+
+func TestSync_EditDuringFetchIsCommittedBeforeMerge(t *testing.T) {
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{"note.md": "original"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	lock := &hookLocker{}
+	svc.SetWorktreeLocker(lock)
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		writeFile(t, dir, "note.md", "edited remotely")
+	})
+	// The user keeps typing: an auto-save lands after Sync started (during fetch).
+	lock.beforeLock = func() { writeFile(t, root, "note.md", "edited locally while syncing") }
+
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("Sync with an edit during fetch must not fail: %v", err)
+	}
+	if got := readFile(t, root, "note.md"); got != "edited remotely" {
+		t.Fatalf("expected remote version in note.md, got %q", got)
+	}
+	conflict := findConflictFile(t, root, "note")
+	if got := readFile(t, root, conflict); got != "edited locally while syncing" {
+		t.Fatalf("expected local edit preserved in conflict file, got %q", got)
+	}
+	if out := runGit(t, root, "status", "--porcelain"); strings.TrimSpace(out) != "" {
+		t.Fatalf("expected clean working tree after sync, got:\n%s", out)
+	}
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("follow-up Sync should be a no-op: %v", err)
+	}
+}
+
+func TestSync_ConcurrentCallsAreSerialized(t *testing.T) {
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{"a.md": "a"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		writeFile(t, dir, "remote.md", "remote")
+	})
+	writeFile(t, root, "local.md", "local")
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 4)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- svc.Sync()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent Sync failed: %v", err)
+		}
+	}
+	if got := readFile(t, root, "remote.md"); got != "remote" {
+		t.Fatalf("expected remote.md merged, got %q", got)
+	}
+}
+
+func TestSync_LocalEditRemoteDeleteKeepsLocalAsConflict(t *testing.T) {
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{"shared.md": "original", "keep.md": "k"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+
+	writeFile(t, root, "shared.md", "edited locally")
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		if err := os.Remove(filepath.Join(dir, "shared.md")); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("modify/delete must be resolved, not fail the sync: %v", err)
+	}
+	conflict := findConflictFile(t, root, "shared")
+	if got := readFile(t, root, conflict); got != "edited locally" {
+		t.Fatalf("expected local edit preserved, got %q", got)
+	}
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("follow-up Sync should be a no-op: %v", err)
+	}
+}
+
+func TestSync_ConflictOnNonASCIIFilename(t *testing.T) {
+	const name = "ghi chú.md"
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{name: "original"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+
+	writeFile(t, root, name, "edited locally")
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		writeFile(t, dir, name, "edited remotely")
+	})
+
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if got := readFile(t, root, name); got != "edited remotely" {
+		t.Fatalf("expected remote version, got %q", got)
+	}
+	conflict := findConflictFile(t, root, "ghi chú")
+	if got := readFile(t, root, conflict); got != "edited locally" {
+		t.Fatalf("expected local version in conflict file, got %q", got)
+	}
+}
+
+func TestSync_LocalDeleteRemoteEditRestoresRemoteWithoutConflictCopy(t *testing.T) {
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{"shared.md": "original", "keep.md": "k"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(root, "shared.md")); err != nil {
+		t.Fatal(err)
+	}
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		writeFile(t, dir, "shared.md", "edited remotely")
+	})
+
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if got := readFile(t, root, "shared.md"); got != "edited remotely" {
+		t.Fatalf("expected remote edit restored, got %q", got)
+	}
+	entries, _ := os.ReadDir(root)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".conflict.") {
+			t.Fatalf("no local version exists, conflict copy %q must not be created", e.Name())
+		}
+	}
+}
+
+func TestSync_LocalRenameRemoteEditMergesIntoNewName(t *testing.T) {
+	bareDir := newBareRemoteWithSeed(t, "main", map[string]string{"a.md": "line1\nline2\nline3\nline4\n"})
+	svc, root := newLocalVault(t, bareDir, "main")
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("initial Sync: %v", err)
+	}
+
+	if err := os.Rename(filepath.Join(root, "a.md"), filepath.Join(root, "b.md")); err != nil {
+		t.Fatal(err)
+	}
+	pushRemoteChange(t, bareDir, "main", func(dir string) {
+		writeFile(t, dir, "a.md", "line1\nline2\nline3\nline4 edited remotely\n")
+	})
+
+	if err := svc.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.md")); err == nil {
+		t.Fatal("a.md was renamed locally and must not be restored")
+	}
+	if got := readFile(t, root, "b.md"); !strings.Contains(got, "line4 edited remotely") {
+		t.Fatalf("expected remote edit merged into b.md, got %q", got)
 	}
 }

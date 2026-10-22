@@ -13,7 +13,7 @@ import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
-import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFile} from '../wailsjs/go/main/App'
+import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
@@ -30,8 +30,14 @@ function App() {
     const [initialContent, setInitialContent] = useState('')
     const [editorKey, setEditorKey] = useState(0)
     const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null)
+    // Latest editor content, including edits not yet auto-saved.
     const currentContentRef = useRef('')
-    const isDirtyRef = useRef(false)
+    // Content known to be on disk for the open note (last read or successfully saved).
+    // Comparing disk against this — not against the live editor text — is what tells
+    // a genuine external change (e.g., Git sync) apart from the user's own unsaved edits.
+    const diskRef = useRef<{path: string | null; content: string}>({path: null, content: ''})
+    // Serializes auto-saves so each one is checked against the outcome of the previous one.
+    const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
     const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('logledge:sidebarOpen') !== 'false')
     const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
         const saved = localStorage.getItem('logledge:sidebarWidth')
@@ -106,33 +112,64 @@ function App() {
         }
     }
 
-    async function openFile(path: string) {
-        try {
-            const text = await ReadFile(path)
-            currentContentRef.current = text
-            isDirtyRef.current = false
-            setExternalChangeNotice(null)
-            setInitialContent(text)
-            setSelectedPath(path)
-            setEditorKey((k) => k + 1)
-        } catch {
-            currentContentRef.current = ''
-            isDirtyRef.current = false
-            setExternalChangeNotice(null)
-            setInitialContent('')
-            setSelectedPath(path)
-            setEditorKey((k) => k + 1)
+    // loadNote (re)initializes the editor with content that is known to be on disk.
+    function loadNote(path: string | null, text: string) {
+        currentContentRef.current = text
+        diskRef.current = {path, content: text}
+        setExternalChangeNotice(null)
+        setInitialContent(text)
+        setSelectedPath(path)
+        setEditorKey((k) => k + 1)
+    }
+
+    // queueSave auto-saves with optimistic concurrency: the write only happens if the
+    // file still holds the version the editor is based on. If Git sync (or another
+    // program) changed it meanwhile, nothing is overwritten and the user is asked
+    // whether to reload the new version or keep the draft.
+    function queueSave(path: string, markdown: string) {
+        const run = async () => {
+            // The note was closed or renamed while this save was queued.
+            if (diskRef.current.path !== path) return
+            try {
+                const res = await WriteFileIfUnchanged(path, markdown, diskRef.current.content)
+                if (diskRef.current.path !== path) return
+                if (res.saved) {
+                    diskRef.current = {path, content: markdown}
+                } else {
+                    setExternalChangeNotice(res.diskContent)
+                }
+            } catch (err) {
+                console.error('Auto-save failed:', err)
+            }
         }
+        saveQueueRef.current = saveQueueRef.current.then(run)
+        return saveQueueRef.current
+    }
+
+    // followSelectedPath keeps the open note (and its unsaved edits) when its path
+    // changes because the note or one of its parent folders was renamed.
+    function followSelectedPath(newPath: string) {
+        diskRef.current = {...diskRef.current, path: newPath}
+        setInitialContent(currentContentRef.current)
+        setSelectedPath(newPath)
+    }
+
+    async function openFile(path: string) {
+        // Let in-flight auto-saves of the current note finish before switching.
+        await saveQueueRef.current
+        let text = ''
+        try {
+            text = await ReadFile(path)
+        } catch {
+            // Open as empty note if it cannot be read.
+        }
+        loadNote(path, text)
         setQuickSwitcherOpen(false)
         setGlobalSearchOpen(false)
     }
 
     function handleVaultSwitched(_newPath: string) {
-        setSelectedPath(null)
-        setInitialContent('')
-        currentContentRef.current = ''
-        isDirtyRef.current = false
-        setExternalChangeNotice(null)
+        loadNote(null, '')
         vault.reload()
     }
 
@@ -180,9 +217,9 @@ function App() {
                 const newPath = await vault.rename(action.targetPath, trimmed)
                 if (newPath) {
                     if (selectedPath === action.targetPath) {
-                        setSelectedPath(newPath)
+                        followSelectedPath(newPath)
                     } else if (selectedPath && selectedPath.startsWith(action.targetPath + '/')) {
-                        setSelectedPath(newPath + selectedPath.slice(action.targetPath.length))
+                        followSelectedPath(newPath + selectedPath.slice(action.targetPath.length))
                     }
                 }
             } catch (err) {
@@ -197,6 +234,7 @@ function App() {
         setDeleteTarget(null)
         await vault.remove(pathToDelete)
         if (selectedPath === pathToDelete || (selectedPath && selectedPath.startsWith(pathToDelete + '/'))) {
+            diskRef.current = {path: null, content: ''}
             setSelectedPath(null)
         }
     }
@@ -209,14 +247,22 @@ function App() {
             if (!selectedPath) return
             try {
                 const diskContent = await ReadFile(selectedPath)
-                if (diskContent !== currentContentRef.current) {
-                    if (isDirtyRef.current) {
-                        setExternalChangeNotice(diskContent)
-                    } else {
-                        currentContentRef.current = diskContent
-                        setInitialContent(diskContent)
-                        setEditorKey((k) => k + 1)
-                    }
+                const known = diskRef.current
+                if (known.path !== selectedPath || diskContent === known.content) {
+                    // Nothing changed on disk since we last read or saved the note:
+                    // unsaved edits in the editor are not an external change.
+                    return
+                }
+                if (diskContent === currentContentRef.current) {
+                    // Our own in-flight auto-save has already reached the disk.
+                    diskRef.current = {path: selectedPath, content: diskContent}
+                    return
+                }
+                if (currentContentRef.current === known.content) {
+                    // No unsaved edits: silently show the new version.
+                    loadNote(selectedPath, diskContent)
+                } else {
+                    setExternalChangeNotice(diskContent)
                 }
             } catch {
                 // file may have been moved or removed
@@ -578,19 +624,20 @@ function App() {
                             <span>{t('externalUpdateNotice')}</span>
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => {
-                                        currentContentRef.current = externalChangeNotice
-                                        setInitialContent(externalChangeNotice)
-                                        setEditorKey((k) => k + 1)
-                                        setExternalChangeNotice(null)
-                                        isDirtyRef.current = false
-                                    }}
+                                    onClick={() => loadNote(selectedPath, externalChangeNotice)}
                                     className="rounded bg-amber-600 px-2.5 py-0.5 font-medium text-white hover:bg-amber-500"
                                 >
                                     {t('reloadBtn')}
                                 </button>
                                 <button
-                                    onClick={() => setExternalChangeNotice(null)}
+                                    onClick={() => {
+                                        // Acknowledge the disk version, then overwrite it with the draft.
+                                        if (selectedPath) {
+                                            diskRef.current = {path: selectedPath, content: externalChangeNotice}
+                                            queueSave(selectedPath, currentContentRef.current)
+                                        }
+                                        setExternalChangeNotice(null)
+                                    }}
                                     className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-0.5"
                                 >
                                     {t('keepDraftBtn')}
@@ -605,22 +652,18 @@ function App() {
                             initialContent={initialContent}
                             onContentChange={(markdown) => {
                                 currentContentRef.current = markdown
-                                isDirtyRef.current = true
                             }}
-                            onChange={async (markdown) => {
+                            onChange={(markdown) => {
                                 currentContentRef.current = markdown
-                                try {
-                                    await WriteFile(selectedPath, markdown)
-                                } finally {
-                                    isDirtyRef.current = false
-                                }
+                                queueSave(selectedPath, markdown)
                             }}
                             onRename={async (newName) => {
                                 if (!selectedPath) return
                                 try {
+                                    await saveQueueRef.current
                                     const newPath = await vault.rename(selectedPath, newName)
                                     if (newPath) {
-                                        setSelectedPath(newPath)
+                                        followSelectedPath(newPath)
                                     }
                                 } catch (err) {
                                     alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))

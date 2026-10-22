@@ -121,3 +121,7 @@ export function SyncNow() {
 export function WriteFile(arg1, arg2) {
   return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }
+
+export function WriteFileIfUnchanged(arg1, arg2, arg3) {
+  return window['go']['main']['App']['WriteFileIfUnchanged'](arg1, arg2, arg3);
+}

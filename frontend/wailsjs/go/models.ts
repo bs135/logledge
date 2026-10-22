@@ -187,6 +187,20 @@ export namespace vault {
 		    return a;
 		}
 	}
+	export class WriteResult {
+	    saved: boolean;
+	    diskContent: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WriteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.saved = source["saved"];
+	        this.diskContent = source["diskContent"];
+	    }
+	}
 
 }
 

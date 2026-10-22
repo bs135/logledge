@@ -65,3 +65,5 @@ export function SwitchVault(arg1:string):Promise<void>;
 export function SyncNow():Promise<void>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;
+
+export function WriteFileIfUnchanged(arg1:string,arg2:string,arg3:string):Promise<vault.WriteResult>;
