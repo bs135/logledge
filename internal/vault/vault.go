@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Bios-Marcel/wastebasket/v2"
@@ -43,6 +44,21 @@ type Service struct {
 	root    string
 	watch   *watcher.Watcher
 	onEvent func() // called on debounced file tree changes, used to emit Wails events
+
+	// worktreeMu serializes every app-initiated mutation of the Vault working tree
+	// with Git sync operations (auto-commit, merge, conflict resolution), so an
+	// editor auto-save can never interleave with a sync in progress.
+	worktreeMu sync.Mutex
+}
+
+// WriteResult reports the outcome of WriteFileIfUnchanged.
+type WriteResult struct {
+	// Saved is true when the content was written to disk.
+	Saved bool `json:"saved"`
+	// DiskContent holds the current on-disk content when Saved is false, i.e.
+	// the file was modified externally (e.g., by Git sync) since the editor last
+	// loaded or saved it.
+	DiskContent string `json:"diskContent"`
 }
 
 // New creates a Service with no Vault currently open. onEvent is called
@@ -76,6 +92,13 @@ func (s *Service) Open(root string) error {
 	s.root = root
 	s.watch = w
 	return nil
+}
+
+// WorktreeLocker returns the lock guarding app-initiated working tree mutations.
+// GitSync holds it while committing and merging so that no Vault write happens
+// in the middle of a sync.
+func (s *Service) WorktreeLocker() sync.Locker {
+	return &s.worktreeMu
 }
 
 // Root returns the absolute path of the open Vault, or "" if none is open.
@@ -188,6 +211,8 @@ func (s *Service) CreateFile(parentRelPath, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	abs := filepath.Join(parentAbs, name)
 	if _, err := os.Stat(abs); err == nil {
 		return "", fmt.Errorf("đã tồn tại: %s", name)
@@ -205,6 +230,8 @@ func (s *Service) CreateFolder(parentRelPath, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	abs := filepath.Join(parentAbs, name)
 	if _, err := os.Stat(abs); err == nil {
 		return "", fmt.Errorf("đã tồn tại: %s", name)
@@ -222,6 +249,8 @@ func (s *Service) Rename(relPath, newName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	newAbs := filepath.Join(filepath.Dir(abs), newName)
 	if _, err := os.Stat(newAbs); err == nil {
 		return "", fmt.Errorf("đã tồn tại: %s", newName)
@@ -245,6 +274,8 @@ func (s *Service) Move(srcRelPath, destParentRelPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	destAbs := filepath.Join(destParentAbs, filepath.Base(srcAbs))
 	if strings.HasPrefix(destAbs+string(os.PathSeparator), srcAbs+string(os.PathSeparator)) {
 		return "", errors.New("không thể di chuyển thư mục vào chính nó")
@@ -268,6 +299,8 @@ func (s *Service) Delete(relPath string) error {
 	if err != nil {
 		return err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	s.suppress(abs)
 	return wastebasket.Trash(abs)
 }
@@ -291,8 +324,46 @@ func (s *Service) WriteFile(relPath, content string) error {
 	if err != nil {
 		return err
 	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	s.suppress(abs)
 	return os.WriteFile(abs, []byte(content), 0o644)
+}
+
+// WriteFileIfUnchanged is the auto-save entry point with optimistic concurrency:
+// it writes content only if the file on disk still equals expected (the version
+// the editor last loaded or saved). If the file was changed externally in the
+// meantime (e.g., Git sync pulled a remote version or resolved a conflict), it
+// does not overwrite it and returns the current disk content instead, letting
+// the frontend ask the user whether to reload or keep the draft.
+// A missing file is (re)created so unsaved edits are never lost.
+func (s *Service) WriteFileIfUnchanged(relPath, content, expected string) (WriteResult, error) {
+	abs, err := s.resolve(relPath)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
+
+	data, err := os.ReadFile(abs)
+	switch {
+	case err == nil:
+		disk := string(data)
+		if disk == content {
+			return WriteResult{Saved: true}, nil
+		}
+		if disk != expected {
+			return WriteResult{Saved: false, DiskContent: disk}, nil
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return WriteResult{}, err
+	}
+
+	s.suppress(abs)
+	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		return WriteResult{}, err
+	}
+	return WriteResult{Saved: true}, nil
 }
 
 // unsafeFilenameChars matches characters that should not appear in filenames on
@@ -319,6 +390,8 @@ func (s *Service) SaveAttachment(noteRelPath, filename, base64Data string) (stri
 		return "", fmt.Errorf("dữ liệu ảnh không hợp lệ: %w", err)
 	}
 
+	s.worktreeMu.Lock()
+	defer s.worktreeMu.Unlock()
 	attachDir := filepath.Join(s.root, ".attachments")
 	if err := os.MkdirAll(attachDir, 0o755); err != nil {
 		return "", err

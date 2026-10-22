@@ -46,6 +46,7 @@ func NewApp() *App {
 	a.vault = vault.New(a.emitVaultChanged)
 	a.search = search.New()
 	a.sync = gitsync.New(a.emitSyncStatus)
+	a.sync.SetWorktreeLocker(a.vault.WorktreeLocker())
 	return a
 }
 
@@ -477,6 +478,14 @@ func (a *App) ReadFile(relPath string) (string, error) {
 // WriteFile writes file content (used for auto-save in Phase 2).
 func (a *App) WriteFile(relPath, content string) error {
 	return a.vault.WriteFile(relPath, content)
+}
+
+// WriteFileIfUnchanged is the editor auto-save entry point: it writes content
+// only if the file on disk still equals expected (the version the editor last
+// loaded or saved). Otherwise the file was changed externally (e.g., by Git
+// sync) and the current disk content is returned without overwriting it.
+func (a *App) WriteFileIfUnchanged(relPath, content, expected string) (vault.WriteResult, error) {
+	return a.vault.WriteFileIfUnchanged(relPath, content, expected)
 }
 
 // SaveAttachment saves an image (clipboard paste / drag-and-drop in editor) into

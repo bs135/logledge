@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestService(t *testing.T) (*Service, string) {
@@ -207,5 +208,74 @@ func TestReadAttachmentDataURLRejectsPathEscapingVault(t *testing.T) {
 
 	if _, err := svc.ReadAttachmentDataURL("note.md", "../../etc/passwd"); err == nil {
 		t.Fatal("expected error for path escaping the vault root, got nil")
+	}
+}
+
+func TestWriteFileIfUnchanged(t *testing.T) {
+	svc, root := newTestService(t)
+	abs := filepath.Join(root, "note.md")
+	if err := os.WriteFile(abs, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Disk matches the editor's base version -> saved.
+	res, err := svc.WriteFileIfUnchanged("note.md", "v2", "v1")
+	if err != nil || !res.Saved {
+		t.Fatalf("expected save, got %+v err=%v", res, err)
+	}
+
+	// Simulate Git sync replacing the file with a remote version.
+	if err := os.WriteFile(abs, []byte("remote"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = svc.WriteFileIfUnchanged("note.md", "v3", "v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Saved || res.DiskContent != "remote" {
+		t.Fatalf("expected external change to be reported, got %+v", res)
+	}
+	if got, _ := os.ReadFile(abs); string(got) != "remote" {
+		t.Fatalf("external version must not be overwritten, got %q", got)
+	}
+
+	// Content already on disk (e.g., duplicate save) -> treated as saved.
+	res, err = svc.WriteFileIfUnchanged("note.md", "remote", "stale")
+	if err != nil || !res.Saved {
+		t.Fatalf("expected idempotent save, got %+v err=%v", res, err)
+	}
+
+	// Missing file (deleted by sync) is recreated so the draft is not lost.
+	if err := os.Remove(abs); err != nil {
+		t.Fatal(err)
+	}
+	res, err = svc.WriteFileIfUnchanged("note.md", "draft", "remote")
+	if err != nil || !res.Saved {
+		t.Fatalf("expected recreate, got %+v err=%v", res, err)
+	}
+	if got, _ := os.ReadFile(abs); string(got) != "draft" {
+		t.Fatalf("expected draft written, got %q", got)
+	}
+}
+
+func TestWorktreeLockerBlocksWrites(t *testing.T) {
+	svc, root := newTestService(t)
+	l := svc.WorktreeLocker()
+	l.Lock()
+
+	done := make(chan error, 1)
+	go func() { done <- svc.WriteFile("note.md", "x") }()
+
+	select {
+	case <-done:
+		t.Fatal("WriteFile must wait while the worktree lock is held")
+	case <-time.After(100 * time.Millisecond):
+	}
+	l.Unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, "note.md")); string(got) != "x" {
+		t.Fatalf("expected write after unlock, got %q", got)
 	}
 }
