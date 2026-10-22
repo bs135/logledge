@@ -63,6 +63,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Theming**: Full Dark, Light, and System Default theme support across the window shell, modals, and Milkdown Crepe editor.
 - **Internationalization (i18n)**: Complete English (`en`) and Vietnamese (`vi`) localization across all UI elements, system tray, and dialogs.
 - **Settings & Quick Help**: Comprehensive tabbed settings dialog and quick help modal with markdown syntax tips and keyboard shortcuts.
+- **Update Check**: Checks GitHub Releases once at startup (in the background) and shows a dismissible toast with a link to the release page when a newer version exists; a manual **Check for updates** button lives in Settings → General.
 
 ---
 
@@ -84,6 +85,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), custom CSS dark/light theme variables, custom `Nunito` font
 - **Markdown Editor**: Milkdown Crepe (`@milkdown/crepe`) with CodeMirror and KaTeX
 - **Icons**: `lucide-react`
+- **Toast Notifications**: [`sonner`](https://sonner.emilkowal.ski)
 - **Internationalization**: Custom dictionary-based i18n (`en`, `vi`)
 
 ---

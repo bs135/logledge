@@ -149,6 +149,33 @@ export namespace search {
 
 }
 
+export namespace updater {
+	
+	export class Info {
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseName: string;
+	    releaseUrl: string;
+	    publishedAt: string;
+	    available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseName = source["releaseName"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.publishedAt = source["publishedAt"];
+	        this.available = source["available"];
+	    }
+	}
+
+}
+
 export namespace vault {
 	
 	export class Node {

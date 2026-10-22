@@ -32,6 +32,7 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), CSS custom variants for dark mode, custom fonts (`Nunito`).
 - **Markdown Editor**: [CodeMirror 6](https://codemirror.net) with custom Obsidian-style Live Preview (inline markdown editing).
 - **Icons**: `lucide-react`.
+- **Toast Notifications**: `sonner`, mounted once via `AppToaster` (`frontend/src/components/AppToaster.tsx`); call `toast(...)` from `sonner` anywhere.
 - **Internationalization (i18n)**: English (`en`) and Vietnamese (`vi`) in `frontend/src/i18n/index.ts`.
 
 ---
@@ -46,6 +47,7 @@ This repository contains **Logledge**, a desktop, local-first note-taking applic
 │   ├── gitsync/                # Git sync engine, git CLI execution, credentials via go-keyring
 │   ├── search/                 # SQLite FTS5 indexer, Quick Switcher fuzzy search, Global Search
 │   ├── tray/                   # System tray integration and lifecycle
+│   ├── updater/                # GitHub Releases update check (semver comparison)
 │   ├── vault/                  # VaultService: file/folder tree CRUD, attachments, trash
 │   └── watcher/                # fsnotify wrapper with debounce and self-write suppression
 ├── frontend/
