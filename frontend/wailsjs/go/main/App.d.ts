@@ -8,6 +8,8 @@ import {search} from '../models';
 
 export function ConfigureSync(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function CopyEntry(arg1:string,arg2:string):Promise<string>;
+
 export function CreateFile(arg1:string,arg2:string):Promise<string>;
 
 export function CreateFolder(arg1:string,arg2:string):Promise<string>;

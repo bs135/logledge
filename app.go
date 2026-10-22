@@ -477,6 +477,12 @@ func (a *App) DuplicateEntry(relPath string) (string, error) {
 	return a.vault.Duplicate(relPath)
 }
 
+// CopyEntry copies the file or folder at srcRelPath into destParentRelPath
+// (file tree Copy/Paste) and returns the relative path of the copy.
+func (a *App) CopyEntry(srcRelPath, destParentRelPath string) (string, error) {
+	return a.vault.Copy(srcRelPath, destParentRelPath)
+}
+
 // GetAbsolutePath returns the full OS-native path on disk of the entry at relPath.
 func (a *App) GetAbsolutePath(relPath string) (string, error) {
 	return a.vault.AbsPath(relPath)

@@ -339,15 +339,30 @@ func copyName(dir, name string, isDir bool) string {
 // naming it with a " copy" suffix (plus a counter when that name is taken), and
 // returns the relative path of the copy. Folders are copied recursively.
 func (s *Service) Duplicate(relPath string) (string, error) {
+	return s.Copy(relPath, filepath.ToSlash(filepath.Dir(filepath.FromSlash(relPath))))
+}
+
+// Copy copies the file or folder at srcRelPath into destParentRelPath (used by
+// the file tree Copy/Paste actions) and returns the relative path of the copy.
+// The original name is kept when free; otherwise a " copy" / " copy (n)" suffix
+// is added. Folders are copied recursively and cannot be pasted into themselves.
+func (s *Service) Copy(srcRelPath, destParentRelPath string) (string, error) {
 	if !s.isOpen() {
 		return "", errors.New("chưa mở vault nào")
 	}
-	srcAbs, err := s.resolve(relPath)
+	srcAbs, err := s.resolve(srcRelPath)
 	if err != nil {
 		return "", err
 	}
 	if srcAbs == s.root {
 		return "", errors.New("không thể sao chép thư mục gốc của vault")
+	}
+	destParentAbs, err := s.resolve(destParentRelPath)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(destParentAbs+string(os.PathSeparator), srcAbs+string(os.PathSeparator)) {
+		return "", errors.New("không thể sao chép thư mục vào chính nó")
 	}
 	s.worktreeMu.Lock()
 	defer s.worktreeMu.Unlock()
@@ -356,7 +371,14 @@ func (s *Service) Duplicate(relPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("không thể sao chép: %w", err)
 	}
-	destAbs := filepath.Join(filepath.Dir(srcAbs), copyName(filepath.Dir(srcAbs), filepath.Base(srcAbs), info.IsDir()))
+	if parentInfo, err := os.Stat(destParentAbs); err != nil || !parentInfo.IsDir() {
+		return "", errors.New("thư mục đích không hợp lệ")
+	}
+	name := filepath.Base(srcAbs)
+	if _, err := os.Lstat(filepath.Join(destParentAbs, name)); err == nil {
+		name = copyName(destParentAbs, name, info.IsDir())
+	}
+	destAbs := filepath.Join(destParentAbs, name)
 
 	if info.IsDir() {
 		err = s.copyDir(srcAbs, destAbs)

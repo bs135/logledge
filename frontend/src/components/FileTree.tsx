@@ -12,12 +12,25 @@ import {
     Edit3,
     Trash2,
     Copy,
+    CopyPlus,
+    Scissors,
+    ClipboardPaste,
     ClipboardCopy,
     FolderSearch,
 } from 'lucide-react'
 import {useI18n} from '../i18n'
 
 export type InlineActionType = 'create-file' | 'create-folder' | 'rename'
+
+// FileClipboard is the app-internal clipboard for the file tree Cut/Copy/Paste actions.
+export interface FileClipboard {
+    mode: 'copy' | 'cut'
+    path: string
+}
+
+export function parentOf(path: string): string {
+    return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+}
 
 export interface InlineAction {
     type: InlineActionType
@@ -75,6 +88,7 @@ export interface FileTreeProps {
     selectedPath: string | null
     filter?: config.FileFilterConfig
     inlineAction?: InlineAction | null
+    clipboard?: FileClipboard | null
     onSelectFile: (path: string) => void
     onCreateFile: (parentRelPath: string) => void
     onCreateFolder: (parentRelPath: string) => void
@@ -84,6 +98,9 @@ export interface FileTreeProps {
     onCopyPath: (relPath: string) => void
     onCopyRelativePath: (relPath: string) => void
     onReveal: (relPath: string) => void
+    onCopy: (relPath: string) => void
+    onCut: (relPath: string) => void
+    onPaste: (destParentRelPath: string) => void
     onMove: (srcRelPath: string, destParentRelPath: string) => void
     onCommitInlineAction: (action: InlineAction, name: string) => void
     onCancelInlineAction: () => void
@@ -139,6 +156,22 @@ export function FileTree({
                 e.preventDefault()
                 e.stopPropagation()
                 props.onDelete(activePath)
+            }
+        } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+            const key = e.key.toLowerCase()
+            if (key === 'c' && activePath) {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onCopy(activePath)
+            } else if (key === 'x' && activePath) {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onCut(activePath)
+            } else if (key === 'v' && props.clipboard) {
+                e.preventDefault()
+                e.stopPropagation()
+                const active = activePath ? findNode(props.root, activePath) : null
+                props.onPaste(active ? (active.isDir ? active.path : parentOf(active.path)) : '')
             }
         }
     }
@@ -223,6 +256,10 @@ function TreeEntry({
     onCopyPath,
     onCopyRelativePath,
     onReveal,
+    onCopy,
+    onCut,
+    onPaste,
+    clipboard,
     onMove,
     onCommitInlineAction,
     onCancelInlineAction,
@@ -234,6 +271,7 @@ function TreeEntry({
 
     const isActive = node.path === activePath
     const isCurrentOpenNote = !node.isDir && node.path === selectedPath
+    const isCut = clipboard?.mode === 'cut' && clipboard.path === node.path
 
     let selectionClass = ''
     if (isActive) {
@@ -334,6 +372,10 @@ function TreeEntry({
                                 onCopyPath={onCopyPath}
                                 onCopyRelativePath={onCopyRelativePath}
                                 onReveal={onReveal}
+                                onCopy={onCopy}
+                                onCut={onCut}
+                                onPaste={onPaste}
+                                clipboard={clipboard}
                                 onMove={onMove}
                                 onCommitInlineAction={onCommitInlineAction}
                                 onCancelInlineAction={onCancelInlineAction}
@@ -374,7 +416,7 @@ function TreeEntry({
                 }}
                 className={`flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 transition-colors outline-none focus:outline-none ${
                     selectionClass || 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60'
-                } ${dragOver ? 'outline outline-1 outline-blue-500' : ''}`}
+                } ${dragOver ? 'outline outline-1 outline-blue-500' : ''} ${isCut ? 'opacity-50' : ''}`}
                 style={{paddingLeft: `${depth * 14 + 8}px`}}
             >
                 <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400 dark:text-neutral-500">
@@ -407,6 +449,10 @@ function TreeEntry({
                     onCopyPath={onCopyPath}
                     onCopyRelativePath={onCopyRelativePath}
                     onReveal={onReveal}
+                    onCopy={onCopy}
+                    onCut={onCut}
+                    onPaste={onPaste}
+                    canPaste={Boolean(clipboard)}
                 />
             )}
 
@@ -444,6 +490,10 @@ function TreeEntry({
                             onCopyPath={onCopyPath}
                             onCopyRelativePath={onCopyRelativePath}
                             onReveal={onReveal}
+                            onCopy={onCopy}
+                            onCut={onCut}
+                            onPaste={onPaste}
+                            clipboard={clipboard}
                             onMove={onMove}
                             onCommitInlineAction={onCommitInlineAction}
                             onCancelInlineAction={onCancelInlineAction}
@@ -592,6 +642,10 @@ interface ContextMenuProps {
     onCopyPath: (relPath: string) => void
     onCopyRelativePath: (relPath: string) => void
     onReveal: (relPath: string) => void
+    onCopy: (relPath: string) => void
+    onCut: (relPath: string) => void
+    onPaste: (destParentRelPath: string) => void
+    canPaste: boolean
 }
 
 function ContextMenu({
@@ -606,9 +660,13 @@ function ContextMenu({
     onCopyPath,
     onCopyRelativePath,
     onReveal,
+    onCopy,
+    onCut,
+    onPaste,
+    canPaste,
 }: ContextMenuProps) {
     const {t} = useI18n()
-    const parent = node.isDir ? node.path : node.path.split('/').slice(0, -1).join('/')
+    const parent = node.isDir ? node.path : parentOf(node.path)
 
     function act(fn: () => void) {
         fn()
@@ -617,7 +675,7 @@ function ContextMenu({
 
     // Keep menu within viewport
     const menuWidth = 220
-    const menuHeight = 290
+    const menuHeight = 380
     const left = Math.max(10, Math.min(position.x, window.innerWidth - menuWidth - 10))
     const top = Math.max(10, Math.min(position.y, window.innerHeight - menuHeight - 10))
     const iconClass = 'h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400'
@@ -639,9 +697,29 @@ function ContextMenu({
                     icon={<FolderPlus className={iconClass} />}
                     onClick={() => act(() => onCreateFolder(parent))}
                 />
+                <MenuSeparator />
+                <MenuItem
+                    label={t('cut')}
+                    shortcut="Ctrl+X"
+                    icon={<Scissors className={iconClass} />}
+                    onClick={() => act(() => onCut(node.path))}
+                />
+                <MenuItem
+                    label={t('copy')}
+                    shortcut="Ctrl+C"
+                    icon={<Copy className={iconClass} />}
+                    onClick={() => act(() => onCopy(node.path))}
+                />
+                <MenuItem
+                    label={t('paste')}
+                    shortcut="Ctrl+V"
+                    icon={<ClipboardPaste className={iconClass} />}
+                    onClick={() => act(() => onPaste(parent))}
+                    disabled={!canPaste}
+                />
                 <MenuItem
                     label={t('makeACopy')}
-                    icon={<Copy className={iconClass} />}
+                    icon={<CopyPlus className={iconClass} />}
                     onClick={() => act(() => onDuplicate(node.path))}
                 />
                 <MenuSeparator />
@@ -689,16 +767,21 @@ function MenuItem({
     icon,
     onClick,
     destructive,
+    disabled,
 }: {
     label: string
     shortcut?: string
     icon?: React.ReactNode
     onClick: () => void
     destructive?: boolean
+    disabled?: boolean
 }) {
     return (
         <button
-            className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+            disabled={disabled}
+            className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                disabled ? 'cursor-default opacity-40' : 'hover:bg-neutral-100 dark:hover:bg-neutral-700'
+            } ${
                 destructive ? 'text-red-600 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'
             }`}
             onClick={onClick}

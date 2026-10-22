@@ -6,6 +6,10 @@ export function ConfigureSync(arg1, arg2, arg3) {
   return window['go']['main']['App']['ConfigureSync'](arg1, arg2, arg3);
 }
 
+export function CopyEntry(arg1, arg2) {
+  return window['go']['main']['App']['CopyEntry'](arg1, arg2);
+}
+
 export function CreateFile(arg1, arg2) {
   return window['go']['main']['App']['CreateFile'](arg1, arg2);
 }

@@ -365,3 +365,51 @@ func TestAbsAndNativeRelPath(t *testing.T) {
 		t.Fatal("expected error for path outside vault")
 	}
 }
+
+func TestCopyKeepsNameOrAddsSuffix(t *testing.T) {
+	svc, root := newTestService(t)
+	for _, d := range []string{"src", "dst"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "Note.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"dst/Note.md", "dst/Note copy.md", "dst/Note copy (1).md"} {
+		got, err := svc.Copy("src/Note.md", "dst")
+		if err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+		if got != want {
+			t.Fatalf("expected %q, got %q", want, got)
+		}
+	}
+	if got, err := svc.Copy("src/Note.md", ""); err != nil || got != "Note.md" {
+		t.Fatalf("copy to root: got %q (%v)", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "src", "Note.md")); err != nil {
+		t.Fatalf("source must remain after copy: %v", err)
+	}
+}
+
+func TestCopyFolderIntoItselfFails(t *testing.T) {
+	svc, root := newTestService(t)
+	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Copy("a", "a"); err == nil {
+		t.Fatal("expected error when copying folder into itself")
+	}
+	if _, err := svc.Copy("a", "a/b"); err == nil {
+		t.Fatal("expected error when copying folder into its descendant")
+	}
+	if _, err := svc.Copy("a/b", "a/b-x"); err == nil {
+		t.Fatal("expected error for missing destination folder")
+	}
+	got, err := svc.Copy("a/b", "a")
+	if err != nil || got != "a/b copy" {
+		t.Fatalf("expected %q, got %q (%v)", "a/b copy", got, err)
+	}
+}

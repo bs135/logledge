@@ -1,5 +1,5 @@
 import {useEffect} from 'react'
-import {FilePlus, FolderPlus} from 'lucide-react'
+import {ClipboardPaste, FilePlus, FolderPlus} from 'lucide-react'
 import {useI18n} from '../i18n'
 
 interface SidebarContextMenuProps {
@@ -7,6 +7,8 @@ interface SidebarContextMenuProps {
     onClose: () => void
     onCreateFile: () => void
     onCreateFolder: () => void
+    canPaste: boolean
+    onPaste: () => void
 }
 
 export function SidebarContextMenu({
@@ -14,6 +16,8 @@ export function SidebarContextMenu({
     onClose,
     onCreateFile,
     onCreateFolder,
+    canPaste,
+    onPaste,
 }: SidebarContextMenuProps) {
     const {t} = useI18n()
 
@@ -26,7 +30,7 @@ export function SidebarContextMenu({
     }, [onClose])
 
     const menuWidth = 160
-    const menuHeight = 80
+    const menuHeight = 120
     const left = Math.max(10, Math.min(position.x, window.innerWidth - menuWidth - 10))
     const top = Math.max(10, Math.min(position.y, window.innerHeight - menuHeight - 10))
 
@@ -62,6 +66,22 @@ export function SidebarContextMenu({
                 >
                     <FolderPlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
                     <span>{t('newFolder')}</span>
+                </button>
+                <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-700" role="separator" />
+                <button
+                    disabled={!canPaste}
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-neutral-700 dark:text-neutral-200 transition-colors ${
+                        canPaste
+                            ? 'hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-900 dark:hover:text-white'
+                            : 'cursor-default opacity-40'
+                    }`}
+                    onClick={() => triggerAction(onPaste)}
+                >
+                    <span className="flex items-center gap-2">
+                        <ClipboardPaste className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+                        <span>{t('paste')}</span>
+                    </span>
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono">Ctrl+V</span>
                 </button>
             </div>
         </div>

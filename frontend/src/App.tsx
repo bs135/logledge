@@ -3,7 +3,7 @@ import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
-import {FileTree, InlineAction} from './components/FileTree'
+import {FileClipboard, FileTree, InlineAction, parentOf} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -51,6 +51,7 @@ function App() {
     })
     const [isResizing, setIsResizing] = useState(false)
     const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
+    const [fileClipboard, setFileClipboard] = useState<FileClipboard | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const lastResizeMouseDownTimeRef = useRef(0)
     const isDraggingSidebarRef = useRef(false)
@@ -169,6 +170,7 @@ function App() {
     }
 
     function handleVaultSwitched(_newPath: string) {
+        setFileClipboard(null)
         loadNote(null, '')
         vault.reload()
     }
@@ -253,6 +255,33 @@ function App() {
             await RevealInExplorer(path)
         } catch (err) {
             alert(t('revealFailed') + String(err))
+        }
+    }
+
+    async function handlePaste(destParent: string) {
+        const clip = fileClipboard
+        if (!clip) return
+        try {
+            if (clip.mode === 'copy') {
+                await vault.copyTo(clip.path, destParent)
+                return
+            }
+            if (parentOf(clip.path) === destParent) {
+                // Pasting a cut entry back into its own folder is a no-op.
+                setFileClipboard(null)
+                return
+            }
+            // Let in-flight auto-saves of the open note land before it is moved.
+            await saveQueueRef.current
+            const newPath = await vault.moveTo(clip.path, destParent)
+            setFileClipboard(null)
+            if (selectedPath === clip.path) {
+                followSelectedPath(newPath)
+            } else if (selectedPath && selectedPath.startsWith(clip.path + '/')) {
+                followSelectedPath(newPath + selectedPath.slice(clip.path.length))
+            }
+        } catch (err) {
+            alert(t('pasteFailed') + String(err))
         }
     }
 
@@ -594,6 +623,10 @@ function App() {
                                         onCopyPath={(path) => copyToClipboard(() => GetAbsolutePath(path))}
                                         onCopyRelativePath={(path) => copyToClipboard(() => GetNativeRelativePath(path))}
                                         onReveal={handleReveal}
+                                        clipboard={fileClipboard}
+                                        onCopy={(path) => setFileClipboard({mode: 'copy', path})}
+                                        onCut={(path) => setFileClipboard({mode: 'cut', path})}
+                                        onPaste={handlePaste}
                                         onMove={vault.move}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
@@ -747,6 +780,8 @@ function App() {
                     onClose={() => setSidebarContextMenuPos(null)}
                     onCreateFile={() => handleCreateNote('')}
                     onCreateFolder={() => handleCreateFolder('')}
+                    canPaste={Boolean(fileClipboard)}
+                    onPaste={() => handlePaste('')}
                 />
             )}
             <ConfirmModal
