@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/bs135/logledge/compare/v0.3.0...v0.3.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **sync:** prevent conflicts when syncing while editing notes ([1427b4a](https://github.com/bs135/logledge/commit/1427b4ab83bf1de6d5d4cd81adafcbeb50358861))
+* **sync:** prevent conflicts when syncing while editing notes ([832020a](https://github.com/bs135/logledge/commit/832020aa749549bfeb82dbf7f52e5a3b45b98ccb))
+
 ## [0.3.0](https://github.com/bs135/logledge/compare/v0.2.0...v0.3.0) (2026-10-14)
 
 
