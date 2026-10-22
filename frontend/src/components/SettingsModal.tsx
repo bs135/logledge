@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import {VaultModal} from './VaultModal'
 import {APP_VERSION} from '../version'
+import {checkForUpdateManually} from './updateCheck'
 
 interface SettingsModalProps {
     initialTab?: 'general' | 'filter' | 'vaults' | 'appearance' | 'about'
@@ -66,6 +67,7 @@ export function SettingsModal({
     } | null>(null)
     const [syncingActive, setSyncingActive] = useState(false)
     const [syncMsg, setSyncMsg] = useState<{type: 'success' | 'error'; text: string} | null>(null)
+    const [checkingUpdate, setCheckingUpdate] = useState(false)
 
     // Load vaults list
     function refreshVaults() {
@@ -151,6 +153,15 @@ export function SettingsModal({
             setSyncMsg({type: 'error', text: String(err)})
         } finally {
             setSyncingActive(false)
+        }
+    }
+
+    async function handleCheckUpdate() {
+        setCheckingUpdate(true)
+        try {
+            await checkForUpdateManually()
+        } finally {
+            setCheckingUpdate(false)
         }
     }
 
@@ -250,7 +261,7 @@ export function SettingsModal({
 
                     {/* Content area */}
                     <div className="flex-1 overflow-y-auto p-5 text-sm">
-                        {/* TAB 1: GENERAL (Language only) */}
+                        {/* TAB 1: GENERAL (Language & Updates) */}
                         {tab === 'general' && (
                             <div className="space-y-4">
                                 <div>
@@ -296,6 +307,25 @@ export function SettingsModal({
                                                 <div className="text-neutral-500 dark:text-neutral-400">Tiếng Anh</div>
                                             </div>
                                         </label>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4">
+                                    <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('updatesTitle')}</h3>
+                                    <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">{t('updatesDesc')}</p>
+                                    <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-800/30">
+                                        <div className="text-xs">
+                                            <div className="text-neutral-500 dark:text-neutral-400">{t('currentVersionLabel')}</div>
+                                            <div className="font-semibold text-neutral-900 dark:text-neutral-100">v{APP_VERSION}</div>
+                                        </div>
+                                        <button
+                                            onClick={handleCheckUpdate}
+                                            disabled={checkingUpdate}
+                                            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60 transition-colors"
+                                        >
+                                            <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+                                            {checkingUpdate ? t('checkingUpdate') : t('checkUpdateBtn')}
+                                        </button>
                                     </div>
                                 </div>
                             </div>

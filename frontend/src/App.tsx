@@ -13,6 +13,7 @@ import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
+import {runStartupUpdateCheck} from './components/updateCheck'
 import {DetectVaultInfo, GetAbsolutePath, GetFileFilterConfig, GetNativeRelativePath, PickVaultFolder, ReadFile, RevealInExplorer, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
 import {ClipboardSetText, EventsOn} from '../wailsjs/runtime/runtime'
@@ -21,6 +22,7 @@ import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 const DEFAULT_SIDEBAR_WIDTH = 256
 const MIN_SIDEBAR_WIDTH = 180
 const MAX_SIDEBAR_WIDTH = 700
+const STARTUP_UPDATE_CHECK_DELAY_MS = 2000
 
 function App() {
     const vault = useVault()
@@ -81,6 +83,12 @@ function App() {
                 }
             })
             .catch(() => {})
+    }, [])
+
+    // Check for a new release once per launch, deferred so it never competes with cold start.
+    useEffect(() => {
+        const timer = window.setTimeout(runStartupUpdateCheck, STARTUP_UPDATE_CHECK_DELAY_MS)
+        return () => window.clearTimeout(timer)
     }, [])
 
     async function handleOpenVaultFolder() {
