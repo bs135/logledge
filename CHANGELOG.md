@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/bs135/logledge/compare/v0.4.0...v0.5.0) (2026-10-22)
+
+
+### Features
+
+* add toast notifications and update check ([05232a6](https://github.com/bs135/logledge/commit/05232a682f2224dcc725dff2a89f32ffcb34ca7d))
+* add toast notifications and update check ([a71788e](https://github.com/bs135/logledge/commit/a71788e9a2a605c74e4255270f95e831188a5dbc))
+
 ## [0.4.0](https://github.com/bs135/logledge/compare/v0.3.1...v0.4.0) (2026-10-22)
 
 
