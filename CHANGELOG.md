@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/bs135/logledge/compare/v0.3.1...v0.4.0) (2026-10-22)
+
+
+### Features
+
+* **filetree:** add copy, path and reveal actions to context menu ([bc127fa](https://github.com/bs135/logledge/commit/bc127fa318060ad3f635abf527502221ebd2bdc6))
+* **filetree:** add cut, copy and paste actions to context menu ([928a534](https://github.com/bs135/logledge/commit/928a534a1712cd56edffda8b9819fb7ec9ac3d05))
+* **filetree:** add file actions to the file tree context menu ([ae86638](https://github.com/bs135/logledge/commit/ae86638852aefa27629da06564c5b59f638953ad))
+
 ## [0.3.1](https://github.com/bs135/logledge/compare/v0.3.0...v0.3.1) (2026-10-22)
 
 
