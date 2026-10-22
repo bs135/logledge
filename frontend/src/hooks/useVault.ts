@@ -1,8 +1,10 @@
 import {useCallback, useEffect, useState} from 'react'
 import {
     CreateFile,
+    CopyEntry,
     CreateFolder,
     DeleteEntry,
+    DuplicateEntry,
     GetTree,
     InitVault,
     MoveEntry,
@@ -24,6 +26,9 @@ export interface UseVaultResult {
     rename: (relPath: string, newName: string) => Promise<string | undefined>
     move: (srcRelPath: string, destParentRelPath: string) => Promise<void>
     remove: (relPath: string) => Promise<void>
+    duplicate: (relPath: string) => Promise<string>
+    copyTo: (srcRelPath: string, destParentRelPath: string) => Promise<string>
+    moveTo: (srcRelPath: string, destParentRelPath: string) => Promise<string>
 }
 
 // useVault manages all state for the active Vault: directory path, file tree,
@@ -150,6 +155,32 @@ export function useVault(): UseVaultResult {
         [wrap],
     )
     const remove = useCallback((relPath: string) => wrap(() => DeleteEntry(relPath))(), [wrap])
+    const duplicate = useCallback(
+        async (relPath: string): Promise<string> => {
+            const newPath = await DuplicateEntry(relPath)
+            refresh()
+            return newPath
+        },
+        [refresh],
+    )
+    // copyTo and moveTo back the file tree Copy/Cut + Paste actions; unlike move,
+    // they return the new path and let the caller handle errors.
+    const copyTo = useCallback(
+        async (srcRelPath: string, destParentRelPath: string): Promise<string> => {
+            const newPath = await CopyEntry(srcRelPath, destParentRelPath)
+            refresh()
+            return newPath
+        },
+        [refresh],
+    )
+    const moveTo = useCallback(
+        async (srcRelPath: string, destParentRelPath: string): Promise<string> => {
+            const newPath = await MoveEntry(srcRelPath, destParentRelPath)
+            refresh()
+            return newPath
+        },
+        [refresh],
+    )
 
-    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove}
+    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove, duplicate, copyTo, moveTo}
 }

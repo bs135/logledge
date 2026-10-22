@@ -13,6 +13,7 @@ import (
 
 	"logledge/internal/config"
 	"logledge/internal/gitsync"
+	"logledge/internal/reveal"
 	"logledge/internal/search"
 	"logledge/internal/tray"
 	"logledge/internal/vault"
@@ -468,6 +469,38 @@ func (a *App) MoveEntry(srcRelPath, destParentRelPath string) (string, error) {
 // DeleteEntry moves the file or folder to the OS recycle bin.
 func (a *App) DeleteEntry(relPath string) error {
 	return a.vault.Delete(relPath)
+}
+
+// DuplicateEntry creates a copy of the file or folder at relPath next to it
+// ("Note.md" -> "Note copy.md" -> "Note copy (1).md") and returns its path.
+func (a *App) DuplicateEntry(relPath string) (string, error) {
+	return a.vault.Duplicate(relPath)
+}
+
+// CopyEntry copies the file or folder at srcRelPath into destParentRelPath
+// (file tree Copy/Paste) and returns the relative path of the copy.
+func (a *App) CopyEntry(srcRelPath, destParentRelPath string) (string, error) {
+	return a.vault.Copy(srcRelPath, destParentRelPath)
+}
+
+// GetAbsolutePath returns the full OS-native path on disk of the entry at relPath.
+func (a *App) GetAbsolutePath(relPath string) (string, error) {
+	return a.vault.AbsPath(relPath)
+}
+
+// GetNativeRelativePath returns relPath relative to the Vault root using the
+// OS-native path separator.
+func (a *App) GetNativeRelativePath(relPath string) (string, error) {
+	return a.vault.NativeRelPath(relPath)
+}
+
+// RevealInExplorer opens the system file manager with the entry at relPath selected.
+func (a *App) RevealInExplorer(relPath string) error {
+	abs, err := a.vault.AbsPath(relPath)
+	if err != nil {
+		return err
+	}
+	return reveal.Path(abs)
 }
 
 // ReadFile reads the file content (used by the editor in Phase 2).

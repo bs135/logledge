@@ -3,7 +3,7 @@ import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
-import {FileTree, InlineAction} from './components/FileTree'
+import {FileClipboard, FileTree, InlineAction, parentOf} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -13,9 +13,9 @@ import {QuickHelpModal} from './components/QuickHelpModal'
 import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
-import {DetectVaultInfo, GetFileFilterConfig, PickVaultFolder, ReadFile, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
+import {DetectVaultInfo, GetAbsolutePath, GetFileFilterConfig, GetNativeRelativePath, PickVaultFolder, ReadFile, RevealInExplorer, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
 import {config} from '../wailsjs/go/models'
-import {EventsOn} from '../wailsjs/runtime/runtime'
+import {ClipboardSetText, EventsOn} from '../wailsjs/runtime/runtime'
 import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
@@ -51,6 +51,7 @@ function App() {
     })
     const [isResizing, setIsResizing] = useState(false)
     const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
+    const [fileClipboard, setFileClipboard] = useState<FileClipboard | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const lastResizeMouseDownTimeRef = useRef(0)
     const isDraggingSidebarRef = useRef(false)
@@ -169,6 +170,7 @@ function App() {
     }
 
     function handleVaultSwitched(_newPath: string) {
+        setFileClipboard(null)
         loadNote(null, '')
         vault.reload()
     }
@@ -225,6 +227,61 @@ function App() {
             } catch (err) {
                 alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
             }
+        }
+    }
+
+    async function handleDuplicate(path: string) {
+        try {
+            await vault.duplicate(path)
+        } catch (err) {
+            alert(t('duplicateFailed') + String(err))
+        }
+    }
+
+    async function copyToClipboard(getText: () => Promise<string>) {
+        try {
+            const text = await getText()
+            const ok = await ClipboardSetText(text)
+            if (!ok) {
+                await navigator.clipboard.writeText(text)
+            }
+        } catch (err) {
+            alert(t('copyPathFailed') + String(err))
+        }
+    }
+
+    async function handleReveal(path: string) {
+        try {
+            await RevealInExplorer(path)
+        } catch (err) {
+            alert(t('revealFailed') + String(err))
+        }
+    }
+
+    async function handlePaste(destParent: string) {
+        const clip = fileClipboard
+        if (!clip) return
+        try {
+            if (clip.mode === 'copy') {
+                await vault.copyTo(clip.path, destParent)
+                return
+            }
+            if (parentOf(clip.path) === destParent) {
+                // Pasting a cut entry back into its own folder is a no-op.
+                setFileClipboard(null)
+                return
+            }
+            // Let in-flight auto-saves of the open note land before it is moved.
+            await saveQueueRef.current
+            const newPath = await vault.moveTo(clip.path, destParent)
+            setFileClipboard(null)
+            if (selectedPath === clip.path) {
+                followSelectedPath(newPath)
+            } else if (selectedPath && selectedPath.startsWith(clip.path + '/')) {
+                followSelectedPath(newPath + selectedPath.slice(clip.path.length))
+            }
+        } catch (err) {
+            alert(t('pasteFailed') + String(err))
         }
     }
 
@@ -562,6 +619,14 @@ function App() {
                                         onCreateFolder={handleCreateFolder}
                                         onRename={handleStartRename}
                                         onDelete={(path) => setDeleteTarget(path)}
+                                        onDuplicate={handleDuplicate}
+                                        onCopyPath={(path) => copyToClipboard(() => GetAbsolutePath(path))}
+                                        onCopyRelativePath={(path) => copyToClipboard(() => GetNativeRelativePath(path))}
+                                        onReveal={handleReveal}
+                                        clipboard={fileClipboard}
+                                        onCopy={(path) => setFileClipboard({mode: 'copy', path})}
+                                        onCut={(path) => setFileClipboard({mode: 'cut', path})}
+                                        onPaste={handlePaste}
                                         onMove={vault.move}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
@@ -715,6 +780,8 @@ function App() {
                     onClose={() => setSidebarContextMenuPos(null)}
                     onCreateFile={() => handleCreateNote('')}
                     onCreateFolder={() => handleCreateFolder('')}
+                    canPaste={Boolean(fileClipboard)}
+                    onPaste={() => handlePaste('')}
                 />
             )}
             <ConfirmModal

@@ -279,3 +279,137 @@ func TestWorktreeLockerBlocksWrites(t *testing.T) {
 		t.Fatalf("expected write after unlock, got %q", got)
 	}
 }
+
+func TestDuplicateFileAddsCopySuffixWithCounter(t *testing.T) {
+	svc, root := newTestService(t)
+	if err := os.MkdirAll(filepath.Join(root, "dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dir", "Note.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"dir/Note copy.md", "dir/Note copy (1).md", "dir/Note copy (2).md"}
+	for _, w := range want {
+		got, err := svc.Duplicate("dir/Note.md")
+		if err != nil {
+			t.Fatalf("Duplicate: %v", err)
+		}
+		if got != w {
+			t.Fatalf("expected %q, got %q", w, got)
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(got)))
+		if err != nil || string(data) != "hello" {
+			t.Fatalf("copy content mismatch: %q, %v", data, err)
+		}
+	}
+}
+
+func TestDuplicateFolderCopiesRecursively(t *testing.T) {
+	svc, root := newTestService(t)
+	if err := os.MkdirAll(filepath.Join(root, "v1.2", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "v1.2", "sub", "a.md"), []byte("A"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.Duplicate("v1.2")
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if got != "v1.2 copy" {
+		t.Fatalf("expected %q, got %q", "v1.2 copy", got)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "v1.2 copy", "sub", "a.md"))
+	if err != nil || string(data) != "A" {
+		t.Fatalf("nested copy content mismatch: %q, %v", data, err)
+	}
+
+	got, err = svc.Duplicate("v1.2")
+	if err != nil || got != "v1.2 copy (1)" {
+		t.Fatalf("expected %q, got %q (%v)", "v1.2 copy (1)", got, err)
+	}
+}
+
+func TestDuplicateRejectsRootAndTraversal(t *testing.T) {
+	svc, _ := newTestService(t)
+	if _, err := svc.Duplicate(""); err == nil {
+		t.Fatal("expected error when duplicating vault root")
+	}
+	if _, err := svc.Duplicate("../outside.md"); err == nil {
+		t.Fatal("expected error for path outside vault")
+	}
+}
+
+func TestAbsAndNativeRelPath(t *testing.T) {
+	svc, root := newTestService(t)
+
+	abs, err := svc.AbsPath("dir/Note.md")
+	if err != nil {
+		t.Fatalf("AbsPath: %v", err)
+	}
+	if want := filepath.Join(root, "dir", "Note.md"); abs != want {
+		t.Fatalf("expected %q, got %q", want, abs)
+	}
+
+	rel, err := svc.NativeRelPath("dir/Note.md")
+	if err != nil {
+		t.Fatalf("NativeRelPath: %v", err)
+	}
+	if want := filepath.Join("dir", "Note.md"); rel != want {
+		t.Fatalf("expected %q, got %q", want, rel)
+	}
+
+	if _, err := svc.AbsPath("../x"); err == nil {
+		t.Fatal("expected error for path outside vault")
+	}
+}
+
+func TestCopyKeepsNameOrAddsSuffix(t *testing.T) {
+	svc, root := newTestService(t)
+	for _, d := range []string{"src", "dst"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "Note.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"dst/Note.md", "dst/Note copy.md", "dst/Note copy (1).md"} {
+		got, err := svc.Copy("src/Note.md", "dst")
+		if err != nil {
+			t.Fatalf("Copy: %v", err)
+		}
+		if got != want {
+			t.Fatalf("expected %q, got %q", want, got)
+		}
+	}
+	if got, err := svc.Copy("src/Note.md", ""); err != nil || got != "Note.md" {
+		t.Fatalf("copy to root: got %q (%v)", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "src", "Note.md")); err != nil {
+		t.Fatalf("source must remain after copy: %v", err)
+	}
+}
+
+func TestCopyFolderIntoItselfFails(t *testing.T) {
+	svc, root := newTestService(t)
+	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Copy("a", "a"); err == nil {
+		t.Fatal("expected error when copying folder into itself")
+	}
+	if _, err := svc.Copy("a", "a/b"); err == nil {
+		t.Fatal("expected error when copying folder into its descendant")
+	}
+	if _, err := svc.Copy("a/b", "a/b-x"); err == nil {
+		t.Fatal("expected error for missing destination folder")
+	}
+	got, err := svc.Copy("a/b", "a")
+	if err != nil || got != "a/b copy" {
+		t.Fatalf("expected %q, got %q (%v)", "a/b copy", got, err)
+	}
+}

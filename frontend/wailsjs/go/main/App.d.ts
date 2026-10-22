@@ -8,6 +8,8 @@ import {search} from '../models';
 
 export function ConfigureSync(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function CopyEntry(arg1:string,arg2:string):Promise<string>;
+
 export function CreateFile(arg1:string,arg2:string):Promise<string>;
 
 export function CreateFolder(arg1:string,arg2:string):Promise<string>;
@@ -16,11 +18,17 @@ export function DeleteEntry(arg1:string):Promise<void>;
 
 export function DetectVaultInfo(arg1:string):Promise<config.VaultEntry>;
 
+export function DuplicateEntry(arg1:string):Promise<string>;
+
+export function GetAbsolutePath(arg1:string):Promise<string>;
+
 export function GetAppSettings():Promise<config.Config>;
 
 export function GetFileFilterConfig():Promise<config.FileFilterConfig>;
 
 export function GetLanguage():Promise<string>;
+
+export function GetNativeRelativePath(arg1:string):Promise<string>;
 
 export function GetSyncSettings():Promise<main.SyncSettings>;
 
@@ -45,6 +53,8 @@ export function ReadFile(arg1:string):Promise<string>;
 export function RemoveVault(arg1:string):Promise<void>;
 
 export function RenameEntry(arg1:string,arg2:string):Promise<string>;
+
+export function RevealInExplorer(arg1:string):Promise<void>;
 
 export function SaveAppSettings(arg1:string,arg2:string):Promise<void>;
 

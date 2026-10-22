@@ -6,6 +6,10 @@ export function ConfigureSync(arg1, arg2, arg3) {
   return window['go']['main']['App']['ConfigureSync'](arg1, arg2, arg3);
 }
 
+export function CopyEntry(arg1, arg2) {
+  return window['go']['main']['App']['CopyEntry'](arg1, arg2);
+}
+
 export function CreateFile(arg1, arg2) {
   return window['go']['main']['App']['CreateFile'](arg1, arg2);
 }
@@ -22,6 +26,14 @@ export function DetectVaultInfo(arg1) {
   return window['go']['main']['App']['DetectVaultInfo'](arg1);
 }
 
+export function DuplicateEntry(arg1) {
+  return window['go']['main']['App']['DuplicateEntry'](arg1);
+}
+
+export function GetAbsolutePath(arg1) {
+  return window['go']['main']['App']['GetAbsolutePath'](arg1);
+}
+
 export function GetAppSettings() {
   return window['go']['main']['App']['GetAppSettings']();
 }
@@ -32,6 +44,10 @@ export function GetFileFilterConfig() {
 
 export function GetLanguage() {
   return window['go']['main']['App']['GetLanguage']();
+}
+
+export function GetNativeRelativePath(arg1) {
+  return window['go']['main']['App']['GetNativeRelativePath'](arg1);
 }
 
 export function GetSyncSettings() {
@@ -80,6 +96,10 @@ export function RemoveVault(arg1) {
 
 export function RenameEntry(arg1, arg2) {
   return window['go']['main']['App']['RenameEntry'](arg1, arg2);
+}
+
+export function RevealInExplorer(arg1) {
+  return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
 
 export function SaveAppSettings(arg1, arg2) {
