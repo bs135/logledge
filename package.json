@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "logledge",
   "private": true,
   "version": "0.5.0",
   "type": "module",
@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "tauri": "tauri",
     "test": "node --test test-live-preview.mjs"
   },
   "dependencies": {
@@ -19,6 +20,8 @@
     "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.5",
     "@lezer/markdown": "^1.8.0",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-opener": "^2.7.2",
     "lucide-react": "^1.51.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -26,6 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",

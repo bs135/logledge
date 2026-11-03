@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Logledge",
+  "version": "../package.json",
+  "identifier": "com.logledge.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Logledge",
+        "width": 1024,
+        "height": 768,
+        "resizable": true,
+        "decorations": false,
+        "dragDropEnabled": false,
+        "backgroundColor": "#1b2636"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "bs135",
+    "copyright": "Copyright 2026 Logledge",
+    "shortDescription": "Modern markdown note-taking app",
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

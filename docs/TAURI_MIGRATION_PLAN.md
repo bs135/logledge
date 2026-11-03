@@ -256,3 +256,25 @@ No blocker found. Plan changes going into Phase 1:
   icon is kept in sync by listening to `onResized` + `isMaximized()`.
 - Credentials and search index stay backward compatible, so no migration step
   is needed for them.
+
+## 9. Phase 1 Notes
+
+- `frontend/` moved to the root with `git mv`. Wails still builds and runs in
+  parallel: `wails.json` sets `"frontend:dir": "."` and `main.go` embeds `dist/`.
+- The unused Python stub (`pyproject.toml`, `src/logledge/`) was removed
+  because it collided with the frontend `src/`.
+- `src-tauri/` is modeled on xmark. `tauri.conf.json` reads its version from
+  `../package.json`, so release bumps only touch `package.json` and
+  `Cargo.toml` (R12). Plugins registered: single-instance (first, focuses the
+  running window), dialog, opener, process.
+- `__APP_VERSION__` was not added: `src/version.ts` already reads the version
+  from `package.json` at build time, which gives the same result.
+- JS packages for `plugin-dialog` / `plugin-process` are added in Phase 4 when
+  the UI first calls them; only `@tauri-apps/api` and `plugin-opener` are
+  needed now.
+- `src/wailsShim.ts` is a **temporary** bridge: when `window.go` /
+  `window.runtime` are absent (Tauri, or a plain browser on `npm run dev`) it
+  maps the Wails runtime calls the UI uses onto Tauri window/event/opener APIs
+  and makes every bound Go method reject. The UI boots to the vault picker.
+  `WindowHide` minimizes until the tray exists (Phase 3). Deleted in Phase 4
+  together with `wailsjs/`.

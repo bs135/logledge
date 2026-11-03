@@ -4,6 +4,9 @@ import './style.css'
 import App from './App'
 import {I18nProvider} from './i18n'
 import {AppToaster} from './components/AppToaster'
+import {installWailsShim} from './wailsShim'
+
+installWailsShim()
 
 // Disable default browser/WebViewer context menu (Back, Forward, Reload, Save As, etc.)
 window.addEventListener(

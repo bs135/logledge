@@ -1,0 +1,23 @@
+[package]
+name = "logledge"
+version = "0.5.0"
+description = "Local-first Markdown note-taking app synced via GitHub"
+authors = ["bs135"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "logledge_lib"
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
