@@ -63,7 +63,7 @@ three OSes.
 | `WindowMinimise/ToggleMaximise/Hide`, `Quit` | `getCurrentWindow().minimize()/toggleMaximize()/hide()`, `exit()` from `plugin-process` (or a dedicated command) |
 | `WindowSetDark/Light/SystemDefaultTheme` | `getCurrentWindow().setTheme('dark' \| 'light' \| null)` |
 | `BrowserOpenURL` | `openUrl` from `plugin-opener` |
-| `ClipboardSetText` | `plugin-clipboard-manager` |
+| `ClipboardSetText` | `navigator.clipboard.writeText` (verified in Phase 0) |
 | `PickVaultFolder` (Go-side dialog) | `plugin-dialog` `open({directory: true})`, or keep a Rust command |
 
 ## 5. Risks
@@ -102,7 +102,7 @@ end of Phase 4 to compare behavior side by side.
   `capabilities/default.json`, `build.rs`, `main.rs` / `lib.rs`.
 - `tauri.conf.json`: productName `Logledge`, identifier `com.logledge.app`,
   `decorations: false`, `dragDropEnabled: false`, icons from `build/`.
-- Plugins: dialog, opener, single-instance, clipboard-manager, process.
+- Plugins: dialog, opener, single-instance, process.
 - Vite: `strictPort`, `clearScreen: false`, `__APP_VERSION__` like xmark; keep `@tailwindcss/vite`.
 - Done when: `npm run tauri dev` shows the UI (no backend yet).
 
@@ -174,3 +174,85 @@ One commit per module, each with ported tests:
 4. **Settings**: keep self-managed `config.json` via `dirs` (recommended,
    backward compatible), or move to `plugin-store` like xmark (loses existing
    config without a migration step)?
+
+## 8. Phase 0 Results
+
+Spikes ran on Windows 11 with Rust 1.90, `keyring` 3.6.3, `rusqlite` 0.37
+(`bundled`, SQLite 3.50 via `libsqlite3-sys` 0.35) and Tauri 2.11. Spike code
+was throwaway and is not committed; the findings below are what Phase 2 relies on.
+
+### R2: go-keyring credential interop (Windows): resolved
+
+A dummy token containing non-ASCII characters was written with go-keyring
+v0.2.8 (same code path as `gitsync.SetPAT`, under a separate service name so the
+real `logledge` entry was never touched), then read from Rust:
+
+| Read path | Result |
+|---|---|
+| `Entry::new(service, user).get_password()` | `NoEntry`: default target name differs |
+| `Entry::new_with_target("<service>:<user>", ..).get_password()` | Found, but **wrong value** (decodes the UTF-8 blob as UTF-16) |
+| `Entry::new_with_target("<service>:<user>", ..).get_secret()` + `String::from_utf8` | **Exact match** |
+
+The reverse direction also works: `set_secret(pat.as_bytes())` on the same
+target is read back unchanged by go-keyring. Phase 2 credentials therefore use:
+
+```rust
+fn pat_entry() -> keyring::Result<Entry> {
+    if cfg!(windows) {
+        Entry::new_with_target("logledge:github-pat", "logledge", "github-pat")
+    } else {
+        Entry::new("logledge", "github-pat")
+    }
+}
+// read:  String::from_utf8(entry.get_secret()?)
+// write: entry.set_secret(pat.as_bytes())
+```
+
+Existing PATs survive the upgrade; no "re-enter PAT" fallback is needed on
+Windows. macOS (`security` service/account) and Linux (Secret Service
+attributes) were not tested here and stay on the Phase 6 QA checklist.
+
+### FTS5 index interop: resolved
+
+An index created by `modernc.org/sqlite` with the exact schema and pragmas of
+`internal/search` (WAL mode) opens in `rusqlite` with `bundled`. The original
+`snippet(notes_fts, 1, '**', '**', '...', 10)` query, `ORDER BY rank` and the
+`ftsQuery` quoting (`"tok"*`) return the same rows and highlights, including
+Vietnamese text, and inserts into `files` / `notes_fts` succeed. Existing
+indexes can be reused as-is; no forced rebuild on upgrade.
+
+### R1: HTML5 drag-and-drop with `dragDropEnabled: false`: resolved
+
+A minimal undecorated Tauri window (`dragDropEnabled: false`) was tested manually for:
+1. Dropping an image file from Explorer onto a textarea (`dataTransfer.files` +
+   `FileReader`), as `Editor.tsx` does.
+2. HTML5 drag between list rows (`text/plain` payload), as `FileTree.tsx` does.
+3. `getCurrentWindow().setTheme('dark' | 'light' | null)`.
+4. `navigator.clipboard.writeText` (decides whether
+   `plugin-clipboard-manager` is needed).
+5. R6: double-click on a `data-tauri-drag-region` title bar toggles maximize
+   natively (so `TitleBar`'s own `onDoubleClick` must go).
+
+| # | Result |
+|---|---|
+| 1 | **Pass.** A PNG dropped from Explorer arrives in `dataTransfer.files` with name, MIME type and size; `FileReader` produces the base64 payload `SaveAttachment` expects |
+| 2 | **Pass.** Row-to-row moves in both directions deliver the `text/plain` path |
+| 3 | **Pass.** `setTheme('dark' \| 'light' \| null)` all succeed; replaces `WindowSet*Theme` |
+| 4 | **Pass.** `navigator.clipboard.writeText` works: origin `http://tauri.localhost` is a secure context. `plugin-clipboard-manager` is **not** needed for copying |
+| 5 | **Confirmed (R6).** Dragging the window by a `data-tauri-drag-region` title bar works. Double-clicking it never delivers a `dblclick` event to JS: Tauri's drag region consumes the mouse events and handles maximize natively. `TitleBar`'s `onDoubleClick={() => WindowToggleMaximise()}` would be dead code, so remove it; double-click is not toggled twice |
+
+Phase 4 follow-up: `EditorContextMenu` pastes via `document.execCommand('paste')`;
+check it in the Tauri webview and fall back to `navigator.clipboard.readText()`
+if it is blocked.
+
+### Phase 0 conclusion
+
+No blocker found. Plan changes going into Phase 1:
+- Drop `plugin-clipboard-manager`; use `navigator.clipboard`.
+- `dragDropEnabled: false` is mandatory in `tauri.conf.json`.
+- `TitleBar`: replace `--wails-draggable` with `data-tauri-drag-region` and
+  drop `onDoubleClick`. Elements inside the bar that must not start a drag
+  (vault switcher, buttons) simply omit the attribute. The maximize/restore
+  icon is kept in sync by listening to `onResized` + `isMaximized()`.
+- Credentials and search index stay backward compatible, so no migration step
+  is needed for them.
