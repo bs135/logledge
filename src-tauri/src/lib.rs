@@ -7,6 +7,8 @@ mod error;
 #[allow(dead_code)]
 mod fuzzy;
 #[allow(dead_code)]
+mod gitsync;
+#[allow(dead_code)]
 mod search;
 #[allow(dead_code)]
 mod vault;
