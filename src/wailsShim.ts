@@ -77,6 +77,45 @@ const appProxy = new Proxy(
     },
 )
 
+// Wails marks drag regions with the inherited CSS variable --wails-draggable
+// ("drag" / "no-drag"); Tauri only understands data-tauri-drag-region.
+function isDragRegion(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) {
+        return false
+    }
+    return getComputedStyle(target).getPropertyValue('--wails-draggable').trim() === 'drag'
+}
+
+// Mirrors Tauri's own drag-region handling: the first press starts a native
+// window drag, a double press toggles maximize. The native drag loop swallows
+// the matching dblclick on some platforms, so React's onDoubleClick on the
+// title bar is blocked here to keep the toggle from firing twice.
+function installDragRegions(): void {
+    window.addEventListener(
+        'mousedown',
+        (e) => {
+            if (e.button !== 0 || !isDragRegion(e.target)) {
+                return
+            }
+            if (e.detail === 2) {
+                currentWindow()?.toggleMaximize()
+            } else {
+                currentWindow()?.startDragging()
+            }
+        },
+        {capture: true},
+    )
+    window.addEventListener(
+        'dblclick',
+        (e) => {
+            if (isDragRegion(e.target)) {
+                e.stopPropagation()
+            }
+        },
+        {capture: true},
+    )
+}
+
 export function installWailsShim(): void {
     const w = window as any
     if (w.go || w.runtime) {
@@ -84,4 +123,7 @@ export function installWailsShim(): void {
     }
     w.runtime = runtimeProxy
     w.go = {main: {App: appProxy}}
+    if (isTauri) {
+        installDragRegions()
+    }
 }
