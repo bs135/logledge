@@ -27,12 +27,21 @@ pub struct VaultEntry {
     pub path: String,
     #[serde(deserialize_with = "null_default")]
     pub name: String,
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_repo_url: String,
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_branch: String,
     /// "none" | "pat" | "ssh"
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_auth_method: String,
 }
 
@@ -57,7 +66,12 @@ impl FileFilterConfig {
             enabled: true,
             mode: "whitelist".into(),
             whitelist: vec![".md".into(), ".markdown".into(), ".txt".into()],
-            blacklist: vec![".exe".into(), ".bin".into(), ".dll".into(), ".logledge".into()],
+            blacklist: vec![
+                ".exe".into(),
+                ".bin".into(),
+                ".dll".into(),
+                ".logledge".into(),
+            ],
         }
     }
 }
@@ -71,25 +85,43 @@ pub struct Config {
     pub vault_path: String,
 
     /// Known vaults for multi-vault switching.
-    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub vaults: Vec<VaultEntry>,
 
     /// "dark" | "light" | "system"
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub theme: String,
 
     /// "vi" | "en"
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub language: String,
 
     // Legacy global GitHub sync settings, kept as a fallback for vaults
     // configured before per-vault settings existed. The Personal Access Token
     // is never stored here; it lives in the OS keychain.
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_repo_url: String,
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_branch: String,
-    #[serde(skip_serializing_if = "String::is_empty", deserialize_with = "null_default")]
+    #[serde(
+        skip_serializing_if = "String::is_empty",
+        deserialize_with = "null_default"
+    )]
     pub git_auth_method: String,
 
     /// File filter preferences for the explorer tree.
@@ -237,14 +269,24 @@ mod tests {
         assert_eq!(load_from(&path).unwrap(), Config::default());
 
         fs::write(&path, r#"{"vaultPath":"x","fileFilter":{"enabled":false}}"#).unwrap();
-        assert_eq!(load_from(&path).unwrap().file_filter, FileFilterConfig::default_filter());
+        assert_eq!(
+            load_from(&path).unwrap().file_filter,
+            FileFilterConfig::default_filter()
+        );
     }
 
     #[test]
     fn save_omits_empty_fields_like_go() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.json");
-        save_to(&path, &Config { vault_path: "v".into(), ..Config::default() }).unwrap();
+        save_to(
+            &path,
+            &Config {
+                vault_path: "v".into(),
+                ..Config::default()
+            },
+        )
+        .unwrap();
 
         let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         let keys: Vec<_> = value.as_object().unwrap().keys().cloned().collect();

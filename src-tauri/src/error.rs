@@ -61,7 +61,10 @@ impl From<&str> for Error {
 /// Tauri serializes command errors to the frontend; send the bare message so
 /// the UI keeps receiving a string, as it did from Wails.
 impl serde::Serialize for Error {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
     }
 }

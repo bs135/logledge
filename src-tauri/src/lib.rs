@@ -5,6 +5,8 @@ mod config;
 #[allow(dead_code)]
 mod error;
 #[allow(dead_code)]
+mod vault;
+#[allow(dead_code)]
 mod watcher;
 
 use tauri::Manager;

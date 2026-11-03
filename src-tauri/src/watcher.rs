@@ -113,9 +113,13 @@ mod tests {
     fn start(root: &Path) -> (Watcher, Arc<AtomicUsize>) {
         let count = Arc::new(AtomicUsize::new(0));
         let c = Arc::clone(&count);
-        let w = Watcher::new(root, DEBOUNCE, Arc::new(move || {
-            c.fetch_add(1, Ordering::SeqCst);
-        }))
+        let w = Watcher::new(
+            root,
+            DEBOUNCE,
+            Arc::new(move || {
+                c.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
         .unwrap();
         (w, count)
     }
