@@ -19,6 +19,6 @@
 
 - [ ] Code follows project guidelines and formatting conventions.
 - [ ] Backend checks pass (`go vet ./...` & `go test ./...`).
-- [ ] Frontend builds without TypeScript errors (`cd frontend && npm run build`).
+- [ ] Frontend builds without TypeScript errors (`npm run build`).
 - [ ] Added or updated translation keys (`en` / `vi`) if UI text changed.
 - [ ] Commit message adheres to project format (`type: title` with bulleted body).

@@ -156,7 +156,6 @@ go test -v ./...
 
 Frontend verification:
 ```bash
-cd frontend
 npm run build
 ```
 
@@ -216,15 +215,14 @@ Continuous Integration and packaging are automated via `.github/workflows/releas
 │   ├── tray/                   # System tray integration and lifecycle
 │   ├── vault/                  # VaultService: file/folder tree CRUD, attachments, trash
 │   └── watcher/                # fsnotify wrapper with debounce and self-write suppression
-├── frontend/
-│   ├── src/
-│   │   ├── components/         # TitleBar, FileTree, Editor, QuickSwitcher, GlobalSearch, Modals
-│   │   ├── hooks/              # useVault, useTheme hooks
-│   │   ├── i18n/               # Localization dictionaries (en, vi)
-│   │   ├── App.tsx             # Main application layout and modal orchestration
-│   │   ├── main.tsx            # React root mount
-│   │   └── style.css           # Tailwind CSS imports, typography overrides, dark/light theme variables
-│   └── wailsjs/                # Auto-generated Wails Go bindings (do not edit manually)
+├── src/
+│   ├── components/             # TitleBar, FileTree, Editor, QuickSwitcher, GlobalSearch, Modals
+│   ├── hooks/                  # useVault, useTheme hooks
+│   ├── i18n/                   # Localization dictionaries (en, vi)
+│   ├── App.tsx                 # Main application layout and modal orchestration
+│   ├── main.tsx                # React root mount
+│   └── style.css               # Tailwind CSS imports, typography overrides, dark/light theme variables
+├── wailsjs/                    # Auto-generated Wails Go bindings (do not edit manually)
 ├── build/                      # Build assets, application icons, NSIS installer configs
 ├── docs/                       # Project documentation, plans, and assets
 └── .github/workflows/          # CI, release, and automated testing workflows
