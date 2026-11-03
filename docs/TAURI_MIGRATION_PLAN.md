@@ -1,0 +1,176 @@
+# Logledge — Wails v2 → Tauri v2 Migration Plan
+
+Goal: replace the tech stack (Wails v2 + Go) with Tauri v2 + Rust, following the
+same structure and build/release approach as `xmark`, while keeping every
+existing feature and user-visible behavior.
+
+## 1. Summary
+
+**Feasible, medium effort.** The Go backend that must actually be rewritten in
+Rust is ~2,000 LOC (`vault`, `gitsync`, `search`, `watcher`, `config`,
+`updater`, `app.go`). Two packages can be dropped entirely because Tauri
+provides them:
+
+- `internal/tray` (406 lines of raw Win32) → Tauri built-in tray, which also
+  works on macOS and Linux.
+- `internal/reveal` → `revealItemInDir` from `tauri-plugin-opener`.
+
+The frontend (React + CodeMirror) stays almost untouched: only the 38 bound
+methods and a handful of runtime APIs change.
+
+Estimate: **~8–12 working days** for one developer, excluding manual QA on all
+three OSes.
+
+## 2. Current State
+
+| | logledge (current) | xmark (reference) |
+|---|---|---|
+| Layout | `frontend/` + Go at repo root | `src/` at root + `src-tauri/` |
+| Backend calls | Generated `wailsjs/` (classes with `createFrom`) | Manual `invoke()` |
+| Settings storage | Go writes `config.json` | `plugin-store` |
+| Update check | Go (`internal/updater`) | Frontend `fetch` |
+| Release | release-please + `wails build` + custom packaging | github-tag-action + `tauri-action` |
+| Vite / TS | Vite 7, TS 5, Tailwind 4 | Vite 8, TS 6, Tailwind 3 |
+
+## 3. Backend Mapping (Go → Rust / Tauri)
+
+| Go | Rust / Tauri | Notes |
+|---|---|---|
+| `wails.Run` + `options.App` | `tauri::Builder`, `tauri.conf.json` | `decorations: false`, 1024×768 |
+| `SingleInstanceLock` | `tauri-plugin-single-instance` | Callback shows + unminimizes the window |
+| `HideWindowOnClose` | `WindowEvent::CloseRequested` → `prevent_close()` + `hide()` | |
+| `OnShutdown` (final sync, 8s timeout) | `RunEvent::ExitRequested` → `prevent_exit()` → sync with timeout → `app.exit(0)` | Risk R3 |
+| `internal/tray` | `tauri::tray::TrayIconBuilder` + `Menu` | Rebuild vi/en labels on language change |
+| `internal/vault` | `std::fs`, `walkdir`, `trash` crate | Keep path-traversal guard, worktree lock, `WriteFileIfUnchanged` |
+| `internal/watcher` (fsnotify) | `notify` + 300ms debounce + 2s suppress map | `notify` is natively recursive; ignore `.git` |
+| `internal/gitsync` | `std::process::Command` running `git`, `creation_flags(CREATE_NO_WINDOW)` on Windows | Port as-is: fetch → autoCommit → ff / merge `-X ours` → conflict rename → push |
+| `go-keyring` | `keyring` crate | Compatibility risk R2 |
+| `internal/search` (modernc sqlite FTS5) | `rusqlite` with `bundled` (FTS5 enabled) | Same SQL and `snippet()`; existing index files stay readable |
+| `sahilm/fuzzy` | `nucleo-matcher` or `fuzzy-matcher` | Ranking will differ slightly |
+| `internal/config` | `serde_json` + `dirs::config_dir()/logledge/config.json` | Do **not** use Tauri `app_config_dir()` (different path, loses old config) |
+| `internal/updater` + `update.go` | Move to TypeScript like xmark | Keep draft/prerelease skip, `safeReleaseURL`, prerelease ordering |
+| `internal/reveal` | opener `revealItemInDir` | Drop the package |
+| Goroutines + 5-minute periodic sync | `tauri::async_runtime::spawn` + `tokio::time::interval`, stop via `JoinHandle::abort` | |
+
+## 4. Frontend Mapping (Wails runtime → Tauri)
+
+| Wails | Tauri |
+|---|---|
+| `wailsjs/go/main/App` (38 functions) | Hand-written `src/lib/api.ts` wrapping `invoke`, **same function names** so components only change the import path |
+| `wailsjs/go/models` (`new config.VaultEntry`, `vault.Node.createFrom`) | Plain TS interfaces in `src/lib/types.ts`; fix the 5 call sites using `new …` / `createFrom` |
+| `EventsOn` (returns unsubscribe synchronously) | `listen()` returns `Promise<UnlistenFn>`; update cleanup in 4 `useEffect`s |
+| `--wails-draggable: drag/no-drag` | `data-tauri-drag-region` |
+| `WindowMinimise/ToggleMaximise/Hide`, `Quit` | `getCurrentWindow().minimize()/toggleMaximize()/hide()`, `exit()` from `plugin-process` (or a dedicated command) |
+| `WindowSetDark/Light/SystemDefaultTheme` | `getCurrentWindow().setTheme('dark' \| 'light' \| null)` |
+| `BrowserOpenURL` | `openUrl` from `plugin-opener` |
+| `ClipboardSetText` | `plugin-clipboard-manager` |
+| `PickVaultFolder` (Go-side dialog) | `plugin-dialog` `open({directory: true})`, or keep a Rust command |
+
+## 5. Risks
+
+| # | Risk | Level | Mitigation |
+|---|---|---|---|
+| R1 | **HTML5 drag-and-drop breaks.** On Windows Tauri intercepts drops by default, breaking image drop into the editor and FileTree drag-and-drop | High | Set `"dragDropEnabled": false` on the window; verify in Phase 0 |
+| R2 | **Stored PAT lost.** go-keyring on Windows uses target `logledge:github-pat` with a UTF-8 blob; `keyring-rs` defaults to a different target and a UTF-16 blob. Linux attributes also differ | High | `Entry::new_with_target("logledge:github-pat", "logledge", "github-pat")`, read via `get_secret()` and decode UTF-8, write back in the same format. Spike against a real PAT from the Wails build |
+| R3 | **Sync on exit.** `ExitRequested`, tray "Quit" and Ctrl+click on close must share one path; easy to hang or exit twice | Medium | Single `graceful_quit()` guarded by an `AtomicBool`, sync on a separate thread with an 8s timeout |
+| R4 | **Sync commands run on the main thread.** Non-`async` Tauri commands block the UI; git and reindex are slow | Medium | Make git/search/tree commands `async` or use `spawn_blocking` |
+| R5 | **Concurrency semantics drift** (worktree lock, run lock, reindex cancel) | Medium | `Arc<Mutex>` (`parking_lot`); cancel reindex via an `AtomicU64` generation counter; port all of `gitsync_test` and `vault_test` |
+| R6 | **Window drag behavior differs.** Tauri toggles maximize on double-click of a drag region; the current `onDoubleClick` would toggle twice. Children do not inherit the drag region | Medium | Remove `onDoubleClick`; check every TitleBar element |
+| R7 | **Installer.** Wails NSIS writes uninstall key `LogledgeLogledge`; Tauri NSIS uses a different key and install dir → users end up with two installs | Medium | NSIS hook (`NSIS_HOOK_PREINSTALL`) that silently runs the old uninstaller, or document it in release notes |
+| R8 | **localStorage lost** (theme, sidebar width, lang) because origin and WebView2 profile change | Low | Theme/lang are also in `config.json`; accept losing sidebar width |
+| R9 | **Serialization differences.** Go nil slices → `null`, Rust empty `Vec` → `[]`; `omitempty` needs `skip_serializing_if` | Low | Audit frontend `null` checks; keep JSON field names (`gitRepoUrl`, `repoURL`, …) |
+| R10 | **Ctrl+P result order** changes with a different fuzzy library | Low | Accept, or tune scoring |
+| R11 | **`invoke` arg naming**: Tauri maps camelCase JS args to snake_case Rust params | Low | Keep one convention inside `api.ts` |
+| R12 | **Version bumps**: xmark needs follow-up "sync Cargo.lock" commits after each release | Low | Set `tauri.conf.json` `"version": "../package.json"`; release-please bumps `package.json` + `Cargo.toml` (`toml` type) |
+
+## 6. Implementation Plan
+
+Work on branch `feature/tauri-migration`. Keep the Go code buildable until the
+end of Phase 4 to compare behavior side by side.
+
+### Phase 0 — Spikes (0.5–1 day)
+
+- R2: read a PAT written by go-keyring using `keyring-rs` on Windows.
+- R1: minimal Tauri window, drop an image into a textarea with `dragDropEnabled: false`.
+- Open an existing FTS5 index file with `rusqlite` (`bundled`).
+- If R2 fails: fall back to asking the user to re-enter the PAT once.
+
+### Phase 1 — Project skeleton (1 day)
+
+- `git mv frontend/* .` to match the xmark layout (keeps file history).
+- Scaffold `src-tauri/` modeled on xmark's `Cargo.toml`,
+  `capabilities/default.json`, `build.rs`, `main.rs` / `lib.rs`.
+- `tauri.conf.json`: productName `Logledge`, identifier `com.logledge.app`,
+  `decorations: false`, `dragDropEnabled: false`, icons from `build/`.
+- Plugins: dialog, opener, single-instance, clipboard-manager, process.
+- Vite: `strictPort`, `clearScreen: false`, `__APP_VERSION__` like xmark; keep `@tailwindcss/vite`.
+- Done when: `npm run tauri dev` shows the UI (no backend yet).
+
+### Phase 2 — Backend core (3–4 days)
+
+One commit per module, each with ported tests:
+
+1. `config.rs` — same path and schema, default `FileFilter`.
+2. `vault.rs` — `resolve` traversal guard, `Tree`, CRUD, `Copy` / `Duplicate` /
+   `copyName`, trash, `WriteFileIfUnchanged`, attachments, data URLs. Port `vault_test.go`.
+3. `watcher.rs` — `notify` + debounce + suppress, ignore `.git`.
+4. `search.rs` — rusqlite FTS5, mtime-based reindex with cancellation,
+   `ftsQuery`, `QuickSwitch`. Port `search_test.go`.
+5. `gitsync/` — `run()` with `CREATE_NO_WINDOW`, `ensure_repo`, `sync`,
+   `reconcile`, `merge_with_conflict_rename`, `split_nul`, `detect_git_info`,
+   credentials. Port `gitsync_test.go` and `detect_test.go`. Highest-care module.
+6. `state.rs` + `commands.rs` — `AppState` holding the services; 37 commands
+   (`GetAppVersion` replaced by `__APP_VERSION__`); emit `vault:changed` and
+   `sync:status` via `app.emit`.
+
+### Phase 3 — App lifecycle (1–1.5 days)
+
+- Tray (Open / Sync now / Quit, localized labels, left-click shows the window),
+  hide-on-close, single-instance, `graceful_quit()` with the 8s final sync.
+- 5-minute periodic sync, restarted on vault switch or sync settings change.
+
+### Phase 4 — Frontend (1.5–2 days)
+
+- Add `src/lib/api.ts` + `src/lib/types.ts`; delete `wailsjs/`.
+- Update `TitleBar`, `useTheme`, `useVault`, `App.tsx`, `SyncStatusBar`,
+  `Editor`, `SettingsModal`, `updateCheck`, `i18n`.
+- Move the updater to `src/utils/updateCheck.ts` + `version.ts`, keeping the Go
+  logic (draft/prerelease handling, safe release URL).
+- Add `disableWebviewDefaults` like xmark, without blocking the app's own context menus.
+
+### Phase 5 — CI/CD (1 day)
+
+- `ci.yml`: Node build + `npm test` + `cargo fmt --check`, `cargo clippy`,
+  `cargo test` (install `libwebkit2gtk-4.1-dev` etc. on Ubuntu).
+- `release.yml`: **keep release-please** (generates CHANGELOG); replace the
+  build job with `tauri-action` using xmark's matrix. Add macOS
+  `universal-apple-darwin` to match the current universal build.
+- `release-please-config.json`: drop `wails.json`, add `src-tauri/Cargo.toml`
+  (`toml` type, `$.package.version`).
+- NSIS hook to uninstall the old Wails build (R7).
+
+### Phase 6 — Cleanup and QA (1–2 days)
+
+- Remove `main.go`, `app.go`, `update.go`, `go.mod` / `go.sum`, `internal/`,
+  `wails.json`, `build/` (keep source icons). Possibly remove the unused Python
+  stub (`pyproject.toml`, `src/logledge/`) — to be confirmed.
+- Update `README`, `.github/copilot-instructions.md`, `docs/PLAN.md`.
+- Manual QA checklist on Windows / macOS / Linux:
+  - open / switch vault; file tree CRUD; drag-and-drop
+  - paste / drop images; auto-save when the file changes externally
+  - Ctrl+P, Ctrl+Shift+F
+  - sync via PAT and SSH; conflict; offline
+  - tray; hide vs quit; single instance
+  - theme; language; update toast
+  - upgrade from Wails 0.5.0 keeps config and PAT
+- Release as **0.6.0** or **1.0.0**, stating the stack change in release notes.
+
+## 7. Open Decisions
+
+1. **Layout**: move `frontend/` to the root like xmark (recommended), or keep `frontend/`?
+2. **Release**: keep release-please (recommended, keeps CHANGELOG) or switch to
+   github-tag-action like xmark?
+3. **Update check**: frontend like xmark (recommended) or keep it in Rust?
+4. **Settings**: keep self-managed `config.json` via `dirs` (recommended,
+   backward compatible), or move to `plugin-store` like xmark (loses existing
+   config without a migration step)?
