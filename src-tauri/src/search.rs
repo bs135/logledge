@@ -57,7 +57,8 @@ impl SearchService {
         Self::with_index_dir(None)
     }
 
-    fn with_index_dir(index_dir: Option<PathBuf>) -> Self {
+    /// Like [`new`](Self::new) with an explicit index directory (tests).
+    pub(crate) fn with_index_dir(index_dir: Option<PathBuf>) -> Self {
         SearchService {
             index_dir,
             index: Mutex::new(None),

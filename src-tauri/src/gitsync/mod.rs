@@ -21,11 +21,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::vault::WorktreeLock;
 
-// Re-exported for the Tauri commands added at the end of Phase 2.
-#[allow(unused_imports)]
-pub use credentials::{clear_pat, get_pat, set_pat};
-#[allow(unused_imports)]
-pub use detect::{detect_git_info, DetectedGitInfo};
+pub use credentials::{get_pat, set_pat};
+pub use detect::detect_git_info;
 
 /// Authentication mechanism used with GitHub.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

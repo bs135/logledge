@@ -145,7 +145,7 @@ impl Default for Config {
 }
 
 /// Path to config.json in the OS config directory, creating its folder.
-fn default_path() -> Result<PathBuf> {
+pub fn default_path() -> Result<PathBuf> {
     let dir = dirs::config_dir()
         .ok_or_else(|| Error::msg("cannot determine the user config directory"))?
         .join("logledge");
@@ -153,22 +153,8 @@ fn default_path() -> Result<PathBuf> {
     Ok(dir.join("config.json"))
 }
 
-/// Reads the configuration. A missing file yields the defaults without error.
-pub fn load() -> Result<Config> {
-    load_from(&default_path()?)
-}
-
-/// Like [`load`], falling back to the defaults on any error (Go's
-/// `cfg, _ := config.Load()` pattern).
-pub fn load_or_default() -> Config {
-    load().unwrap_or_default()
-}
-
-/// Writes the configuration as indented JSON.
-pub fn save(cfg: &Config) -> Result<()> {
-    save_to(&default_path()?, cfg)
-}
-
+/// Reads the configuration at `path`. A missing file yields the defaults
+/// without error.
 pub fn load_from(path: &Path) -> Result<Config> {
     let data = match fs::read(path) {
         Ok(data) => data,
@@ -183,6 +169,7 @@ pub fn load_from(path: &Path) -> Result<Config> {
     Ok(cfg)
 }
 
+/// Writes the configuration as indented JSON.
 pub fn save_to(path: &Path, cfg: &Config) -> Result<()> {
     let data = serde_json::to_vec_pretty(cfg)?;
     fs::write(path, data)?;

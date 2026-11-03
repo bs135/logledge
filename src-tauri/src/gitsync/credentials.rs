@@ -44,6 +44,7 @@ fn get(service: &str, user: &str) -> Result<Option<String>> {
     }
 }
 
+#[cfg(test)]
 fn clear(service: &str, user: &str) -> Result<()> {
     match entry(service, user).and_then(|e| e.delete_credential()) {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -59,11 +60,6 @@ pub fn set_pat(pat: &str) -> Result<()> {
 /// Reads the Personal Access Token; `None` when none is stored.
 pub fn get_pat() -> Result<Option<String>> {
     get(SERVICE, USER)
-}
-
-/// Removes the Personal Access Token (no error if absent).
-pub fn clear_pat() -> Result<()> {
-    clear(SERVICE, USER)
 }
 
 #[cfg(test)]
