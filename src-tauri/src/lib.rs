@@ -1,3 +1,10 @@
+// Backend modules are wired to Tauri commands at the end of Phase 2; until
+// then they are only exercised by their tests.
+#[allow(dead_code)]
+mod config;
+#[allow(dead_code)]
+mod error;
+
 use tauri::Manager;
 
 /// Label of the single application window declared in tauri.conf.json.
