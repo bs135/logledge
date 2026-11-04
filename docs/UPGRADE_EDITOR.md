@@ -1,5 +1,7 @@
 # Implementation Plan: Obsidian-Style Inline Markdown Editor (Live Preview) for Logledge
 
+> **Historical document.** Written for the original Wails v2 (Go) implementation. Since 0.6.0 the app runs on Tauri v2 with a Rust backend; see [TAURI_MIGRATION_PLAN.md](TAURI_MIGRATION_PLAN.md) for how each Go component maps to Rust.
+
 ## 1. Problem Statement & Motivation
 Logledge currently uses **Milkdown Crepe** (`@milkdown/crepe`), which is built on **ProseMirror**. While functional as a rich-text WYSIWYG editor, it has significant drawbacks:
 - It does not offer Obsidian's signature **Live Preview / Hybrid Editing** experience: seeing rich formatting by default, but revealing raw Markdown syntax (e.g., `**bold**`, `# Heading`, `[link](url)`) when clicking or placing the cursor directly on a node.

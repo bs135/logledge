@@ -18,7 +18,7 @@
 ## Checklist
 
 - [ ] Code follows project guidelines and formatting conventions.
-- [ ] Backend checks pass (`go vet ./...` & `go test ./...`).
-- [ ] Frontend builds without TypeScript errors (`cd frontend && npm run build`).
+- [ ] Backend checks pass (`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` & `cargo test` in `src-tauri/`).
+- [ ] Frontend builds and tests pass (`npm run build` & `npm test`).
 - [ ] Added or updated translation keys (`en` / `vi`) if UI text changed.
 - [ ] Commit message adheres to project format (`type: title` with bulleted body).

@@ -1,0 +1,91 @@
+import {useEffect, useState} from 'react'
+import {getSyncStatus, onEvent, syncNow} from '../lib/api'
+import type {SyncStatus} from '../lib/types'
+import {Settings, CheckCircle2, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
+import {useI18n} from '../i18n'
+
+interface SyncStatusBarProps {
+    onOpenSettings: () => void
+}
+
+function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
+    if (syncing) {
+        return <RefreshCw className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+    }
+    switch (state) {
+        case 'idle':
+            return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        case 'syncing':
+            return <RefreshCw className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+        case 'conflict':
+            return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+        case 'offline':
+            return <WifiOff className="h-3.5 w-3.5 text-neutral-400" />
+        case 'error':
+            return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        case 'not_configured':
+        default:
+            return <Settings className="h-3.5 w-3.5 text-neutral-500" />
+    }
+}
+
+// SyncStatusBar displays GitHub sync status (Phase 4) at the bottom of the screen,
+// allowing users to click to sync immediately or open settings.
+export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
+    const {t} = useI18n()
+    const [status, setStatus] = useState<SyncStatus>({state: 'not_configured', message: ''})
+    const [syncing, setSyncing] = useState(false)
+
+    useEffect(() => {
+        getSyncStatus().then(setStatus).catch(() => {})
+        const off = onEvent('sync:status', (s: SyncStatus) => setStatus(s))
+        return off
+    }, [])
+
+    async function handleClick() {
+        if (status.state === 'not_configured') {
+            onOpenSettings()
+            return
+        }
+        setSyncing(true)
+        try {
+            await syncNow()
+        } catch {
+            // Error status is already emitted via the sync:status event
+        } finally {
+            setSyncing(false)
+        }
+    }
+
+    function getStateLabel(state: string) {
+        switch (state) {
+            case 'not_configured':
+                return t('syncNotConfigured')
+            case 'idle':
+                return t('syncIdle')
+            case 'syncing':
+                return t('syncSyncing')
+            case 'conflict':
+                return t('syncConflict')
+            case 'offline':
+                return t('syncOffline')
+            case 'error':
+                return t('syncError')
+            default:
+                return state
+        }
+    }
+
+    return (
+        <div className="flex items-center border-t border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 px-3 py-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+            <button
+                className="flex items-center gap-1.5 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors"
+                onClick={handleClick}
+                title={status.message || t('syncClickToSync')}
+            >
+                <StatusIcon state={status.state} syncing={syncing} />
+                <span>{syncing ? t('syncSyncing') : getStateLabel(status.state)}</span>
+            </button>
+        </div>
+    )
+}

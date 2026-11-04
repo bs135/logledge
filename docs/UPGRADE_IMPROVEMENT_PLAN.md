@@ -1,5 +1,7 @@
 # Logledge Upgrade & Improvement Plan
 
+> **Historical document.** Written for the original Wails v2 (Go) implementation. Since 0.6.0 the app runs on Tauri v2 with a Rust backend; see [TAURI_MIGRATION_PLAN.md](TAURI_MIGRATION_PLAN.md) for how each Go component maps to Rust.
+
 ## 1. Problem Statement & Feasibility Assessment
 
 The Logledge application is a desktop Markdown note-taking app built with **Wails v2 (Go backend) + React 19 / TypeScript / Vite / Tailwind CSS / Milkdown Crepe**.
