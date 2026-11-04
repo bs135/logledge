@@ -1,5 +1,6 @@
 import {useEffect} from 'react'
 import {X, FolderGit2, Keyboard, BookOpen} from 'lucide-react'
+import {openUrl} from '@tauri-apps/plugin-opener'
 import {useI18n} from '../i18n'
 import {APP_VERSION} from '../version'
 
@@ -45,12 +46,14 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                         <div>
                             <h3 className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">Logledge</h3>
                             <p className="text-neutral-600 dark:text-neutral-400 mt-0.5">{t('aboutLogledgeDesc')}</p>
-                            <p className="text-neutral-500 mt-1 text-[11px]">Version {APP_VERSION} • Wails v2 + React + Milkdown Crepe</p>
+                            <p className="text-neutral-500 mt-1 text-[11px]">Version {APP_VERSION} • Tauri v2 + React + CodeMirror</p>
                         </div>
                         <a
                             href="https://github.com/bs135/logledge"
-                            target="_blank"
-                            rel="noreferrer"
+                            onClick={(e) => {
+                                e.preventDefault()
+                                openUrl(e.currentTarget.href).catch(() => {})
+                            }}
                             className="inline-flex items-center rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 dark:hover:text-white px-3 py-1.5 transition-colors"
                         >
                             <FolderGit2 className="h-3.5 w-3.5 mr-1.5" />

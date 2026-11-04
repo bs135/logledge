@@ -1,5 +1,7 @@
 # Logledge — Implementation Plan
 
+> **Historical document.** Written for the original Wails v2 (Go) implementation. Since 0.6.0 the app runs on Tauri v2 with a Rust backend; see [TAURI_MIGRATION_PLAN.md](TAURI_MIGRATION_PLAN.md) for how each Go component maps to Rust.
+
 ## 1. Overall Feasibility Assessment
 
 The concept is feasible. Wails v2 (Go + React/TS, utilizing the native OS WebView instead of bundling Chromium) is the right choice to achieve <1s cold-start, <80MB RAM, and <30MB binary size — this is Wails' core advantage over Electron. The local-first architecture, independent `.md` files, and Git-based synchronization is a proven model (Obsidian + Git plugin, Foam, etc.).

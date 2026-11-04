@@ -175,6 +175,9 @@ One commit per module, each with ported tests:
    backward compatible), or move to `plugin-store` like xmark (loses existing
    config without a migration step)?
 
+All four were settled with the recommended option: root layout,
+release-please, frontend update check, self-managed `config.json`.
+
 ## 8. Phase 0 Results
 
 Spikes ran on Windows 11 with Rust 1.90, `keyring` 3.6.3, `rusqlite` 0.37
@@ -373,3 +376,39 @@ No blocker found. Plan changes going into Phase 1:
   UAC prompt the old admin-level uninstaller needs. It removes the old program
   files and shortcuts only; `config.json` and the keychain PAT stay. MSI is
   not built because it cannot run this hook.
+
+## 14. Phase 6 Notes
+
+- Removed the Go backend (`main.go`, `app.go`, `update.go`, their tests,
+  `go.mod` / `go.sum`, `internal/`), `wails.json` and `build/`. The source
+  artwork moved to `src-tauri/icons/source/`; regenerate the icon set with
+  `npx tauri icon src-tauri/icons/source/appicon.png`. The Python stub had
+  already been removed in Phase 1.
+- `README.md`, `.github/copilot-instructions.md` and the PR template describe
+  the Tauri stack and the cargo / npm checks. `docs/PLAN.md`,
+  `docs/UPGRADE_EDITOR.md` and `docs/UPGRADE_IMPROVEMENT_PLAN.md` are kept as
+  history with a note pointing here.
+- Rust doc comments that mention "the Go build" are kept on purpose: they
+  explain which on-disk formats must stay compatible.
+- Quick Help's GitHub link used `target="_blank"`, which the Tauri webview
+  does not open in the browser; it now goes through `openUrl`.
+- Release binary on Windows: `logledge.exe` ~13.8 MB, NSIS installer ~3.8 MB
+  (Wails portable exe was ~19.3 MB). Cold start and idle RAM still need to be
+  re-measured.
+
+### QA status
+
+| Area | Windows | macOS | Linux |
+|---|---|---|---|
+| Open / switch vault, file tree CRUD, drag-and-drop | Pass | Pending | Pending |
+| Paste / drop images, auto-save, external change reload | Pass | Pending | Pending |
+| Ctrl+P, Ctrl+Shift+F | Pass | Pending | Pending |
+| Sync via PAT (status bar and tray) | Pass | Pending | Pending |
+| Sync via SSH, conflict, offline | Pending | Pending | Pending |
+| Tray, hide vs quit, single instance | Pass | Pending | Pending |
+| Theme, language (incl. tray labels), update check | Pass | Pending | Pending |
+| Upgrade from Wails 0.5.0 keeps config and PAT | Pass | n/a | n/a |
+
+macOS and Linux need the CI bundles (`test-build.yml`) and a machine to run
+them on. Release-please will version the merge as **0.6.0**
+(`bump-minor-pre-major`); the release notes should state the stack change.

@@ -1,6 +1,6 @@
 # Logledge
 
-A desktop, local-first note-taking application based on plain `.md` files — synchronized across devices via GitHub. Built with [Wails v2](https://wails.io) (Go backend + React 19 / TypeScript frontend).
+A desktop, local-first note-taking application based on plain `.md` files — synchronized across devices via GitHub. Built with [Tauri v2](https://tauri.app) (Rust backend + React 19 / TypeScript frontend).
 
 [![CI](https://github.com/bs135/logledge/actions/workflows/ci.yml/badge.svg)](https://github.com/bs135/logledge/actions/workflows/ci.yml)
 [![Release](https://github.com/bs135/logledge/actions/workflows/release.yml/badge.svg)](https://github.com/bs135/logledge/actions/workflows/release.yml)
@@ -28,9 +28,9 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Inline Creation & Renaming**: Create notes/folders and rename entries directly in the tree without modal interruptions.
 - **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) with quick toggle support.
 - **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
-- **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via pure Go (`wastebasket`), preserving undo capabilities.
+- **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+B`) to toggle visibility.
-- **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `fsnotify` with debounce (300ms) and self-write suppression.
+- **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `notify` with debounce (300ms) and self-write suppression.
 
 ### Markdown Live Preview Editor (Obsidian-Style)
 - **CodeMirror 6 Live Preview**: Seamless hybrid editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, links, WikiLinks `[[note]]`). Delimiters hide when viewing and reveal in-place on cursor focus.
@@ -44,23 +44,23 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Remote Update Detection**: Alerts user when an active note is modified externally (via Git pull or external editor) with options to reload or preserve draft.
 
 ### Full-Text & Fuzzy Search
-- **Quick Switcher (`Ctrl+P`)**: Instant fuzzy search by filename using `sahilm/fuzzy`.
-- **Global Search (`Ctrl+Shift+F`)**: Full-text search across all notes in the vault using SQLite FTS5 (`modernc.org/sqlite`), displaying contextual snippets with highlighted search terms.
-- **Background Indexing**: Incremental reindexing runs asynchronously in background goroutines without blocking cold-start or user typing.
+- **Quick Switcher (`Ctrl+P`)**: Instant fuzzy search by filename (a port of the `sahilm/fuzzy` ranking).
+- **Global Search (`Ctrl+Shift+F`)**: Full-text search across all notes in the vault using SQLite FTS5 (`rusqlite`, bundled SQLite), displaying contextual snippets with highlighted search terms.
+- **Background Indexing**: Incremental reindexing runs asynchronously on background threads without blocking cold-start or user typing.
 - **Isolated Index Database**: SQLite index database is stored outside the Vault in the user's OS cache directory, preventing repo pollution.
 
 ### GitHub Sync Engine
 - **Automated Background Sync**: Syncs automatically on application startup, every 5 minutes while active, and on clean application shutdown (with an 8-second safety timeout).
 - **One-Click Manual Sync**: Immediate synchronization via status bar trigger or system tray menu.
-- **System Git CLI Integration**: Invokes native `git` CLI via `os/exec` with silent background process creation on Windows (`CREATE_NO_WINDOW`, `HideWindow: true`).
-- **Zero Plaintext Credentials**: Personal Access Tokens (PAT) are stored exclusively in the OS Keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service via `zalando/go-keyring`). Also supports system SSH keys.
+- **System Git CLI Integration**: Invokes the native `git` CLI via `std::process::Command` with silent background process creation on Windows (`CREATE_NO_WINDOW`).
+- **Zero Plaintext Credentials**: Personal Access Tokens (PAT) are stored exclusively in the OS Keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service via the `keyring` crate). Also supports system SSH keys.
 - **Non-Destructive Conflict Resolution**: Employs `git fetch` and `git merge --no-commit --no-ff -X ours`, detecting divergent changes and renaming conflicting local files to `<Name>.conflict.<timestamp>.md`. Never injects raw git conflict markers (`<<<<<<<`).
 - **Real-Time Status Indicator**: Dynamic status bar showing Synced, Syncing, Conflict, Offline, or Error states.
 
 ### Desktop Shell & Ergonomics
 - **Custom Frameless Title Bar**: Draggable header, active vault & note indicator, centered search trigger, and custom window controls (minimize, maximize/restore, close to tray).
 - **System Tray Integration**: Runs in background with tray menu (Open Logledge, Sync Now, Quit) and single-instance lock to prevent duplicate processes.
-- **Theming**: Full Dark, Light, and System Default theme support across the window shell, modals, and Milkdown Crepe editor.
+- **Theming**: Full Dark, Light, and System Default theme support across the window shell, modals, and editor.
 - **Internationalization (i18n)**: Complete English (`en`) and Vietnamese (`vi`) localization across all UI elements, system tray, and dialogs.
 - **Settings & Quick Help**: Comprehensive tabbed settings dialog and quick help modal with markdown syntax tips and keyboard shortcuts.
 - **Update Check**: Checks GitHub Releases once at startup (in the background) and shows a dismissible toast with a link to the release page when a newer version exists; a manual **Check for updates** button lives in Settings → General.
@@ -70,20 +70,20 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 ## Tech Stack
 
 ### Backend
-- **Language**: Go 1.25+
-- **Application Framework**: [Wails v2](https://wails.io) (`github.com/wailsapp/wails/v2`)
-- **Database & Search**: `modernc.org/sqlite` (pure Go SQLite with FTS5 enabled, CGO-free)
-- **Filesystem Watcher**: `github.com/fsnotify/fsnotify` (with debounce and self-write suppression)
-- **Git Sync Engine**: System `git` CLI via `os/exec` (with OS-specific window suppression on Windows)
-- **Credential Storage**: OS Keychain / Credential Manager via `github.com/zalando/go-keyring`
-- **Trash / Recycle Bin**: `github.com/Bios-Marcel/wastebasket/v2` (pure Go)
-- **Fuzzy Search**: `github.com/sahilm/fuzzy`
-- **System Tray**: Windows Win32 API implementation via `golang.org/x/sys/windows`
+- **Language**: Rust (stable)
+- **Application Framework**: [Tauri v2](https://tauri.app) with the `dialog`, `opener` and `single-instance` plugins
+- **Database & Search**: `rusqlite` (bundled SQLite with FTS5)
+- **Filesystem Watcher**: `notify` (with debounce and self-write suppression)
+- **Git Sync Engine**: System `git` CLI via `std::process::Command` (with console window suppression on Windows)
+- **Credential Storage**: OS Keychain / Credential Manager via the `keyring` crate (compatible with entries written by the earlier Go build)
+- **Trash / Recycle Bin**: `trash`
+- **Fuzzy Search**: Rust port of the `sahilm/fuzzy` ranking (`src-tauri/src/fuzzy.rs`)
+- **System Tray**: Tauri's built-in tray (Windows, macOS, Linux)
 
 ### Frontend
 - **Framework & Bundler**: React 19, TypeScript 5.6+, Vite 7
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), custom CSS dark/light theme variables, custom `Nunito` font
-- **Markdown Editor**: Milkdown Crepe (`@milkdown/crepe`) with CodeMirror and KaTeX
+- **Markdown Editor**: CodeMirror 6 with a custom Obsidian-style Live Preview
 - **Icons**: `lucide-react`
 - **Toast Notifications**: [`sonner`](https://sonner.emilkowal.ski)
 - **Internationalization**: Custom dictionary-based i18n (`en`, `vi`)
@@ -96,14 +96,14 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 Pre-built packages are published on [GitHub Releases](https://github.com/bs135/logledge/releases):
 
 - **Windows**:
-  - Installer: `logledge-windows-amd64-installer-v*.exe` (NSIS setup with WebView2 bootstrapper).
-  - Portable: `logledge-windows-amd64-v*.exe` (standalone executable).
+  - Installer: `Logledge_<version>_windows_x64-setup.exe` (NSIS, per-user install, with WebView2 bootstrapper).
+  - Upgrading from 0.5.0 or earlier (Wails build) removes the old installation automatically (a UAC prompt may appear); settings, vaults and the stored PAT are kept.
   - *Requirement*: Microsoft Edge WebView2 Runtime (preinstalled on Windows 10/11).
 - **macOS**:
-  - Universal Binary: `logledge-darwin-universal-v*.zip` (contains `Logledge.app` for both Apple Silicon and Intel).
+  - Universal `.dmg` (Apple Silicon and Intel), plus `.app.tar.gz`.
 - **Linux**:
-  - Archive: `logledge-linux-amd64-v*.tar.gz` and standalone binary.
-  - *Requirements*: GTK 3 (`libgtk-3-0`) and WebKit2GTK 4.1 (`libwebkit2gtk-4.1-0`).
+  - `.AppImage`, `.deb` and `.rpm`.
+  - *Requirements*: WebKit2GTK 4.1 (`libwebkit2gtk-4.1-0`); the tray needs an AppIndicator-capable desktop.
 
 > **Note**: System `git` CLI must be installed and available in your system `PATH` for GitHub synchronization features.
 
@@ -121,7 +121,7 @@ Pre-built packages are published on [GitHub Releases](https://github.com/bs135/l
 | `Ctrl + V` | File Tree | Paste copied or cut entry into the selected folder (or the selected file's folder) |
 | `Enter` / `Blur` | Note Title | Save inline note title and rename file |
 | `Esc` | Modals / Menus | Close active modal, dropdown, or context menu |
-| `Ctrl + Click Close (X)` | Title Bar | Force quit application (skips minimize to tray) |
+| `Ctrl + Click Close (X)` | Title Bar | Quit the application (after a final sync) instead of hiding to tray |
 | `Double-Click Handle` | Sidebar Resize | Reset sidebar width to default (256px) |
 | `Right-Click` | File Tree / Sidebar | Open context menu (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete) |
 | `Drag-and-Drop` | File Tree | Relocate file or folder into target folder |
@@ -133,99 +133,105 @@ Pre-built packages are published on [GitHub Releases](https://github.com/bs135/l
 ## Development
 
 ### Prerequisites
-- **Go**: 1.25 or higher
+- **Rust**: stable toolchain (via [rustup](https://rustup.rs))
 - **Node.js**: 20+ (Node 24 recommended) and npm
-- **Wails CLI v2**:
-  ```bash
-  go install github.com/wailsapp/wails/v2/cmd/wails@latest
-  ```
 - **Git CLI**: Installed and available in `PATH`
-- **Linux Packages** (Linux development only):
+- **Platform packages**: see the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). On Debian/Ubuntu:
   ```bash
-  sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+  sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
   ```
+
+Install frontend dependencies once:
+```bash
+npm install
+```
 
 ### Testing & verification
 
-Backend verification:
+Backend verification (from `src-tauri/`):
 ```bash
-go build ./...
-go vet ./...
-go test -v ./...
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
 Frontend verification:
 ```bash
 npm run build
+npm test
 ```
 
 ### Run in development
 ```bash
-wails dev
+npm run tauri dev
 ```
-Starts the Wails development server with Vite hot-reloading (HMR) for frontend and automatic Go recompilation on backend changes.
+Starts Vite with hot-reloading (HMR) for the frontend and rebuilds the Rust backend on changes.
 
 ### Building for Production
 
 ```bash
-# Build standalone portable binary
-wails build
-
-# Build with NSIS installer (Windows)
-wails build -nsis
+npm run tauri build
 ```
 
-Compiled binaries will be generated in `build/bin/`.
+Bundles are generated in `src-tauri/target/release/bundle/` (NSIS installer on Windows, `.dmg`/`.app` on macOS, `.AppImage`/`.deb`/`.rpm` on Linux).
 
 ### Cross-Platform Packaging
 
-Continuous Integration and packaging are automated via `.github/workflows/release.yml` using [Release-Please](https://github.com/googleapis/release-please) upon merges to `main` and tag pushes matching `v*`:
+Releases are automated via `.github/workflows/release.yml`: [Release-Please](https://github.com/googleapis/release-please) maintains the changelog and creates the release on merges to `main`, then [`tauri-action`](https://github.com/tauri-apps/tauri-action) builds and uploads the bundles (also on tag pushes matching `v*`):
 
-- **Windows (`windows-amd64`)**: Builds portable `.exe` and NSIS installer with WebView2 bootstrapper.
-- **macOS (`darwin-universal`)**: Builds universal application bundle (`Logledge.app`) packaged into a `.zip` archive.
-- **Linux (`linux-amd64`)**: Builds Linux binary with WebKit2GTK 4.1 tags packaged into a `.tar.gz` archive.
+- **Windows x64**: NSIS installer. Its pre-install hook (`src-tauri/windows/hooks.nsh`) removes an older Wails-based installation.
+- **macOS**: Universal (`universal-apple-darwin`) `.dmg` and `.app.tar.gz`.
+- **Linux x64**: `.AppImage`, `.deb`, `.rpm`.
 
-*Local packaging note*: Generating NSIS installers locally requires `makensis` (installable via Chocolatey: `choco install nsis -y`). On machines without administrative privileges, build the portable executable using `wails build`.
+`.github/workflows/test-build.yml` builds the same matrix on demand and uploads the bundles as workflow artifacts.
 
 ### Measured Non-Functional Requirements (Windows Dev Machine)
 
-| Metric | Target | Measured | Architecture Highlights |
+| Metric | Target | Measured | Notes |
 |---|---|---|---|
-| Cold-start | < 1s | ~1.0s | Asynchronous non-blocking startup; Vault initialization, search indexing, and Git sync execute in background goroutines |
-| Idle RAM | < 80MB | ~35–67MB | Native OS WebView2 via Wails instead of heavy bundled Chromium; memory footprint dominated by webview engine |
-| Binary size (portable exe) | < 30MB | ~19.3MB | CGO-free pure Go SQLite (`modernc.org/sqlite`), tree-shaking, and asset compression via Go embed |
+| Cold-start | < 1s | to be re-measured | Vault loading, search indexing and Git sync run on background threads |
+| Idle RAM | < 80MB | to be re-measured | Native OS WebView instead of a bundled Chromium |
+| Binary size | < 30MB | ~13.8MB (`logledge.exe`), ~3.8MB installer | Release profile, bundled SQLite |
 
 ### GitHub Sync — Implementation Notes
 
-- **System `git` CLI (`os/exec`)**: Leverages the user's native `git` CLI rather than pure Go Git implementations (such as `go-git`), ensuring full compatibility with advanced Git features, SSH configs, and credential helpers.
-- **Windows Console Window Suppression**: Invokes Git commands with `CreationFlags = 0x08000000` (`CREATE_NO_WINDOW`) and `HideWindow = true` to eliminate unwanted console window flashing on Windows.
+- **System `git` CLI**: Leverages the user's native `git` CLI rather than a library implementation (such as libgit2), ensuring full compatibility with advanced Git features, SSH configs, and credential helpers.
+- **Windows Console Window Suppression**: Invokes Git commands with the `CREATE_NO_WINDOW` (`0x08000000`) creation flag to eliminate unwanted console window flashing on Windows.
 - **Conflict Handling without Conflict Markers**: Instead of inserting standard Git merge conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) that corrupt markdown rendering, the sync engine fetches remote changes and uses `git merge --no-commit --no-ff -X ours`. Files modified simultaneously on both local and remote are automatically backed up as `<Name>.conflict.<timestamp>.md`, allowing users to inspect both versions cleanly. A note modified locally but deleted remotely is likewise preserved as a `.conflict` copy instead of failing the sync.
-- **Safe Sync While Editing**: Sync runs are serialized. Network round-trips (fetch/push) run without blocking the editor, while the auto-commit and merge run atomically under a worktree lock shared with every Vault write, so an auto-save can never land mid-merge. Auto-save uses optimistic concurrency (`WriteFileIfUnchanged`): if sync changed the open note on disk, the draft is not written over it — the user is asked to reload the new version or keep the draft.
-- **Zero Plaintext Credentials**: Personal Access Tokens (PAT) are stored exclusively in the native OS Keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service via `zalando/go-keyring`). Tokens are never written to `.git/config`, environment variables, or disk files.
+- **Safe Sync While Editing**: Sync runs are serialized. Network round-trips (fetch/push) run without blocking the editor, while the auto-commit and merge run atomically under a worktree lock shared with every Vault write, so an auto-save can never land mid-merge. Auto-save uses optimistic concurrency (`write_file_if_unchanged`): if sync changed the open note on disk, the draft is not written over it — the user is asked to reload the new version or keep the draft.
+- **Zero Plaintext Credentials**: Personal Access Tokens (PAT) are stored exclusively in the native OS Keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service via the `keyring` crate). Tokens are never written to `.git/config`, environment variables, or disk files.
 
 ### Directory Structure
 
 ```
-├── main.go                     # Entry point, Wails configuration, frameless window, single instance lock
-├── app.go                      # Wails App struct: bridge between Go backend services and frontend
-├── internal/
-│   ├── config/                 # Application configuration (multi-vault, active vault, theme, language, filter)
-│   ├── gitsync/                # Git sync engine, git CLI execution, credentials via go-keyring
-│   ├── search/                 # SQLite FTS5 indexer, Quick Switcher fuzzy search, Global Search
-│   ├── tray/                   # System tray integration and lifecycle
-│   ├── vault/                  # VaultService: file/folder tree CRUD, attachments, trash
-│   └── watcher/                # fsnotify wrapper with debounce and self-write suppression
-├── src/
+├── src/                        # React frontend
 │   ├── components/             # TitleBar, FileTree, Editor, QuickSwitcher, GlobalSearch, Modals
 │   ├── hooks/                  # useVault, useTheme hooks
 │   ├── i18n/                   # Localization dictionaries (en, vi)
+│   ├── lib/                    # api.ts (typed Tauri command wrappers), types.ts, updater.ts
 │   ├── App.tsx                 # Main application layout and modal orchestration
 │   ├── main.tsx                # React root mount
 │   └── style.css               # Tailwind CSS imports, typography overrides, dark/light theme variables
-├── wailsjs/                    # Auto-generated Wails Go bindings (do not edit manually)
-├── build/                      # Build assets, application icons, NSIS installer configs
+├── src-tauri/                  # Rust backend
+│   ├── src/
+│   │   ├── lib.rs              # Tauri builder: plugins, state, command registration
+│   │   ├── commands.rs         # Tauri commands exposed to the frontend
+│   │   ├── state.rs            # AppState: services plus multi-vault configuration
+│   │   ├── config.rs           # config.json (multi-vault, active vault, theme, language, filter)
+│   │   ├── vault.rs            # VaultService: file/folder tree CRUD, attachments, trash
+│   │   ├── watcher.rs          # notify wrapper with debounce and self-write suppression
+│   │   ├── search.rs           # SQLite FTS5 indexer and Global Search
+│   │   ├── fuzzy.rs            # Quick Switcher fuzzy matching
+│   │   ├── gitsync/            # Git sync engine, git CLI execution, keychain credentials
+│   │   ├── tray.rs             # System tray menu
+│   │   └── lifecycle.rs        # Hide-to-tray and graceful quit with final sync
+│   ├── capabilities/           # Tauri permissions for the main window
+│   ├── icons/                  # App icons (source artwork in icons/source/)
+│   ├── windows/hooks.nsh       # NSIS installer hooks
+│   └── tauri.conf.json         # Tauri app and bundle configuration
+├── public/                     # Static assets served by Vite
 ├── docs/                       # Project documentation, plans, and assets
-└── .github/workflows/          # CI, release, and automated testing workflows
+└── .github/workflows/          # CI, release, and test build workflows
 ```
 
 ---

@@ -1,7 +1,5 @@
-build/bin
 node_modules
 dist
-package.json.md5
 *.exe
 .DS_Store
 Thumbs.db
