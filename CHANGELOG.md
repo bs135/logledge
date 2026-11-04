@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/bs135/logledge/compare/v0.5.0...v0.6.0) (2026-11-04)
+
+
+### Features
+
+* scaffold Tauri v2 shell alongside Wails ([6f3284c](https://github.com/bs135/logledge/commit/6f3284cd58a26ff79e3d18fabd53dcb298f60fe8))
+* **tauri:** add app state and Tauri commands ([de85e45](https://github.com/bs135/logledge/commit/de85e453223f0e8d720c92932e13332782a93a84))
+* **tauri:** add tray, hide-on-close and graceful quit with final sync ([023f968](https://github.com/bs135/logledge/commit/023f968f11a3f0ebc3f04b249455f7e4eea77131))
+* **tauri:** call Rust commands from the frontend and drop Wails bindings ([1a6fffa](https://github.com/bs135/logledge/commit/1a6fffaf876f15122897f7de6461db2a80b2eafb))
+* **tauri:** port config module to Rust ([e5ac788](https://github.com/bs135/logledge/commit/e5ac7882ebafbdde6c534663525ae09da1eafe71))
+* **tauri:** port GitHub sync service to Rust ([d83bdb2](https://github.com/bs135/logledge/commit/d83bdb291ff155b9e618ba6a972e0cf9b1412c13))
+* **tauri:** port search service to Rust ([a087394](https://github.com/bs135/logledge/commit/a087394f424130dc9bfc2ffe08cb35f99f123214))
+* **tauri:** port vault file watcher to Rust ([41b1a0d](https://github.com/bs135/logledge/commit/41b1a0d22021da31a87e191cca1440716bc39011))
+* **tauri:** port vault service to Rust ([9dcd7c3](https://github.com/bs135/logledge/commit/9dcd7c34c337086a83b9d75a4de9e8b87e8839a8))
+
+
+### Bug Fixes
+
+* support Wails drag regions in the Tauri shim ([355081e](https://github.com/bs135/logledge/commit/355081e8e6645aecc36ef2b004cf96f7ee125638))
+* **tauri:** satisfy clippy unnecessary_sort_by on newer Rust ([8065f22](https://github.com/bs135/logledge/commit/8065f22daf7d85afafc9f67ac3789115a5b38123))
+
 ## [0.5.0](https://github.com/bs135/logledge/compare/v0.4.0...v0.5.0) (2026-10-22)
 
 
