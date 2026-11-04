@@ -30,7 +30,7 @@ pub fn find(pattern: &str, data: &[String]) -> Vec<Match> {
         .enumerate()
         .filter_map(|(index, s)| score(&pattern, s).map(|score| Match { index, score }))
         .collect();
-    matches.sort_by(|a, b| b.score.cmp(&a.score));
+    matches.sort_by_key(|m| std::cmp::Reverse(m.score));
     matches
 }
 
