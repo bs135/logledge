@@ -12,8 +12,10 @@ use tauri_plugin_dialog::DialogExt;
 use crate::config::{Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, Status};
+use crate::lifecycle;
 use crate::search::SearchResult;
 use crate::state::{AppState, SyncSettings};
+use crate::tray;
 use crate::vault::{clean_path, Node, WriteResult};
 
 /// Max results for Global Search and the Quick Switcher.
@@ -119,11 +121,17 @@ pub fn get_language(state: AppStateRef<'_>) -> String {
 
 #[tauri::command]
 pub async fn save_app_settings(
+    app: AppHandle,
     state: AppStateRef<'_>,
     theme: String,
     language: String,
 ) -> Result<()> {
-    blocking(&state, move |s| s.save_app_settings(&theme, &language)).await
+    blocking(&state, move |s| {
+        s.save_app_settings(&theme, &language)?;
+        tray::set_language(&app, &s.language());
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -340,4 +348,13 @@ pub async fn sync_now(state: AppStateRef<'_>) -> Result<()> {
 #[tauri::command]
 pub fn get_sync_status(state: AppStateRef<'_>) -> Status {
     state.sync.status()
+}
+
+// --- Lifecycle ---------------------------------------------------------------------
+
+/// Quits the app after a final, time-limited sync (title bar Ctrl+click on
+/// close). Replaces Wails' runtime Quit, which ran OnShutdown.
+#[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    lifecycle::graceful_quit(&app);
 }

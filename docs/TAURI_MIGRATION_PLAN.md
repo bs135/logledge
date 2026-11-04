@@ -60,7 +60,7 @@ three OSes.
 | `wailsjs/go/models` (`new config.VaultEntry`, `vault.Node.createFrom`) | Plain TS interfaces in `src/lib/types.ts`; fix the 5 call sites using `new …` / `createFrom` |
 | `EventsOn` (returns unsubscribe synchronously) | `listen()` returns `Promise<UnlistenFn>`; update cleanup in 4 `useEffect`s |
 | `--wails-draggable: drag/no-drag` | `data-tauri-drag-region` |
-| `WindowMinimise/ToggleMaximise/Hide`, `Quit` | `getCurrentWindow().minimize()/toggleMaximize()/hide()`, `exit()` from `plugin-process` (or a dedicated command) |
+| `WindowMinimise/ToggleMaximise/Hide`, `Quit` | `getCurrentWindow().minimize()/toggleMaximize()/hide()`, `quit_app` command (runs the final sync; see Phase 3 notes) |
 | `WindowSetDark/Light/SystemDefaultTheme` | `getCurrentWindow().setTheme('dark' \| 'light' \| null)` |
 | `BrowserOpenURL` | `openUrl` from `plugin-opener` |
 | `ClipboardSetText` | `navigator.clipboard.writeText` (verified in Phase 0) |
@@ -102,7 +102,7 @@ end of Phase 4 to compare behavior side by side.
   `capabilities/default.json`, `build.rs`, `main.rs` / `lib.rs`.
 - `tauri.conf.json`: productName `Logledge`, identifier `com.logledge.app`,
   `decorations: false`, `dragDropEnabled: false`, icons from `build/`.
-- Plugins: dialog, opener, single-instance, process.
+- Plugins: dialog, opener, single-instance (process dropped in Phase 3).
 - Vite: `strictPort`, `clearScreen: false`, `__APP_VERSION__` like xmark; keep `@tailwindcss/vite`.
 - Done when: `npm run tauri dev` shows the UI (no backend yet).
 
@@ -266,10 +266,10 @@ No blocker found. Plan changes going into Phase 1:
 - `src-tauri/` is modeled on xmark. `tauri.conf.json` reads its version from
   `../package.json`, so release bumps only touch `package.json` and
   `Cargo.toml` (R12). Plugins registered: single-instance (first, focuses the
-  running window), dialog, opener, process.
+  running window), dialog, opener, process (removed again in Phase 3).
 - `__APP_VERSION__` was not added: `src/version.ts` already reads the version
   from `package.json` at build time, which gives the same result.
-- JS packages for `plugin-dialog` / `plugin-process` are added in Phase 4 when
+- JS package for `plugin-dialog` is added in Phase 4 when
   the UI first calls them; only `@tauri-apps/api` and `plugin-opener` are
   needed now.
 - `src/wailsShim.ts` is a **temporary** bridge: when `window.go` /
@@ -303,3 +303,24 @@ No blocker found. Plan changes going into Phase 1:
   credentials test uses the separate service `logledge-test`.
 - The UI still talks to the Phase 1 shim; the commands are first exercised
   end to end in Phase 4.
+
+## 11. Phase 3 Notes
+
+- `tray.rs`: Open / Sync now / Quit with vi/en labels; left click shows the
+  window, right click opens the menu. Labels follow `save_app_settings`
+  without a restart. Uses Tauri's built-in tray (`tray-icon` feature), so it
+  now also works on macOS and Linux (the Go tray was Windows only).
+- `lifecycle.rs`: closing the main window hides it (Wails `HideWindowOnClose`).
+  Every quit path (tray Quit, title bar Ctrl+click via the new `quit_app`
+  command, OS-initiated exit such as Cmd+Q) goes through `graceful_quit()`:
+  hide the window, stop periodic sync, run one final sync capped at 8 s, then
+  exit. An `AtomicBool` makes it run once and lets our own exit through (R3).
+- `tauri-plugin-process` was removed: a frontend `exit()` would skip the final
+  sync, so quitting is only possible through `quit_app`.
+- Periodic 5-minute sync was already done in Phase 2 (`AppState::apply_sync`
+  restarts it on vault switch and sync settings change).
+- Same limitation as the Go build: if the final sync exceeds 8 s, the process
+  exits while git may still be running, which can leave `.git/index.lock`.
+- The shim's `WindowHide` now really hides to the tray and `Quit` calls
+  `quit_app`.
+

@@ -3,6 +3,7 @@
 // window.go.main.App.*, which only the Wails webview injects. This shim maps
 // the runtime calls the UI uses onto Tauri APIs and makes every backend call
 // reject until the Rust commands exist. Removed in Phase 4 together with wailsjs/.
+import {invoke} from '@tauri-apps/api/core'
 import {listen} from '@tauri-apps/api/event'
 import {getCurrentWindow} from '@tauri-apps/api/window'
 import {openUrl} from '@tauri-apps/plugin-opener'
@@ -41,10 +42,9 @@ const runtime: Record<string, AnyFn> = {
     WindowIsMaximised: async () => (await currentWindow()?.isMaximized()) ?? false,
     WindowShow: () => currentWindow()?.show(),
     WindowUnminimise: () => currentWindow()?.unminimize(),
-    // There is no tray yet (Phase 3), so hiding would leave no way back to the
-    // window: minimize instead.
-    WindowHide: () => currentWindow()?.minimize(),
-    Quit: () => currentWindow()?.close(),
+    WindowHide: () => currentWindow()?.hide(),
+    // Quits through the backend so the final sync runs, like Wails' OnShutdown.
+    Quit: () => (isTauri ? invoke('quit_app') : undefined),
 
     WindowSetDarkTheme: () => currentWindow()?.setTheme('dark'),
     WindowSetLightTheme: () => currentWindow()?.setTheme('light'),

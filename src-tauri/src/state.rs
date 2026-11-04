@@ -2,7 +2,7 @@
 //! services plus the multi-vault configuration logic ported from app.go.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -357,6 +357,23 @@ impl AppState {
         self.save_config(&cfg)?;
         self.apply_sync(&root, repo_url, branch, AuthMethod::parse(auth_method))
     }
+
+    /// Final sync before the app exits: stops periodic syncing and, if sync is
+    /// configured, runs one last sync, giving up after `timeout` so a slow or
+    /// broken network never hangs the exit.
+    pub fn final_sync(&self, timeout: Duration) {
+        self.sync.stop();
+        if !self.sync.is_configured() {
+            return;
+        }
+        let sync = Arc::clone(&self.sync);
+        let (done_tx, done_rx) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sync.sync();
+            let _ = done_tx.send(());
+        });
+        let _ = done_rx.recv_timeout(timeout);
+    }
 }
 
 #[cfg(test)]
@@ -560,6 +577,25 @@ mod tests {
         t.app.switch_vault(&vault).unwrap();
         t.app.configure_sync("", "main", "none").unwrap();
         assert!(!t.app.sync.is_configured());
+    }
+
+    #[test]
+    fn final_sync_runs_once_and_respects_timeout() {
+        let t = new_app();
+        // Not configured: returns immediately.
+        t.app.final_sync(Duration::from_secs(8));
+
+        // Configured against an unreachable local remote: the sync fails fast
+        // and its outcome is reported through status.
+        let vault = t.vault("v");
+        t.app.switch_vault(&vault).unwrap();
+        let remote = path_string(&t.dir.path().join("missing.git"));
+        t.app.configure_sync(&remote, "main", "none").unwrap();
+
+        let started = std::time::Instant::now();
+        t.app.final_sync(Duration::from_secs(20));
+        assert!(started.elapsed() < Duration::from_secs(20));
+        assert_eq!(t.app.sync.status().state, "offline");
     }
 
     #[test]

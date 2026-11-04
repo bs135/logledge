@@ -3,8 +3,10 @@ mod config;
 mod error;
 mod fuzzy;
 mod gitsync;
+mod lifecycle;
 mod search;
 mod state;
+mod tray;
 mod vault;
 mod watcher;
 
@@ -21,30 +23,16 @@ const VAULT_CHANGED_EVENT: &str = "vault:changed";
 /// Event carrying GitHub sync status changes for the status bar.
 const SYNC_STATUS_EVENT: &str = "sync:status";
 
-/// Label of the single application window declared in tauri.conf.json.
-const MAIN_WINDOW: &str = "main";
-
-/// Brings the existing main window to the foreground (restoring it if it was
-/// minimized or hidden to the tray).
-fn show_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // Must be registered first so a second launch exits before other
         // plugins initialize; the running instance is focused instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+            lifecycle::show_main_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let config_path = config::default_path()?;
             let vault_handle = app.handle().clone();
@@ -59,9 +47,11 @@ pub fn run() {
                     let _ = sync_handle.emit(SYNC_STATUS_EVENT, status);
                 }),
             );
+            tray::init(app.handle(), &state.language())?;
             app.manage(state);
             Ok(())
         })
+        .on_window_event(lifecycle::on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::init_vault,
             commands::pick_vault_folder,
@@ -99,7 +89,9 @@ pub fn run() {
             commands::set_github_pat,
             commands::sync_now,
             commands::get_sync_status,
+            commands::quit_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(lifecycle::on_run_event);
 }
