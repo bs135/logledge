@@ -20,8 +20,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: Build & Test
+  frontend:
+    name: Frontend Build & Test
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     steps:
@@ -44,18 +44,65 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+  rust:
+    name: Rust Lint & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          go-version: "1.25"
-          cache: true
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Go build
-        run: go build ./...
+      # tauri::generate_context! needs the frontend dist folder at compile time.
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
 
-      - name: Go vet
-        run: go vet ./...
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Go test
-        run: go test -v ./...
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
 
+      - name: cargo fmt
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      # The keychain round-trip test needs a Secret Service daemon, which the
+      # Linux runner lacks; it still runs on Windows.
+      - name: cargo test
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            cargo test -- --skip round_trip_in_os_keychain
+          else
+            cargo test
+          fi

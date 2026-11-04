@@ -11,9 +11,9 @@
       "bump-patch-for-minor-pre-major": false,
       "extra-files": [
         {
-          "type": "json",
-          "path": "wails.json",
-          "jsonpath": "$.info.productVersion"
+          "type": "toml",
+          "path": "src-tauri/Cargo.toml",
+          "jsonpath": "$.package.version"
         },
         {
           "type": "json",

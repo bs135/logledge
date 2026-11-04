@@ -347,3 +347,29 @@ No blocker found. Plan changes going into Phase 1:
 - `src/lib/disableWebviewDefaults.ts` (from xmark) blocks the native context
   menu and reload shortcuts (F5, Ctrl/Cmd+R), which would drop unsaved editor
   content; the app's own context menus are unaffected.
+
+## 13. Phase 5 Notes
+
+- `ci.yml`: a frontend job (`npm run build`, `npm test`) and a Rust job on
+  `ubuntu-22.04` and `windows-latest` (`cargo fmt --check` on Linux,
+  `cargo clippy --all-targets -D warnings`, `cargo test`). The frontend is
+  built first because `generate_context!` needs `dist/`. The keychain
+  round-trip test is skipped on Linux, where the runner has no Secret Service.
+- `release.yml`: release-please is unchanged (CHANGELOG, tag, release); the
+  build job now runs `tauri-action`, which uploads the bundles to that release
+  (or creates it for a manual `v*` tag push or `workflow_dispatch`). Matrix:
+  Windows x64 (NSIS only), macOS `universal-apple-darwin`, Linux x64
+  (`.deb`, `.rpm`, `.AppImage`).
+- `test-build.yml`: same matrix, uploads the bundles as workflow artifacts.
+- Asset changes vs. the Wails release: no portable Windows `.exe` or raw Linux
+  binary and no `.sha256` files; macOS ships a `.dmg` and `.app.tar.gz`
+  instead of a zipped `.app`.
+- `release-please-config.json`: `wails.json` replaced by
+  `src-tauri/Cargo.toml` (`toml`, `$.package.version`). `tauri.conf.json`
+  reads its version from `package.json`, which release-please already bumps.
+- R7: `src-tauri/windows/hooks.nsh` (`NSIS_HOOK_PREINSTALL`) looks up the
+  Wails uninstall key `...\Uninstall\LogledgeLogledge` (HKLM, then HKCU) and
+  runs that uninstaller silently via `ExecShellWait`, so Windows can raise the
+  UAC prompt the old admin-level uninstaller needs. It removes the old program
+  files and shortcuts only; `config.json` and the keychain PAT stay. MSI is
+  not built because it cannot run this hook.
