@@ -1,14 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
-import {
-    EventsOn,
-    Quit,
-    WindowHide,
-    WindowIsMaximised,
-    WindowMinimise,
-    WindowToggleMaximise,
-} from '../../wailsjs/runtime/runtime'
-import {DetectVaultInfo, GetVaultList, PickVaultFolder, SaveVault, SetGitHubPAT, SwitchVault} from '../../wailsjs/go/main/App'
-import {config} from '../../wailsjs/go/models'
+import {getCurrentWindow} from '@tauri-apps/api/window'
+import {detectVaultInfo, getVaultList, onEvent, pickVaultFolder, quitApp, saveVault, setGitHubPAT, switchVault} from '../lib/api'
+import type {VaultEntry} from '../lib/types'
 import {useI18n} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
 import {
@@ -57,31 +50,28 @@ export function TitleBar({
     const {t, lang} = useI18n()
     const [isMaximised, setIsMaximised] = useState(false)
     const [vaultDropdownOpen, setVaultDropdownOpen] = useState(false)
-    const [vaults, setVaults] = useState<config.VaultEntry[]>([])
-    const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+    const [vaults, setVaults] = useState<VaultEntry[]>([])
+    const [addingVault, setAddingVault] = useState<VaultEntry | null>(null)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        let timer: ReturnType<typeof setInterval>
-        async function checkMaximised() {
-            try {
-                const max = await WindowIsMaximised()
-                setIsMaximised(max)
-            } catch {
-                // ignore
-            }
+        const appWindow = getCurrentWindow()
+        function checkMaximised() {
+            appWindow.isMaximized().then(setIsMaximised).catch(() => {})
         }
         checkMaximised()
-        timer = setInterval(checkMaximised, 500)
-        return () => clearInterval(timer)
+        const unlisten = appWindow.onResized(checkMaximised)
+        return () => {
+            unlisten.then((off) => off()).catch(() => {})
+        }
     }, [])
 
     useEffect(() => {
         function reloadVaults() {
-            GetVaultList().then((list) => setVaults(list || []))
+            getVaultList().then((list) => setVaults(list || []))
         }
         reloadVaults()
-        const off = EventsOn('vault:changed', reloadVaults)
+        const off = onEvent('vault:changed', reloadVaults)
         return off
     }, [vaultPath])
 
@@ -92,7 +82,7 @@ export function TitleBar({
             }
         }
         if (vaultDropdownOpen) {
-            GetVaultList().then((list) => setVaults(list || []))
+            getVaultList().then((list) => setVaults(list || []))
             window.addEventListener('mousedown', handleClickOutside)
             return () => window.removeEventListener('mousedown', handleClickOutside)
         }
@@ -106,7 +96,7 @@ export function TitleBar({
         setVaultDropdownOpen(false)
         if (targetPath === vaultPath) return
         try {
-            await SwitchVault(targetPath)
+            await switchVault(targetPath)
             onVaultSwitched?.(targetPath)
         } catch {
             // ignore
@@ -116,20 +106,20 @@ export function TitleBar({
     async function handleOpenNewVault() {
         setVaultDropdownOpen(false)
         try {
-            const chosen = await PickVaultFolder()
+            const chosen = await pickVaultFolder()
             if (!chosen) return
-            const detected = await DetectVaultInfo(chosen)
+            const detected = await detectVaultInfo(chosen)
             setAddingVault(detected)
         } catch (err) {
             alert(String(err))
         }
     }
 
-    async function handleSaveNewVault(entry: config.VaultEntry, pat?: string) {
+    async function handleSaveNewVault(entry: VaultEntry, pat?: string) {
         if (pat && entry.gitAuthMethod === 'pat') {
-            await SetGitHubPAT(pat)
+            await setGitHubPAT(pat)
         }
-        await SaveVault(entry, true)
+        await saveVault(entry, true)
         setAddingVault(null)
         onVaultSwitched?.(entry.path)
     }
@@ -137,11 +127,10 @@ export function TitleBar({
     return (
         <header
             className="flex h-9 w-full select-none items-center justify-between border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 px-2 text-xs text-neutral-700 dark:text-neutral-300"
-            style={{['--wails-draggable' as string]: 'drag'}}
-            onDoubleClick={() => WindowToggleMaximise()}
+            data-tauri-drag-region
         >
             {/* Left section: Logo, Sidebar Toggle, Vault & Note info */}
-            <div className="flex items-center gap-2" style={{['--wails-draggable' as string]: 'no-drag'}}>
+            <div className="flex items-center gap-2">
                 <img src="/icon.svg" alt="Logledge" className="h-4 w-4" />
                 <span className="font-semibold text-neutral-900 dark:text-neutral-100">Logledge</span>
 
@@ -234,7 +223,7 @@ export function TitleBar({
             {vaultPath && (
                 <div
                     className="flex cursor-pointer items-center gap-2 rounded border border-neutral-300 dark:border-neutral-800 bg-white dark:bg-neutral-950/60 px-3 py-1 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-700 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors"
-                    style={{['--wails-draggable' as string]: 'no-drag'}}
+                   
                     onClick={onOpenQuickSwitcher}
                 >
                     <Search className="h-3.5 w-3.5" />
@@ -244,7 +233,7 @@ export function TitleBar({
             )}
 
             {/* Right section: Theme Switcher, Help, Settings, Window Controls */}
-            <div className="flex items-center" style={{['--wails-draggable' as string]: 'no-drag'}}>
+            <div className="flex items-center">
                 {onToggleTheme && (
                     <button
                         onClick={onToggleTheme}
@@ -286,14 +275,14 @@ export function TitleBar({
 
                 {/* Window Control Buttons */}
                 <button
-                    onClick={() => WindowMinimise()}
+                    onClick={() => getCurrentWindow().minimize()}
                     title={lang === 'vi' ? 'Thu nhỏ' : 'Minimize'}
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                     <Minus className="h-3.5 w-3.5" />
                 </button>
                 <button
-                    onClick={() => WindowToggleMaximise()}
+                    onClick={() => getCurrentWindow().toggleMaximize()}
                     title={isMaximised ? (lang === 'vi' ? 'Khôi phục kích thước' : 'Restore') : (lang === 'vi' ? 'Phóng to' : 'Maximize')}
                     className="flex h-9 w-10 items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
@@ -306,9 +295,9 @@ export function TitleBar({
                 <button
                     onClick={(e) => {
                         if (e.ctrlKey || e.shiftKey) {
-                            Quit()
+                            quitApp()
                         } else {
-                            WindowHide()
+                            getCurrentWindow().hide()
                         }
                     }}
                     title={lang === 'vi' ? 'Thu nhỏ xuống khay hệ thống (Giữ Ctrl để Thoát)' : 'Hide to system tray (Hold Ctrl to Quit)'}

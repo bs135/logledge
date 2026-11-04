@@ -14,9 +14,8 @@ import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {runStartupUpdateCheck} from './components/updateCheck'
-import {DetectVaultInfo, GetAbsolutePath, GetFileFilterConfig, GetNativeRelativePath, PickVaultFolder, ReadFile, RevealInExplorer, SaveFileFilterConfig, SaveVault, SetGitHubPAT, WriteFileIfUnchanged} from '../wailsjs/go/main/App'
-import {config} from '../wailsjs/go/models'
-import {ClipboardSetText, EventsOn} from '../wailsjs/runtime/runtime'
+import {detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
+import type {FileFilterConfig, VaultEntry} from './lib/types'
 import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
@@ -58,8 +57,8 @@ function App() {
     const lastResizeMouseDownTimeRef = useRef(0)
     const isDraggingSidebarRef = useRef(false)
     const dragStartXRef = useRef(0)
-    const [filterConfig, setFilterConfig] = useState<config.FileFilterConfig>(() => {
-        return new config.FileFilterConfig({
+    const [filterConfig, setFilterConfig] = useState<FileFilterConfig>(() => {
+        return ({
             enabled: true,
             mode: 'whitelist',
             whitelist: ['.md', '.markdown', '.txt'],
@@ -71,12 +70,12 @@ function App() {
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
-    const [addingVault, setAddingVault] = useState<config.VaultEntry | null>(null)
+    const [addingVault, setAddingVault] = useState<VaultEntry | null>(null)
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
     useEffect(() => {
-        GetFileFilterConfig()
+        getFileFilterConfig()
             .then((cfg) => {
                 if (cfg) {
                     setFilterConfig(cfg)
@@ -93,20 +92,20 @@ function App() {
 
     async function handleOpenVaultFolder() {
         try {
-            const chosen = await PickVaultFolder()
+            const chosen = await pickVaultFolder()
             if (!chosen) return
-            const detected = await DetectVaultInfo(chosen)
+            const detected = await detectVaultInfo(chosen)
             setAddingVault(detected)
         } catch (err) {
             alert(String(err))
         }
     }
 
-    async function handleSaveNewVault(entry: config.VaultEntry, pat?: string) {
+    async function handleSaveNewVault(entry: VaultEntry, pat?: string) {
         if (pat && entry.gitAuthMethod === 'pat') {
-            await SetGitHubPAT(pat)
+            await setGitHubPAT(pat)
         }
-        await SaveVault(entry, true)
+        await saveVault(entry, true)
         setAddingVault(null)
         handleVaultSwitched(entry.path)
     }
@@ -140,7 +139,7 @@ function App() {
             // The note was closed or renamed while this save was queued.
             if (diskRef.current.path !== path) return
             try {
-                const res = await WriteFileIfUnchanged(path, markdown, diskRef.current.content)
+                const res = await writeFileIfUnchanged(path, markdown, diskRef.current.content)
                 if (diskRef.current.path !== path) return
                 if (res.saved) {
                     diskRef.current = {path, content: markdown}
@@ -168,7 +167,7 @@ function App() {
         await saveQueueRef.current
         let text = ''
         try {
-            text = await ReadFile(path)
+            text = await readFile(path)
         } catch {
             // Open as empty note if it cannot be read.
         }
@@ -249,10 +248,7 @@ function App() {
     async function copyToClipboard(getText: () => Promise<string>) {
         try {
             const text = await getText()
-            const ok = await ClipboardSetText(text)
-            if (!ok) {
-                await navigator.clipboard.writeText(text)
-            }
+            await navigator.clipboard.writeText(text)
         } catch (err) {
             alert(t('copyPathFailed') + String(err))
         }
@@ -260,7 +256,7 @@ function App() {
 
     async function handleReveal(path: string) {
         try {
-            await RevealInExplorer(path)
+            await revealInExplorer(path)
         } catch (err) {
             alert(t('revealFailed') + String(err))
         }
@@ -311,7 +307,7 @@ function App() {
         async function checkExternalChange() {
             if (!selectedPath) return
             try {
-                const diskContent = await ReadFile(selectedPath)
+                const diskContent = await readFile(selectedPath)
                 const known = diskRef.current
                 if (known.path !== selectedPath || diskContent === known.content) {
                     // Nothing changed on disk since we last read or saved the note:
@@ -334,8 +330,8 @@ function App() {
             }
         }
 
-        const offVault = EventsOn('vault:changed', checkExternalChange)
-        const offSync = EventsOn('sync:status', (st: {state: string}) => {
+        const offVault = onEvent('vault:changed', checkExternalChange)
+        const offSync = onEvent('sync:status', (st: {state: string}) => {
             if (st?.state === 'idle') {
                 checkExternalChange()
             }
@@ -579,12 +575,12 @@ function App() {
                                 >
                                     <button
                                         onClick={() => {
-                                            const updated = new config.FileFilterConfig({
+                                            const updated = ({
                                                 ...filterConfig,
                                                 enabled: !filterConfig.enabled,
                                             })
                                             setFilterConfig(updated)
-                                            SaveFileFilterConfig(updated).catch(() => {})
+                                            saveFileFilterConfig(updated).catch(() => {})
                                         }}
                                         title={filterConfig.enabled ? t('filterActive') : t('filterInactive')}
                                         className={`p-1 rounded transition-colors ${
@@ -628,8 +624,8 @@ function App() {
                                         onRename={handleStartRename}
                                         onDelete={(path) => setDeleteTarget(path)}
                                         onDuplicate={handleDuplicate}
-                                        onCopyPath={(path) => copyToClipboard(() => GetAbsolutePath(path))}
-                                        onCopyRelativePath={(path) => copyToClipboard(() => GetNativeRelativePath(path))}
+                                        onCopyPath={(path) => copyToClipboard(() => getAbsolutePath(path))}
+                                        onCopyRelativePath={(path) => copyToClipboard(() => getNativeRelativePath(path))}
                                         onReveal={handleReveal}
                                         clipboard={fileClipboard}
                                         onCopy={(path) => setFileClipboard({mode: 'copy', path})}

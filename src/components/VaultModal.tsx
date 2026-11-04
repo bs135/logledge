@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react'
-import {config} from '../../wailsjs/go/models'
-import {GetSyncSettings} from '../../wailsjs/go/main/App'
+import type {VaultEntry} from '../lib/types'
+import {getSyncSettings} from '../lib/api'
 import {useI18n} from '../i18n'
 import {
     Folder,
@@ -14,8 +14,8 @@ import {
 interface VaultModalProps {
     isOpen: boolean
     mode: 'create' | 'edit'
-    initialVault: config.VaultEntry
-    onSave: (entry: config.VaultEntry, pat?: string) => Promise<void>
+    initialVault: VaultEntry
+    onSave: (entry: VaultEntry, pat?: string) => Promise<void>
     onClose: () => void
 }
 
@@ -51,7 +51,7 @@ export function VaultModal({
     }, [initialVault])
 
     useEffect(() => {
-        GetSyncSettings()
+        getSyncSettings()
             .then((s) => setHasPAT(s.hasPAT))
             .catch(() => {})
     }, [])
@@ -82,7 +82,7 @@ export function VaultModal({
             const trimmedURL = repoURL.trim()
             const trimmedBranch = branch.trim() || 'main'
 
-            const entry = new config.VaultEntry({
+            const entry = ({
                 path: trimmedPath,
                 name: trimmedName,
                 gitRepoUrl: trimmedURL,

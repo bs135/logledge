@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import type {DragEvent} from 'react'
-import {config, vault} from '../../wailsjs/go/models'
+import type {FileFilterConfig, VaultNode} from '../lib/types'
 import {
     ChevronRight,
     ChevronDown,
@@ -38,7 +38,7 @@ export interface InlineAction {
     initialValue?: string
 }
 
-function shouldShowFile(name: string, filter: config.FileFilterConfig): boolean {
+function shouldShowFile(name: string, filter: FileFilterConfig): boolean {
     const lower = name.toLowerCase()
     if (filter.mode === 'blacklist') {
         const isBlacklisted = (filter.blacklist || []).some((ext) => {
@@ -55,16 +55,16 @@ function shouldShowFile(name: string, filter: config.FileFilterConfig): boolean 
     }
 }
 
-function filterNode(node: vault.Node, filter?: config.FileFilterConfig): vault.Node | null {
+function filterNode(node: VaultNode, filter?: FileFilterConfig): VaultNode | null {
     if (!filter || !filter.enabled) return node
     if (!node.isDir) {
         return shouldShowFile(node.name, filter) ? node : null
     }
     const filteredChildren = (node.children || [])
         .map((child) => filterNode(child, filter))
-        .filter((child): child is vault.Node => child !== null)
+        .filter((child): child is VaultNode => child !== null)
 
-    return vault.Node.createFrom({
+    return ({
         name: node.name,
         path: node.path,
         isDir: node.isDir,
@@ -72,7 +72,7 @@ function filterNode(node: vault.Node, filter?: config.FileFilterConfig): vault.N
     })
 }
 
-function findNode(node: vault.Node, path: string): vault.Node | null {
+function findNode(node: VaultNode, path: string): VaultNode | null {
     if (node.path === path) return node
     if (node.children) {
         for (const child of node.children) {
@@ -84,9 +84,9 @@ function findNode(node: vault.Node, path: string): vault.Node | null {
 }
 
 export interface FileTreeProps {
-    root: vault.Node
+    root: VaultNode
     selectedPath: string | null
-    filter?: config.FileFilterConfig
+    filter?: FileFilterConfig
     inlineAction?: InlineAction | null
     clipboard?: FileClipboard | null
     onSelectFile: (path: string) => void
@@ -232,7 +232,7 @@ export function FileTree({
 }
 
 interface TreeEntryProps extends Omit<FileTreeProps, 'root'> {
-    node: vault.Node
+    node: VaultNode
     depth: number
     rootPath: string
     activePath: string | null
@@ -631,7 +631,7 @@ function InlineInput({
 }
 
 interface ContextMenuProps {
-    node: vault.Node
+    node: VaultNode
     position: {x: number; y: number}
     onClose: () => void
     onCreateFile: (parentRelPath: string) => void

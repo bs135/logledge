@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useEffect, useState} from 'react'
-import {GetAppSettings} from '../../wailsjs/go/main/App'
+import {getAppSettings} from '../lib/api'
 
 export type Language = 'en' | 'vi'
 
@@ -316,7 +316,7 @@ export function I18nProvider({children}: {children: React.ReactNode}) {
     })
 
     useEffect(() => {
-        GetAppSettings().then((cfg) => {
+        getAppSettings().then((cfg) => {
             if (cfg?.language === 'en' || cfg?.language === 'vi') {
                 setLang(cfg.language)
                 localStorage.setItem('logledge:lang', cfg.language)

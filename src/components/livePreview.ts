@@ -6,7 +6,7 @@ import {
 } from '@codemirror/view'
 import { EditorState, Facet, Range, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
-import { ReadAttachmentDataURL } from '../../wailsjs/go/main/App'
+import { readAttachmentDataURL } from '../lib/api'
 import { translate } from '../i18n'
 
 // Carries the active note's Vault-relative path into the StateField so the Image
@@ -90,7 +90,7 @@ function resolveAttachmentSrc(notePath: string, src: string): Promise<string> {
     const cacheKey = `${notePath}\u0000${src}`
     let pending = attachmentDataUrlCache.get(cacheKey)
     if (!pending) {
-        pending = ReadAttachmentDataURL(notePath, src).catch((err) => {
+        pending = readAttachmentDataURL(notePath, src).catch((err) => {
             attachmentDataUrlCache.delete(cacheKey)
             throw err
         })

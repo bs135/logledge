@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
-import {SearchNotes} from '../../wailsjs/go/main/App'
-import type {search} from '../../wailsjs/go/models'
+import {searchNotes} from '../lib/api'
+import type {SearchResult} from '../lib/types'
 import {Search, FileText} from 'lucide-react'
 import {useI18n} from '../i18n'
 
@@ -15,7 +15,7 @@ interface GlobalSearchProps {
 export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
     const {t} = useI18n()
     const [query, setQuery] = useState('')
-    const [results, setResults] = useState<search.Result[]>([])
+    const [results, setResults] = useState<SearchResult[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -29,7 +29,7 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                 setResults([])
                 return
             }
-            SearchNotes(query)
+            searchNotes(query)
                 .then((r) => {
                     setResults(r || [])
                     setActiveIndex(0)

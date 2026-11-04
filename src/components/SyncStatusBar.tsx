@@ -1,7 +1,6 @@
 import {useEffect, useState} from 'react'
-import {GetSyncStatus, SyncNow} from '../../wailsjs/go/main/App'
-import {gitsync} from '../../wailsjs/go/models'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
+import {getSyncStatus, onEvent, syncNow} from '../lib/api'
+import type {SyncStatus} from '../lib/types'
 import {Settings, CheckCircle2, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
 import {useI18n} from '../i18n'
 
@@ -34,12 +33,12 @@ function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
 // allowing users to click to sync immediately or open settings.
 export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
     const {t} = useI18n()
-    const [status, setStatus] = useState<gitsync.Status>({state: 'not_configured', message: ''})
+    const [status, setStatus] = useState<SyncStatus>({state: 'not_configured', message: ''})
     const [syncing, setSyncing] = useState(false)
 
     useEffect(() => {
-        GetSyncStatus().then(setStatus).catch(() => {})
-        const off = EventsOn('sync:status', (s: gitsync.Status) => setStatus(s))
+        getSyncStatus().then(setStatus).catch(() => {})
+        const off = onEvent('sync:status', (s: SyncStatus) => setStatus(s))
         return off
     }, [])
 
@@ -50,7 +49,7 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
         }
         setSyncing(true)
         try {
-            await SyncNow()
+            await syncNow()
         } catch {
             // Error status is already emitted via the sync:status event
         } finally {

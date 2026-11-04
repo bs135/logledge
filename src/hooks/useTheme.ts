@@ -1,12 +1,17 @@
 import {useEffect, useState} from 'react'
-import {
-    WindowSetDarkTheme,
-    WindowSetLightTheme,
-    WindowSetSystemDefaultTheme,
-} from '../../wailsjs/runtime/runtime'
-import {GetAppSettings, SaveAppSettings} from '../../wailsjs/go/main/App'
+import {getCurrentWindow, type Theme} from '@tauri-apps/api/window'
+import {getAppSettings, saveAppSettings} from '../lib/api'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
+
+/** Sets the native window theme (title bar, scrollbars); null follows the OS. */
+function setNativeTheme(theme: Theme | null) {
+    try {
+        getCurrentWindow().setTheme(theme).catch(() => {})
+    } catch {
+        // not running inside Tauri (browser preview)
+    }
+}
 
 export function useTheme() {
     const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -18,25 +23,13 @@ export function useTheme() {
         let isDark = true
         if (mode === 'dark') {
             isDark = true
-            try {
-                WindowSetDarkTheme()
-            } catch {
-                // ignore in browser preview
-            }
+            setNativeTheme('dark')
         } else if (mode === 'light') {
             isDark = false
-            try {
-                WindowSetLightTheme()
-            } catch {
-                // ignore
-            }
+            setNativeTheme('light')
         } else {
             isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-            try {
-                WindowSetSystemDefaultTheme()
-            } catch {
-                // ignore
-            }
+            setNativeTheme(null)
         }
 
         const root = document.documentElement
@@ -54,14 +47,14 @@ export function useTheme() {
         localStorage.setItem('logledge:theme', mode)
         applyTheme(mode)
         const lang = localStorage.getItem('logledge:lang') || 'vi'
-        SaveAppSettings(mode, lang).catch(() => {})
+        saveAppSettings(mode, lang).catch(() => {})
     }
 
     // Initialize from backend settings or localStorage
     useEffect(() => {
         applyTheme(theme)
 
-        GetAppSettings()
+        getAppSettings()
             .then((cfg) => {
                 if (cfg?.theme && (cfg.theme === 'dark' || cfg.theme === 'light' || cfg.theme === 'system')) {
                     setThemeState(cfg.theme as ThemeMode)

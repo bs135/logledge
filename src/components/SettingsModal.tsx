@@ -1,18 +1,18 @@
 import {useEffect, useState} from 'react'
 import {
-    DetectVaultInfo,
-    GetVaultList,
-    PickVaultFolder,
-    RemoveVault,
-    SaveAppSettings,
-    SaveFileFilterConfig,
-    SaveVault,
-    SetGitHubPAT,
-    SwitchVault,
-    SyncNow,
-} from '../../wailsjs/go/main/App'
-import {BrowserOpenURL} from '../../wailsjs/runtime/runtime'
-import {config} from '../../wailsjs/go/models'
+    detectVaultInfo,
+    getVaultList,
+    pickVaultFolder,
+    removeVault,
+    saveAppSettings,
+    saveFileFilterConfig,
+    saveVault,
+    setGitHubPAT,
+    switchVault,
+    syncNow,
+} from '../lib/api'
+import {openUrl} from '@tauri-apps/plugin-opener'
+import type {FileFilterConfig, VaultEntry} from '../lib/types'
 import {useI18n} from '../i18n'
 import type {Language} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
@@ -38,8 +38,8 @@ interface SettingsModalProps {
     initialTab?: 'general' | 'filter' | 'vaults' | 'appearance' | 'about'
     currentVaultPath: string | null
     currentTheme: ThemeMode
-    filterConfig: config.FileFilterConfig
-    onUpdateFilterConfig: (newConfig: config.FileFilterConfig) => void
+    filterConfig: FileFilterConfig
+    onUpdateFilterConfig: (newConfig: FileFilterConfig) => void
     onSetTheme: (theme: ThemeMode) => void
     onSwitchVault: (newPath: string) => void
     onClose: () => void
@@ -59,11 +59,11 @@ export function SettingsModal({
     const [tab, setTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>(initialTab)
 
     // Multi-Vault state
-    const [vaults, setVaults] = useState<config.VaultEntry[]>([])
+    const [vaults, setVaults] = useState<VaultEntry[]>([])
     const [vaultLoading, setVaultLoading] = useState(false)
     const [editingVault, setEditingVault] = useState<{
         mode: 'create' | 'edit'
-        vault: config.VaultEntry
+        vault: VaultEntry
     } | null>(null)
     const [syncingActive, setSyncingActive] = useState(false)
     const [syncMsg, setSyncMsg] = useState<{type: 'success' | 'error'; text: string} | null>(null)
@@ -71,7 +71,7 @@ export function SettingsModal({
 
     // Load vaults list
     function refreshVaults() {
-        GetVaultList()
+        getVaultList()
             .then((list) => setVaults(list || []))
             .catch(() => {})
     }
@@ -83,9 +83,9 @@ export function SettingsModal({
     async function handleAddVault() {
         try {
             setVaultLoading(true)
-            const chosen = await PickVaultFolder()
+            const chosen = await pickVaultFolder()
             if (!chosen) return
-            const detected = await DetectVaultInfo(chosen)
+            const detected = await detectVaultInfo(chosen)
             setEditingVault({
                 mode: 'create',
                 vault: detected,
@@ -97,10 +97,10 @@ export function SettingsModal({
         }
     }
 
-    function handleEditVault(v: config.VaultEntry) {
+    function handleEditVault(v: VaultEntry) {
         setEditingVault({
             mode: 'edit',
-            vault: new config.VaultEntry({
+            vault: ({
                 path: v.path,
                 name: v.name,
                 gitRepoUrl: v.gitRepoUrl,
@@ -110,12 +110,12 @@ export function SettingsModal({
         })
     }
 
-    async function handleSaveVaultModal(entry: config.VaultEntry, pat?: string) {
+    async function handleSaveVaultModal(entry: VaultEntry, pat?: string) {
         if (pat && entry.gitAuthMethod === 'pat') {
-            await SetGitHubPAT(pat)
+            await setGitHubPAT(pat)
         }
         const isCreate = editingVault?.mode === 'create'
-        await SaveVault(entry, isCreate)
+        await saveVault(entry, isCreate)
         if (isCreate) {
             onSwitchVault(entry.path)
         }
@@ -127,7 +127,7 @@ export function SettingsModal({
         if (targetPath === currentVaultPath) return
         setVaultLoading(true)
         try {
-            await SwitchVault(targetPath)
+            await switchVault(targetPath)
             onSwitchVault(targetPath)
             refreshVaults()
         } finally {
@@ -136,7 +136,7 @@ export function SettingsModal({
     }
 
     async function handleRemoveVault(targetPath: string) {
-        await RemoveVault(targetPath)
+        await removeVault(targetPath)
         refreshVaults()
     }
 
@@ -144,7 +144,7 @@ export function SettingsModal({
         setSyncingActive(true)
         setSyncMsg(null)
         try {
-            await SyncNow()
+            await syncNow()
             setSyncMsg({
                 type: 'success',
                 text: lang === 'vi' ? 'Đã kích hoạt đồng bộ Git!' : 'Git sync triggered!',
@@ -167,16 +167,16 @@ export function SettingsModal({
 
     function handleLanguageChange(newLang: Language) {
         setLanguage(newLang)
-        SaveAppSettings(currentTheme, newLang).catch(() => {})
+        saveAppSettings(currentTheme, newLang).catch(() => {})
     }
 
-    function updateFilter(partial: Partial<config.FileFilterConfig>) {
-        const updated = new config.FileFilterConfig({
+    function updateFilter(partial: Partial<FileFilterConfig>) {
+        const updated = ({
             ...filterConfig,
             ...partial,
         })
         onUpdateFilterConfig(updated)
-        SaveFileFilterConfig(updated).catch(() => {})
+        saveFileFilterConfig(updated).catch(() => {})
     }
 
     return (
@@ -667,7 +667,7 @@ export function SettingsModal({
 
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => BrowserOpenURL('https://github.com/bs135/logledge')}
+                                        onClick={() => openUrl('https://github.com/bs135/logledge').catch(() => {})}
                                         className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 px-3 py-1.5 text-xs font-medium transition-colors"
                                     >
                                         <FolderGit2 className="h-3.5 w-3.5" />

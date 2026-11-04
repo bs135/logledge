@@ -324,3 +324,26 @@ No blocker found. Plan changes going into Phase 1:
 - The shim's `WindowHide` now really hides to the tray and `Quit` calls
   `quit_app`.
 
+
+## 12. Phase 4 Notes
+
+- `src/lib/api.ts`: one typed wrapper per Tauri command (camelCase names,
+  argument keys matching the Rust parameters) plus `onEvent()`, which returns a
+  synchronous unsubscribe so effects can return it directly, even before
+  Tauri's async `listen` has resolved. `src/lib/types.ts` replaces the Wails
+  model classes with plain interfaces (`vault.Node` became `VaultNode` to
+  avoid clashing with the DOM `Node` type).
+- `wailsjs/` and the Phase 1 shim are deleted. The title bar uses
+  `data-tauri-drag-region` on the header only, which matches the old
+  `--wails-draggable` layout (the three child sections were `no-drag`), and
+  Tauri's own double-click maximize replaces the React `onDoubleClick`. The
+  maximize icon now updates on `onResized` instead of 500 ms polling.
+- Native theme via `getCurrentWindow().setTheme()`; links via
+  `plugin-opener`'s `openUrl`; copy-path via `navigator.clipboard`.
+- Update check ported to `src/lib/updater.ts` with the Go behaviour: drafts
+  and pre-releases are ignored, pre-release-aware version comparison, and the
+  release link falls back to the releases page unless it points at this repo.
+  `test-updater.mjs` ports `updater_test.go` and runs in `npm test`.
+- `src/lib/disableWebviewDefaults.ts` (from xmark) blocks the native context
+  menu and reload shortcuts (F5, Ctrl/Cmd+R), which would drop unsaved editor
+  content; the app's own context menus are unaffected.

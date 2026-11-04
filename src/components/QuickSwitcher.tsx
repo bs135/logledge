@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
-import {QuickSwitch} from '../../wailsjs/go/main/App'
+import {quickSwitch} from '../lib/api'
 import {Search, FileText} from 'lucide-react'
 import {useI18n} from '../i18n'
 
@@ -24,7 +24,7 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            QuickSwitch(query)
+            quickSwitch(query)
                 .then((paths) => {
                     setResults(paths || [])
                     setActiveIndex(0)

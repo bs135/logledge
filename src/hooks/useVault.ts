@@ -1,22 +1,22 @@
 import {useCallback, useEffect, useState} from 'react'
 import {
-    CreateFile,
-    CopyEntry,
-    CreateFolder,
-    DeleteEntry,
-    DuplicateEntry,
-    GetTree,
-    InitVault,
-    MoveEntry,
-    RenameEntry,
-    SelectVaultFolder,
-} from '../../wailsjs/go/main/App'
-import {vault} from '../../wailsjs/go/models'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
+    createFile,
+    copyEntry,
+    createFolder,
+    deleteEntry,
+    duplicateEntry,
+    getTree,
+    initVault,
+    moveEntry,
+    renameEntry,
+    onEvent,
+    selectVaultFolder,
+} from '../lib/api'
+import type {VaultNode} from '../lib/types'
 
 export interface UseVaultResult {
     vaultPath: string | null
-    tree: vault.Node | null
+    tree: VaultNode | null
     loading: boolean
     error: string | null
     selectFolder: () => Promise<void>
@@ -32,23 +32,23 @@ export interface UseVaultResult {
 }
 
 // useVault manages all state for the active Vault: directory path, file tree,
-// and CRUD operations. Does not block cold start — GetTree is invoked asynchronously
+// and CRUD operations. Does not block cold start — getTree is invoked asynchronously
 // after the component mounts, allowing parent UI to render immediately while waiting.
 export function useVault(): UseVaultResult {
     const [vaultPath, setVaultPath] = useState<string | null>(null)
-    const [tree, setTree] = useState<vault.Node | null>(null)
+    const [tree, setTree] = useState<VaultNode | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     const refresh = useCallback(() => {
-        GetTree()
+        getTree()
             .then(setTree)
             .catch((err) => setError(String(err)))
     }, [])
 
     useEffect(() => {
         let cancelled = false
-        InitVault()
+        initVault()
             .then((path) => {
                 if (cancelled) return
                 setVaultPath(path || null)
@@ -62,14 +62,14 @@ export function useVault(): UseVaultResult {
     }, [refresh])
 
     useEffect(() => {
-        const off = EventsOn('vault:changed', refresh)
+        const off = onEvent('vault:changed', refresh)
         return off
     }, [refresh])
 
     const selectFolder = useCallback(async () => {
         setError(null)
         try {
-            const path = await SelectVaultFolder()
+            const path = await selectVaultFolder()
             if (path) {
                 setVaultPath(path)
                 refresh()
@@ -83,10 +83,10 @@ export function useVault(): UseVaultResult {
         setLoading(true)
         setError(null)
         try {
-            const path = await InitVault()
+            const path = await initVault()
             setVaultPath(path || null)
             if (path) {
-                const tr = await GetTree()
+                const tr = await getTree()
                 setTree(tr)
             } else {
                 setTree(null)
@@ -113,7 +113,7 @@ export function useVault(): UseVaultResult {
     const createFile = useCallback(
         async (parentRelPath: string, name: string): Promise<string | undefined> => {
             try {
-                const newPath = await CreateFile(parentRelPath, name)
+                const newPath = await createFile(parentRelPath, name)
                 refresh()
                 return newPath
             } catch (err) {
@@ -126,7 +126,7 @@ export function useVault(): UseVaultResult {
     const createFolder = useCallback(
         async (parentRelPath: string, name: string): Promise<string | undefined> => {
             try {
-                const newPath = await CreateFolder(parentRelPath, name)
+                const newPath = await createFolder(parentRelPath, name)
                 refresh()
                 return newPath
             } catch (err) {
@@ -139,7 +139,7 @@ export function useVault(): UseVaultResult {
     const rename = useCallback(
         async (relPath: string, newName: string): Promise<string | undefined> => {
             try {
-                const newPath = await RenameEntry(relPath, newName)
+                const newPath = await renameEntry(relPath, newName)
                 refresh()
                 return newPath
             } catch (err) {
@@ -151,13 +151,13 @@ export function useVault(): UseVaultResult {
     )
     const move = useCallback(
         (srcRelPath: string, destParentRelPath: string) =>
-            wrap(() => MoveEntry(srcRelPath, destParentRelPath))(),
+            wrap(() => moveEntry(srcRelPath, destParentRelPath))(),
         [wrap],
     )
-    const remove = useCallback((relPath: string) => wrap(() => DeleteEntry(relPath))(), [wrap])
+    const remove = useCallback((relPath: string) => wrap(() => deleteEntry(relPath))(), [wrap])
     const duplicate = useCallback(
         async (relPath: string): Promise<string> => {
-            const newPath = await DuplicateEntry(relPath)
+            const newPath = await duplicateEntry(relPath)
             refresh()
             return newPath
         },
@@ -167,7 +167,7 @@ export function useVault(): UseVaultResult {
     // they return the new path and let the caller handle errors.
     const copyTo = useCallback(
         async (srcRelPath: string, destParentRelPath: string): Promise<string> => {
-            const newPath = await CopyEntry(srcRelPath, destParentRelPath)
+            const newPath = await copyEntry(srcRelPath, destParentRelPath)
             refresh()
             return newPath
         },
@@ -175,7 +175,7 @@ export function useVault(): UseVaultResult {
     )
     const moveTo = useCallback(
         async (srcRelPath: string, destParentRelPath: string): Promise<string> => {
-            const newPath = await MoveEntry(srcRelPath, destParentRelPath)
+            const newPath = await moveEntry(srcRelPath, destParentRelPath)
             refresh()
             return newPath
         },

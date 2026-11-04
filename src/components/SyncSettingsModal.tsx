@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react'
-import {ConfigureSync, GetSyncSettings, SetGitHubPAT} from '../../wailsjs/go/main/App'
+import {configureSync, getSyncSettings, setGitHubPAT} from '../lib/api'
 
 interface SyncSettingsModalProps {
     onClose: () => void
@@ -18,7 +18,7 @@ export function SyncSettingsModal({onClose}: SyncSettingsModalProps) {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        GetSyncSettings().then((s) => {
+        getSyncSettings().then((s) => {
             setRepoURL(s.repoURL || '')
             setBranch(s.branch || 'main')
             if (s.authMethod === 'pat' || s.authMethod === 'ssh' || s.authMethod === 'none') {
@@ -33,9 +33,9 @@ export function SyncSettingsModal({onClose}: SyncSettingsModalProps) {
         setError(null)
         try {
             if (authMethod === 'pat' && pat.trim()) {
-                await SetGitHubPAT(pat.trim())
+                await setGitHubPAT(pat.trim())
             }
-            await ConfigureSync(repoURL.trim(), branch.trim() || 'main', authMethod)
+            await configureSync(repoURL.trim(), branch.trim() || 'main', authMethod)
             onClose()
         } catch (err) {
             setError(String(err))

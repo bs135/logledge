@@ -1,20 +1,20 @@
 import {toast} from 'sonner'
 import {ArrowUpCircle, X} from 'lucide-react'
-import {CheckForUpdate} from '../../wailsjs/go/main/App'
-import {BrowserOpenURL} from '../../wailsjs/runtime/runtime'
-import {updater} from '../../wailsjs/go/models'
+import {openUrl} from '@tauri-apps/plugin-opener'
+import {checkForUpdate, type UpdateInfo} from '../lib/updater'
+import {APP_VERSION} from '../version'
 import {translate} from '../i18n'
 
 const UPDATE_TOAST_ID = 'update-available'
 
 let startupCheckStarted = false
 
-function format(template: string, info: updater.Info): string {
+function format(template: string, info: UpdateInfo): string {
     return template.replace('{latest}', info.latestVersion).replace('{current}', info.currentVersion)
 }
 
 /** Shows a persistent toast announcing a new release, with Details and close buttons. */
-export function showUpdateAvailableToast(info: updater.Info) {
+export function showUpdateAvailableToast(info: UpdateInfo) {
     toast.custom(
         (id) => (
             <div className="flex w-[356px] items-start gap-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-neutral-800 dark:text-neutral-100 shadow-lg">
@@ -26,7 +26,7 @@ export function showUpdateAvailableToast(info: updater.Info) {
                     </div>
                     <button
                         onClick={() => {
-                            BrowserOpenURL(info.releaseUrl)
+                            openUrl(info.releaseUrl).catch(() => {})
                             toast.dismiss(id)
                         }}
                         className="mt-3 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
@@ -54,7 +54,7 @@ export function showUpdateAvailableToast(info: updater.Info) {
 export function runStartupUpdateCheck() {
     if (startupCheckStarted) return
     startupCheckStarted = true
-    CheckForUpdate()
+    checkForUpdate(APP_VERSION)
         .then((info) => {
             if (info?.available) showUpdateAvailableToast(info)
         })
@@ -62,9 +62,9 @@ export function runStartupUpdateCheck() {
 }
 
 /** Manual check triggered by the user; reports every outcome via toast. */
-export async function checkForUpdateManually(): Promise<updater.Info | null> {
+export async function checkForUpdateManually(): Promise<UpdateInfo | null> {
     try {
-        const info = await CheckForUpdate()
+        const info = await checkForUpdate(APP_VERSION)
         if (info.available) {
             showUpdateAvailableToast(info)
         } else {

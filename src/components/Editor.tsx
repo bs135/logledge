@@ -5,8 +5,8 @@ import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
 import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
 import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {SaveAttachment} from '../../wailsjs/go/main/App'
-import {BrowserOpenURL} from '../../wailsjs/runtime'
+import {saveAttachment} from '../lib/api'
+import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
 import {livePreview, notePathFacet} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
@@ -169,7 +169,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                     try {
                         const base64 = await fileToBase64(file)
                         const fileName = file.name || `image-${Date.now()}.png`
-                        const relPath = await SaveAttachment(pathRef.current, fileName, base64)
+                        const relPath = await saveAttachment(pathRef.current, fileName, base64)
                         const markdownImage = `![${fileName}](${encodeMarkdownPath(relPath)})\n`
                         view.dispatch(view.state.replaceSelection(markdownImage))
                     } catch (err) {
@@ -192,7 +192,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             for (const file of imageFiles) {
                 try {
                     const base64 = await fileToBase64(file)
-                    const relPath = await SaveAttachment(pathRef.current, file.name, base64)
+                    const relPath = await saveAttachment(pathRef.current, file.name, base64)
                     const markdownImage = `![${file.name}](${encodeMarkdownPath(relPath)})\n`
                     view.dispatch(view.state.replaceSelection(markdownImage))
                 } catch (err) {
@@ -207,7 +207,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 const url = target?.getAttribute('data-url')
                 if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
                     e.preventDefault()
-                    BrowserOpenURL(url)
+                    openUrl(url).catch(() => {})
                 }
             }
         }
