@@ -106,3 +106,18 @@ jobs:
           else
             cargo test
           fi
+
+  # Single check required by the main branch ruleset; passes only when every
+  # job above passed, so job names above can change without touching it.
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: [frontend, rust]
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    steps:
+      - name: Check job results
+        run: |
+          if [ "${{ needs.frontend.result }}" != "success" ] || [ "${{ needs.rust.result }}" != "success" ]; then
+            echo "frontend=${{ needs.frontend.result }} rust=${{ needs.rust.result }}" >&2
+            exit 1
+          fi
