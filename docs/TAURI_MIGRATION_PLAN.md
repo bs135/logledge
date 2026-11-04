@@ -392,9 +392,21 @@ No blocker found. Plan changes going into Phase 1:
   explain which on-disk formats must stay compatible.
 - Quick Help's GitHub link used `target="_blank"`, which the Tauri webview
   does not open in the browser; it now goes through `openUrl`.
-- Release binary on Windows: `logledge.exe` ~13.8 MB, NSIS installer ~3.8 MB
-  (Wails portable exe was ~19.3 MB). Cold start and idle RAM still need to be
-  re-measured.
+- Release binary on Windows: `logledge.exe` ~13.6 MB, NSIS installer ~3.8 MB
+  (Wails portable exe was ~19.3 MB).
+- Cold start and idle RAM, release build on the Windows dev machine, 5 runs
+  with the user's real vault (startup sync included):
+  - Time from launch until React has rendered the title bar (detected through
+    UI Automation, so a slight overestimate): 0.79–0.99 s on warm runs, 1.69 s
+    on the first launch (cold disk cache).
+  - Idle after 30 s: `logledge.exe` itself ~34 MB working set (~6 MB private).
+    With its WebView2 child processes, the private memory totals ~180–200 MB;
+    their working sets add up to ~450 MB, but that sum counts shared WebView2
+    pages several times.
+  - The Wails figure (35–67 MB) appears to cover only the app process. The
+    comparable Tauri number (~34 MB) is within the 80 MB target; the
+    WebView2 processes are the same engine either way. A side-by-side
+    measurement was not possible because the Wails build is uninstalled.
 
 ### QA status
 

@@ -189,9 +189,9 @@ Releases are automated via `.github/workflows/release.yml`: [Release-Please](htt
 
 | Metric | Target | Measured | Notes |
 |---|---|---|---|
-| Cold-start | < 1s | to be re-measured | Vault loading, search indexing and Git sync run on background threads |
-| Idle RAM | < 80MB | to be re-measured | Native OS WebView instead of a bundled Chromium |
-| Binary size | < 30MB | ~13.8MB (`logledge.exe`), ~3.8MB installer | Release profile, bundled SQLite |
+| Cold-start | < 1s | ~0.8–1.0s (1.7s with a cold disk cache) | Launch until the UI is rendered. Vault loading, search indexing and Git sync run on background threads |
+| Idle RAM | < 80MB | ~34MB (`logledge.exe`); ~180–200MB private incl. WebView2 processes | Native OS WebView instead of a bundled Chromium; the WebView2 processes dominate the total |
+| Binary size | < 30MB | ~13.6MB (`logledge.exe`), ~3.8MB installer | Release profile, bundled SQLite |
 
 ### GitHub Sync — Implementation Notes
 
