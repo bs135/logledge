@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/bs135/logledge/compare/v0.6.0...v0.6.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **editor:** keep fenced code block height stable between view and code mode ([083bc6f](https://github.com/bs135/logledge/commit/083bc6f1cb0a743d546ac6dcddfea8226da6c037))
+* **editor:** keep fenced code block height stable between view and code mode ([3bf31d6](https://github.com/bs135/logledge/commit/3bf31d68c410d734687b3a9d38576ef5960323db))
+
 ## [0.6.0](https://github.com/bs135/logledge/compare/v0.5.0...v0.6.0) (2026-11-04)
 
 
