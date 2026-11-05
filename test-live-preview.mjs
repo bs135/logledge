@@ -361,6 +361,33 @@ test('Fenced Code Block: Live Preview reveals on cursor, renders header & collap
     assert.strictEqual(foundEndFenceMarkCase4, true, 'Closing ``` should be revealed when cursor is on code line')
 })
 
+test('Fenced Code Block: every line keeps the same line box in view and code mode', () => {
+    // Regression: in view mode the opening fence used to be replaced by a block widget and
+    // the closing fence collapsed to a thin footer line, so the block changed height when
+    // the cursor entered or left it. Both fence lines must keep their line decoration (the
+    // source of font size, line height and padding) and no decoration may be a block one.
+    for (const doc of ['```js\nlet a = 1\nlet b = 2\n```\nafter', '```\nplain\n```\nafter']) {
+        const lineClasses = (anchor) => {
+            const plugin = new LivePreviewPlugin(createTestView(doc, anchor))
+            const classes = new Map()
+            let hasBlockDecoration = false
+            plugin.decorations.between(0, doc.length, (from, to, val) => {
+                if (val.spec?.block) hasBlockDecoration = true
+                if (to === from && val.spec?.class?.includes('cm-codeblock-line')) {
+                    // cm-codeblock-footer is only a marker class with no layout styles.
+                    classes.set(from, val.spec.class.replace(' cm-codeblock-footer', ''))
+                }
+            })
+            assert.strictEqual(hasBlockDecoration, false, 'Code block must not use block decorations')
+            return classes
+        }
+        const viewMode = lineClasses(doc.length) // cursor on the trailing text line
+        const codeMode = lineClasses(0) // cursor on the opening fence
+        assert.strictEqual(viewMode.size, doc.split('\n').length - 1, 'Every code block line, fences included, has a line decoration')
+        assert.deepStrictEqual(viewMode, codeMode, `Line decorations must not depend on the mode for ${JSON.stringify(doc)}`)
+    }
+})
+
 test('Fenced Code Block: unclosed block does not collapse code lines as footer', () => {
     const doc = '```python\nprint("hello")'
     const view = createTestView(doc, 0)
