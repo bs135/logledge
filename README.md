@@ -2,7 +2,6 @@
 
 A desktop, local-first note-taking application based on plain `.md` files — synchronized across devices via GitHub. Built with [Tauri v2](https://tauri.app) (Rust backend + React 19 / TypeScript frontend).
 
-[![CI](https://github.com/bs135/logledge/actions/workflows/ci.yml/badge.svg)](https://github.com/bs135/logledge/actions/workflows/ci.yml)
 [![Release](https://github.com/bs135/logledge/actions/workflows/release.yml/badge.svg)](https://github.com/bs135/logledge/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -177,13 +176,13 @@ Bundles are generated in `src-tauri/target/release/bundle/` (NSIS installer on W
 
 ### Cross-Platform Packaging
 
-Releases are automated via `.github/workflows/release.yml`: [Release-Please](https://github.com/googleapis/release-please) maintains the changelog and creates the release on merges to `main`, then [`tauri-action`](https://github.com/tauri-apps/tauri-action) builds and uploads the bundles (also on tag pushes matching `v*`):
+Releases are automated via `.github/workflows/release.yml` on every push to `main`: [`github-tag-action`](https://github.com/mathieudutour/github-tag-action) derives the next version from the Conventional Commit messages since the last tag (patch by default), the workflow commits the version bump (`chore(release): x.y.z [skip ci]`) and pushes the `vX.Y.Z` tag, then [`tauri-action`](https://github.com/tauri-apps/tauri-action) builds the bundles and publishes them to the GitHub release with the generated changelog as release notes:
 
 - **Windows x64**: NSIS installer. Its pre-install hook (`src-tauri/windows/hooks.nsh`) removes an older Wails-based installation.
 - **macOS**: Universal (`universal-apple-darwin`) `.dmg` and `.app.tar.gz`.
 - **Linux x64**: `.AppImage`, `.deb`, `.rpm`.
 
-`.github/workflows/test-build.yml` builds the same matrix on demand and uploads the bundles as workflow artifacts.
+Running the workflow manually (`workflow_dispatch`) builds the same matrix without releasing and uploads the bundles as workflow artifacts. Because the `main` ruleset requires pull requests, the bump commit and tag are pushed with a deploy key: a write-enabled deploy key whose private key is stored in the `RELEASE_DEPLOY_KEY` secret, with "Deploy keys" in the ruleset's bypass list. `CHANGELOG.md` covers releases up to 0.6.1; later notes live on the GitHub releases.
 
 ### Measured Non-Functional Requirements (Windows Dev Machine)
 
@@ -253,7 +252,7 @@ type(scope): commit title
 Where `type` is one of: `feat`, `fix`, `refactor`, `perf`, `docs`, `style`, `test`, `chore`. `scope` should be a concise description of the area of the codebase affected by the commit (e.g., `backend`, `frontend`, `api`).
 
 ### Branching Model
-- `main`: Production-ready release branch managed by Release-Please.
+- `main`: Production-ready release branch; every push to it is tagged and released.
 - `develop`: Active development and staging branch for pull requests.
 
 ---
