@@ -189,9 +189,11 @@ export class CodeBlockHeaderWidget extends WidgetType {
     }
 
     toDOM(view: EditorView) {
-        const header = document.createElement('div')
+        // Rendered inline inside the fence line (which keeps its code-block line styling),
+        // so it must stay shorter than that line's height and not add its own box chrome.
+        const header = document.createElement('span')
         header.className =
-            'cm-codeblock-header flex items-center justify-between w-full select-none py-[2px] px-2 border-b border-neutral-200/60 dark:border-neutral-700/40 rounded-t-md bg-neutral-100/70 dark:bg-neutral-800/50 text-neutral-400 dark:text-neutral-500 font-sans leading-none'
+            'cm-codeblock-header select-none text-neutral-400 dark:text-neutral-500 font-sans leading-none'
 
         // Language label badge
         const leftWrap = document.createElement('div')
@@ -272,6 +274,18 @@ export class CodeBlockHeaderWidget extends WidgetType {
         }
         return false
     }
+}
+
+// Line class shared by every line of a fenced code block. It must not depend on whether
+// the block is rendered (view mode) or revealed as raw markdown (code mode): any difference
+// in font size, line height, padding or margin makes the block change height on toggle.
+function codeblockLineClass(first: boolean, last: boolean, footer: boolean): string {
+    let cls =
+        'cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5'
+    if (first) cls += ' cm-codeblock-first'
+    if (last) cls += ' cm-codeblock-last'
+    if (footer) cls += ' cm-codeblock-footer'
+    return cls
 }
 
 // A node range whose rendering toggles between "rendered" and "raw markdown" depending
@@ -731,21 +745,27 @@ function buildDecorations(state: EditorState): BuildResult {
                 if (!visitedCodeblockLines.has(startLine.from)) {
                     visitedCodeblockLines.add(startLine.from)
 
+                    // The fence line keeps the same line decoration in both modes so the
+                    // block's height does not change when the cursor enters or leaves it;
+                    // only the line's content is swapped for the header widget.
+                    decorations.push(
+                        Decoration.line({
+                            class: codeblockLineClass(
+                                true,
+                                startLine.number === endLine.number,
+                                false
+                            ),
+                        }).range(startLine.from)
+                    )
                     if (!isBlockActive) {
+                        // Inline (not block) replacement: a block widget would substitute
+                        // the whole line box with the widget's own, differently sized box.
                         decorations.push(
                             Decoration.replace({
                                 widget: new CodeBlockHeaderWidget(lang, codeContent, startLine.from),
-                                block: true,
                             }).range(startLine.from, startLine.to)
                         )
                     } else {
-                        decorations.push(
-                            Decoration.line({
-                                class: `cm-codeblock-line cm-codeblock-first font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5${
-                                    startLine.number === endLine.number ? ' cm-codeblock-last' : ''
-                                }`,
-                            }).range(startLine.from)
-                        )
                         if (fenceMatch) {
                             const indentLen = fenceMatch[1].length
                             const fenceMarkLen = fenceMatch[2].length
@@ -785,9 +805,11 @@ function buildDecorations(state: EditorState): BuildResult {
                         visitedCodeblockLines.add(curLine.from)
                         decorations.push(
                             Decoration.line({
-                                class: `cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5${
-                                    !hasClosingFence && l === endLine.number ? ' cm-codeblock-last' : ''
-                                }`,
+                                class: codeblockLineClass(
+                                    false,
+                                    !hasClosingFence && l === endLine.number,
+                                    false
+                                ),
                             }).range(curLine.from)
                         )
                     }
@@ -797,21 +819,18 @@ function buildDecorations(state: EditorState): BuildResult {
                 if (hasClosingFence && !visitedCodeblockLines.has(endLine.from)) {
                     visitedCodeblockLines.add(endLine.from)
 
+                    // Same line box in both modes (see the start line above); in view mode
+                    // the closing fence text is hidden, leaving an empty full-height line.
+                    decorations.push(
+                        Decoration.line({
+                            class: codeblockLineClass(false, true, !isBlockActive),
+                        }).range(endLine.from)
+                    )
                     if (!isBlockActive) {
-                        decorations.push(
-                            Decoration.line({
-                                class: 'cm-codeblock-line cm-codeblock-last cm-codeblock-footer font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50',
-                            }).range(endLine.from)
-                        )
                         decorations.push(
                             Decoration.replace({}).range(endLine.from, endLine.to)
                         )
                     } else {
-                        decorations.push(
-                            Decoration.line({
-                                class: 'cm-codeblock-line cm-codeblock-last font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5',
-                            }).range(endLine.from)
-                        )
                         if (endMatch) {
                             const indentLen = endMatch[1].length
                             const fenceMarkLen = endMatch[2].length
