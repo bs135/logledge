@@ -182,7 +182,7 @@ Releases are automated via `.github/workflows/release.yml` on every push to `mai
 - **macOS**: Universal (`universal-apple-darwin`) `.dmg` and `.app.tar.gz`.
 - **Linux x64**: `.AppImage`, `.deb`, `.rpm`.
 
-Running the workflow manually (`workflow_dispatch`) builds the same matrix without releasing and uploads the bundles as workflow artifacts. The workflow needs "Read and write permissions" for Actions, and the `main` ruleset must let GitHub Actions bypass its pull request rule so the bump commit can be pushed. `CHANGELOG.md` covers releases up to 0.6.1; later notes live on the GitHub releases.
+Running the workflow manually (`workflow_dispatch`) builds the same matrix without releasing and uploads the bundles as workflow artifacts. Because the `main` ruleset requires pull requests, the bump commit and tag are pushed with a deploy key: a write-enabled deploy key whose private key is stored in the `RELEASE_DEPLOY_KEY` secret, with "Deploy keys" in the ruleset's bypass list. `CHANGELOG.md` covers releases up to 0.6.1; later notes live on the GitHub releases.
 
 ### Measured Non-Functional Requirements (Windows Dev Machine)
 

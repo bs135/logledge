@@ -442,9 +442,13 @@ them on. Release-please will version the merge as **0.6.0**
   installs `libdbus-1-dev` for the keyring crate, Node 24.
 - `workflow_dispatch` builds without releasing and uploads artifacts (replaces
   `test-build.yml`).
-- Requirements outside the repo: Actions "Read and write permissions", and the
-  "Protect Production/Main" ruleset must allow GitHub Actions to bypass its
-  pull request rule, or the bump push is rejected. The required "Build & Test"
+- The bump commit and tag are pushed over SSH with a deploy key
+  (`RELEASE_DEPLOY_KEY` secret, write access, "Deploy keys" in the bypass list
+  of the "Protect Production/Main" ruleset). On a personal repository the
+  ruleset cannot list GitHub Actions as a bypass actor, so GITHUB_TOKEN would
+  be rejected by the pull request rule. Pushes made with a deploy key do
+  trigger workflows: the bump commit carries `[skip ci]`, and the tag push does
+  not match the `main` branch trigger. The required "Build & Test"
   status check was removed from the ruleset.
 - There is no PR CI any more; run `cargo fmt --check`, `cargo clippy
   --all-targets -- -D warnings`, `cargo test`, `npm run build` and `npm test`

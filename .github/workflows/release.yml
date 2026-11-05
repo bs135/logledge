@@ -1,9 +1,11 @@
 name: Release
-# Requires repository setting "Settings > Actions > General > Workflow permissions"
-# set to "Read and write permissions" so the tag-release job can push the
-# version-bump commit and tag back to `main`. The "Protect Production/Main"
-# ruleset must also let GitHub Actions bypass its pull request rule, otherwise
-# that push is rejected.
+# The tag-release job pushes the version-bump commit and tag back to `main`.
+# `main` is protected by the "Protect Production/Main" ruleset (pull request
+# required), and on a personal repository GITHUB_TOKEN cannot bypass it, so
+# the push uses a deploy key instead:
+#   - Settings > Deploy keys: a key with "Allow write access".
+#   - Secret RELEASE_DEPLOY_KEY: that key's private key.
+#   - Ruleset bypass list: "Deploy keys".
 
 on:
   push:
@@ -32,6 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Determine next version
         id: tag_version
