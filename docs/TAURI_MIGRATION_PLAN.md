@@ -424,3 +424,28 @@ No blocker found. Plan changes going into Phase 1:
 macOS and Linux need the CI bundles (`test-build.yml`) and a machine to run
 them on. Release-please will version the merge as **0.6.0**
 (`bump-minor-pre-major`); the release notes should state the stack change.
+
+## 15. Release Workflow Switched to xmark's (after 0.6.1)
+
+- `ci.yml`, `test-build.yml` and release-please (`release-please-config.json`,
+  `.release-please-manifest.json`) were removed; `release.yml` is now xmark's
+  workflow adapted to Logledge. Decision 2 in section 7 is reversed.
+- On every push to `main`, `github-tag-action` (dry run) computes the next
+  version from Conventional Commits (default bump: patch). The job bumps
+  `package.json`, `package-lock.json` and `src-tauri/Cargo.toml`, pushes
+  `chore(release): x.y.z [skip ci]` to `main`, pushes the tag, and the build
+  job publishes the bundles with the generated changelog as release notes.
+  `tauri.conf.json` is not edited because it reads the version from
+  `package.json`.
+- Differences from xmark: macOS builds `universal-apple-darwin` instead of
+  arm64 only, Windows builds NSIS only (the uninstall hook), Linux also
+  installs `libdbus-1-dev` for the keyring crate, Node 24.
+- `workflow_dispatch` builds without releasing and uploads artifacts (replaces
+  `test-build.yml`).
+- Requirements outside the repo: Actions "Read and write permissions", and the
+  "Protect Production/Main" ruleset must allow GitHub Actions to bypass its
+  pull request rule, or the bump push is rejected. The required "Build & Test"
+  status check was removed from the ruleset.
+- There is no PR CI any more; run `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings`, `cargo test`, `npm run build` and `npm test`
+  locally before merging. `CHANGELOG.md` stops at 0.6.1.
