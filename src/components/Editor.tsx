@@ -8,6 +8,7 @@ import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {saveAttachment} from '../lib/api'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
+import {emoticonToEmoji} from './emoji'
 import {toggleInlineMarker} from './formatting'
 import {livePreview, notePathFacet} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
@@ -125,6 +126,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
                 notePathFacet.of(path),
                 livePreview,
+                emoticonToEmoji,
                 customKeymap,
                 editorTheme,
                 updateListener,
