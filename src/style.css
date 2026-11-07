@@ -119,6 +119,25 @@ html.dark .cm-heading-6 {
     color: #94a3b8;
 }
 
+/* Blockquotes: one 4px bar per nesting level, 1rem apart, set by --bq-depth on the line.
+   Bars are a background image (not borders) so any depth works with a single rule, and
+   there is no vertical margin: CodeMirror's height map ignores margins. */
+.cm-blockquote {
+    --bq-bar: #d4d4d4;
+    padding-left: calc(var(--bq-depth, 1) * 1rem) !important;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--bq-bar) 0 4px,
+        transparent 4px 1rem
+    );
+    background-size: calc(var(--bq-depth, 1) * 1rem) 100%;
+    background-repeat: no-repeat;
+}
+
+html.dark .cm-blockquote {
+    --bq-bar: #404040;
+}
+
 /* Selection and Cursor */
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground {
