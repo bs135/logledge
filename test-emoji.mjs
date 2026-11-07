@@ -62,3 +62,40 @@ test('leaves code untouched', () => {
     assert.strictEqual(convert('```\n:)|\n```'), '```\n:)\n```')
     assert.strictEqual(convert('    :)|'), '    :)')
 })
+
+test('converts symbol shortcuts', () => {
+    assert.strictEqual(convert('(c)|'), '©')
+    assert.strictEqual(convert('Copyright (C)|'), 'Copyright ©')
+    assert.strictEqual(convert('Brand (r)|'), 'Brand ®')
+    assert.strictEqual(convert('Brand (R)|'), 'Brand ®')
+    assert.strictEqual(convert('Logledge (tm)|'), 'Logledge ™')
+    assert.strictEqual(convert('Logledge (TM)|'), 'Logledge ™')
+    assert.strictEqual(convert('5 +-|'), '5 ±')
+    assert.strictEqual(convert('+-|'), '±')
+})
+
+test('converts dashes only after text on the line', () => {
+    assert.strictEqual(convert('pages 10 --|'), 'pages 10 –')
+    assert.strictEqual(convert('wait ---|'), 'wait —')
+    // Line-leading dashes are Markdown: horizontal rule, setext underline, front matter.
+    assert.strictEqual(convert('---|'), '---')
+    assert.strictEqual(convert('Title\n--|'), 'Title\n--')
+    assert.strictEqual(convert('  ---|'), '  ---')
+    // Table delimiter rows and CLI flags are left alone.
+    // (`|` is the cursor marker in convert(), so the table case places the cursor at the end.)
+    const tableDoc = '| a | b |\n| --- | ---'
+    const tableState = EditorState.create({doc: tableDoc, extensions: [markdown({base: markdownLanguage, extensions: [GFM]})]})
+    assert.strictEqual(emoticonAt(tableState, tableDoc.length), null)
+    assert.strictEqual(convert('run --help|'), 'run --help')
+    assert.strictEqual(convert('a--|'), 'a--')
+})
+
+test('requires whitespace or line start before a symbol shortcut', () => {
+    assert.strictEqual(convert('f(c)|'), 'f(c)')
+    assert.strictEqual(convert('x+-|'), 'x+-')
+})
+
+test('leaves symbol shortcuts in code untouched', () => {
+    assert.strictEqual(convert('`a (c)|`'), '`a (c)`')
+    assert.strictEqual(convert('```\nx --|\n```'), '```\nx --\n```')
+})
