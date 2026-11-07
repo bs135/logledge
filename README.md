@@ -35,6 +35,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **CodeMirror 6 Live Preview**: Seamless hybrid editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, links, WikiLinks `[[note]]`). Delimiters hide when viewing and reveal in-place on cursor focus.
 - **Formatting Shortcuts**: `Ctrl+B` (bold), `Ctrl+I` (italic) and `Ctrl+Shift+X` (strikethrough) and `Ctrl+E` (inline code) toggle the markers around the selection; pressing again removes them.
 - **Emoticon to Emoji**: Typing an emoticon such as `:)`, `:D`, `;)` or `<3` followed by a space or Enter turns it into an emoji (🙂 😃 😉 ❤️). Press `Ctrl+Z` right after to keep the text. Code spans and code blocks are left untouched.
+- **Typographic Symbols**: The same way, `(c)` `(r)` `(tm)` (any case), `+-`, `--` and `---` become © ® ™ ± – —. Dashes are only converted after other text on a line without `|`, so horizontal rules, setext headings, front matter and table delimiter rows stay intact.
 - **Code Syntax Highlighting**: Multi-language syntax highlighting powered by CodeMirror.
 - **Sans-Serif Typography**: Clean, modern `Nunito` sans-serif typography across all headings and editor body.
 - **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.

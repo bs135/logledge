@@ -37,7 +37,27 @@ export const EMOTICONS: Record<string, string> = {
     '</3': '💔',
 }
 
-const MAX_LEN = Math.max(...Object.keys(EMOTICONS).map((k) => k.length))
+// Typographic symbols, converted with the same trigger and rules as the emoticons.
+export const SYMBOLS: Record<string, string> = {
+    '(c)': '©',
+    '(C)': '©',
+    '(r)': '®',
+    '(R)': '®',
+    '(tm)': '™',
+    '(TM)': '™',
+    '+-': '±',
+    '--': '–',
+    '---': '—',
+}
+
+const REPLACEMENTS: Record<string, string> = {...EMOTICONS, ...SYMBOLS}
+
+// Dash runs are Markdown syntax when they open a line (horizontal rule, setext heading
+// underline, front matter) or sit in a table (delimiter row), so they are only converted
+// after other text on a line that has no `|`.
+const DASH_TOKENS = new Set(['--', '---'])
+
+const MAX_LEN = Math.max(...Object.keys(REPLACEMENTS).map((k) => k.length))
 
 // Syntax nodes whose content must stay literal (code, URLs, raw HTML).
 const LITERAL_NODES = new Set([
@@ -60,23 +80,27 @@ function inLiteralNode(state: EditorState, pos: number): boolean {
 }
 
 /**
- * Returns the change that turns the emoticon ending at `pos` into an emoji, or null.
- * The emoticon must stand alone: start of line or whitespace before it, so text such as
- * `http://` or `f(x)` is never touched.
+ * Returns the change that turns the emoticon or symbol shortcut ending at `pos` into its
+ * replacement, or null. The token must stand alone: start of line or whitespace before
+ * it, so text such as `http://`, `f(x)` or `--flag` is never touched.
  */
 export function emoticonAt(state: EditorState, pos: number): {from: number; to: number; insert: string} | null {
     const line = state.doc.lineAt(pos)
     const before = state.sliceDoc(Math.max(line.from, pos - MAX_LEN - 1), pos)
-    // Try the longest match first so `:-)` wins over `-)`-like suffixes.
+    // Try the longest match first so `:-)` wins over `-)`-like suffixes and `---` over `--`.
     for (let len = Math.min(MAX_LEN, before.length); len >= 2; len--) {
         const token = before.slice(before.length - len)
-        const emoji = EMOTICONS[token]
-        if (!emoji) continue
+        const replacement = REPLACEMENTS[token]
+        if (!replacement) continue
         const from = pos - len
         const prev = from > line.from ? state.sliceDoc(from - 1, from) : ''
         if (prev && !/\s/.test(prev)) continue
+        if (DASH_TOKENS.has(token)) {
+            const textBefore = state.sliceDoc(line.from, from)
+            if (!textBefore.trim() || line.text.includes('|')) return null
+        }
         if (inLiteralNode(state, pos)) return null
-        return {from, to: pos, insert: emoji}
+        return {from, to: pos, insert: replacement}
     }
     return null
 }
