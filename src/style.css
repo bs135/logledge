@@ -119,6 +119,25 @@ html.dark .cm-heading-6 {
     color: #94a3b8;
 }
 
+/* Blockquotes: one 4px bar per nesting level, 1rem apart, set by --bq-depth on the line.
+   Bars are a background image (not borders) so any depth works with a single rule, and
+   there is no vertical margin: CodeMirror's height map ignores margins. */
+.cm-blockquote {
+    --bq-bar: #d4d4d4;
+    padding-left: calc(var(--bq-depth, 1) * 1rem) !important;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--bq-bar) 0 4px,
+        transparent 4px 1rem
+    );
+    background-size: calc(var(--bq-depth, 1) * 1rem) 100%;
+    background-repeat: no-repeat;
+}
+
+html.dark .cm-blockquote {
+    --bq-bar: #404040;
+}
+
 /* Selection and Cursor */
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground {
@@ -227,3 +246,65 @@ html.dark .cm-token-meta { color: #d2a8ff; }
 html.dark .cm-token-comment { color: #8b949e; font-style: italic; }
 html.dark .cm-token-punctuation { color: #8b949e; }
 html.dark .cm-token-invalid { color: #ff7b72; text-decoration: underline wavy #ff7b72; }
+
+/* GFM tables rendered by TableWidget (view mode). */
+.cm-table {
+    border-collapse: collapse;
+    font-size: 0.9375em;
+    line-height: 1.5;
+}
+
+.cm-table th,
+.cm-table td {
+    border: 1px solid #e5e7eb;
+    padding: 0.375rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+    cursor: text;
+}
+
+.cm-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.cm-table tbody tr:nth-child(even) td {
+    background-color: rgba(245, 245, 245, 0.5);
+}
+
+html.dark .cm-table th,
+html.dark .cm-table td {
+    border-color: #404040;
+}
+
+html.dark .cm-table th {
+    background-color: rgba(38, 38, 38, 0.8);
+    color: #f8fafc;
+}
+
+html.dark .cm-table tbody tr:nth-child(even) td {
+    background-color: rgba(38, 38, 38, 0.35);
+}
+
+/* Unordered list bullets rendered by BulletWidget (view mode). Fixed width so the item
+   text sits where it would after the raw "-"/"*" marker. */
+.cm-list-bullet {
+    display: inline-block;
+    width: 0.75em;
+    text-align: center;
+    color: #737373;
+    font-size: 1.15em;
+    line-height: 1;
+}
+
+html.dark .cm-list-bullet {
+    color: #a3a3a3;
+}
+
+/* Leading indentation of nested list items: monospace spaces give a visible step per level. */
+.cm-list-indent {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* Keep the monospace font's metrics from making indented lines taller. */
+    line-height: 1;
+}

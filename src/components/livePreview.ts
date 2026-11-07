@@ -6,6 +6,7 @@ import {
 } from '@codemirror/view'
 import { EditorState, Facet, Range, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
+import type { SyntaxNode } from '@lezer/common'
 import { readAttachmentDataURL } from '../lib/api'
 import { translate } from '../i18n'
 
@@ -52,6 +53,31 @@ class CheckboxWidget extends WidgetType {
         })
         wrap.appendChild(input)
         return wrap
+    }
+
+    ignoreEvent() {
+        return false
+    }
+}
+
+// Bullet glyphs by list nesting level (1-based), cycling for deeper levels.
+const BULLET_GLYPHS = ['•', '◦', '▪']
+
+export class BulletWidget extends WidgetType {
+    constructor(readonly depth: number) {
+        super()
+    }
+
+    eq(other: BulletWidget) {
+        return this.depth === other.depth
+    }
+
+    toDOM() {
+        const el = document.createElement('span')
+        el.className = `cm-list-bullet cm-list-bullet-${((this.depth - 1) % BULLET_GLYPHS.length) + 1}`
+        el.textContent = BULLET_GLYPHS[(this.depth - 1) % BULLET_GLYPHS.length]
+        el.setAttribute('aria-hidden', 'true')
+        return el
     }
 
     ignoreEvent() {
@@ -141,6 +167,278 @@ class ImageWidget extends WidgetType {
                 })
         }
         wrap.appendChild(img)
+        return wrap
+    }
+}
+
+// ---- GFM tables -------------------------------------------------------------------
+// A table not touched by the selection is replaced by a block widget that renders it as
+// an HTML <table>. The widget only receives a plain data model (built from the syntax
+// tree in buildTableData) so that `eq` can cheaply decide whether the DOM can be reused.
+
+type TableInline =
+    | { t: 'text'; text: string }
+    | { t: 'code'; text: string }
+    | { t: 'wiki'; text: string }
+    | { t: 'strong' | 'em' | 'strike'; children: TableInline[] }
+    | { t: 'link'; url: string; children: TableInline[] }
+
+type TableAlign = 'left' | 'center' | 'right' | null
+
+interface TableCellData {
+    // Document position of the cell's content (or of the gap between its pipes when the
+    // cell is empty); clicking the cell puts the cursor there.
+    from: number
+    content: TableInline[]
+}
+
+interface TableData {
+    aligns: TableAlign[]
+    header: TableCellData[]
+    rows: TableCellData[][]
+}
+
+// Syntax nodes that are pure markup inside inline formatting and never shown as text.
+const INLINE_MARK_NODES = new Set(['EmphasisMark', 'StrikethroughMark', 'CodeMark', 'LinkMark'])
+
+function pushText(out: TableInline[], text: string) {
+    if (!text) return
+    const prev = out[out.length - 1]
+    if (prev?.t === 'text') prev.text += text
+    else out.push({ t: 'text', text })
+}
+
+// "[[Note]]" is not part of the Lezer grammar (it is styled by a raw-text scan in
+// buildDecorations; Lezer even parses its inner "[Note]" as a reference Link), so it is
+// split out of the already-merged plain text runs here.
+function splitWikiLinks(items: TableInline[]): TableInline[] {
+    const out: TableInline[] = []
+    for (const item of items) {
+        if (item.t !== 'text') {
+            out.push(item)
+            continue
+        }
+        const wikiRegex = /\[\[([^\]]+)\]\]/g
+        let last = 0
+        let m: RegExpExecArray | null
+        while ((m = wikiRegex.exec(item.text)) !== null) {
+            if (m.index > last) out.push({ t: 'text', text: item.text.slice(last, m.index) })
+            out.push({ t: 'wiki', text: m[1] })
+            last = m.index + m[0].length
+        }
+        if (last < item.text.length) out.push({ t: 'text', text: item.text.slice(last) })
+    }
+    return out
+}
+
+// Converts the inline content of `node` between `from` and `to` into TableInline items.
+function tableInlines(
+    doc: EditorState['doc'],
+    node: SyntaxNode,
+    from: number,
+    to: number
+): TableInline[] {
+    const out: TableInline[] = []
+    let pos = from
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (child.to <= from || child.from >= to) continue
+        if (child.from > pos) pushText(out, doc.sliceString(pos, child.from))
+        pos = Math.max(pos, child.to)
+        const name = child.name
+        if (INLINE_MARK_NODES.has(name)) continue
+        if (name === 'StrongEmphasis' || name === 'Emphasis' || name === 'Strikethrough') {
+            const t = name === 'StrongEmphasis' ? 'strong' : name === 'Emphasis' ? 'em' : 'strike'
+            out.push({ t, children: tableInlines(doc, child, child.from, child.to) })
+        } else if (name === 'InlineCode') {
+            let codeFrom = child.from
+            let codeTo = child.to
+            const first = child.firstChild
+            const last = child.lastChild
+            if (first?.name === 'CodeMark') codeFrom = first.to
+            if (last?.name === 'CodeMark' && last !== first) codeTo = last.from
+            out.push({ t: 'code', text: doc.sliceString(codeFrom, codeTo) })
+        } else if (name === 'Link') {
+            const marks = child.getChildren('LinkMark')
+            const url = child.getChild('URL')
+            if (marks.length >= 2 && url) {
+                out.push({
+                    t: 'link',
+                    url: doc.sliceString(url.from, url.to),
+                    children: tableInlines(doc, child, marks[0].to, marks[1].from),
+                })
+            } else {
+                pushText(out, doc.sliceString(child.from, child.to))
+            }
+        } else if (name === 'Escape') {
+            pushText(out, doc.sliceString(child.from + 1, child.to))
+        } else {
+            pushText(out, doc.sliceString(child.from, child.to))
+        }
+    }
+    if (pos < to) pushText(out, doc.sliceString(pos, to))
+    return splitWikiLinks(out)
+}
+
+// Splits a TableHeader/TableRow into cells at its `|` delimiters. Lezer omits TableCell
+// nodes for empty cells, so cells are derived from the gaps between delimiters rather
+// than from the TableCell nodes alone.
+function tableRowCells(doc: EditorState['doc'], row: SyntaxNode): TableCellData[] {
+    const delims = row.getChildren('TableDelimiter')
+    const cellNodes = row.getChildren('TableCell')
+    const gaps: [number, number][] = []
+    if (delims.length === 0) {
+        gaps.push([row.from, row.to])
+    } else {
+        if (doc.sliceString(row.from, delims[0].from).trim()) gaps.push([row.from, delims[0].from])
+        for (let i = 0; i + 1 < delims.length; i++) gaps.push([delims[i].to, delims[i + 1].from])
+        const lastTo = delims[delims.length - 1].to
+        if (doc.sliceString(lastTo, row.to).trim()) gaps.push([lastTo, row.to])
+    }
+    return gaps.map(([gapFrom, gapTo]) => {
+        const cell = cellNodes.find((c) => c.from >= gapFrom && c.to <= gapTo)
+        if (!cell) return { from: gapFrom, content: [] }
+        return { from: cell.from, content: tableInlines(doc, cell, cell.from, cell.to) }
+    })
+}
+
+function parseTableAligns(delimiterRow: string): TableAlign[] {
+    return delimiterRow
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((spec) => {
+            const s = spec.trim()
+            const left = s.startsWith(':')
+            const right = s.endsWith(':')
+            if (left && right) return 'center'
+            if (right) return 'right'
+            if (left) return 'left'
+            return null
+        })
+}
+
+function buildTableData(doc: EditorState['doc'], table: SyntaxNode): TableData | null {
+    const headerNode = table.getChild('TableHeader')
+    if (!headerNode) return null
+    // The delimiter row (|---|:-:|) is a TableDelimiter directly under Table.
+    const delimRow = table.getChildren('TableDelimiter')[0]
+    const header = tableRowCells(doc, headerNode)
+    const cols = header.length
+    const aligns = delimRow ? parseTableAligns(doc.sliceString(delimRow.from, delimRow.to)) : []
+    const rows = table.getChildren('TableRow').map((rowNode) => {
+        // GFM: body rows are padded with empty cells / truncated to the header's width.
+        const cells = tableRowCells(doc, rowNode).slice(0, cols)
+        while (cells.length < cols) cells.push({ from: rowNode.to, content: [] })
+        return cells
+    })
+    return { aligns: header.map((_, i) => aligns[i] ?? null), header, rows }
+}
+
+function appendTableInlines(parent: HTMLElement, items: TableInline[]) {
+    for (const item of items) {
+        switch (item.t) {
+            case 'text':
+                parent.appendChild(document.createTextNode(item.text))
+                break
+            case 'code': {
+                const el = document.createElement('code')
+                el.className =
+                    'cm-inline-code font-mono text-[0.875em] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-red-500 dark:text-red-400 border border-neutral-200 dark:border-neutral-700/60'
+                el.textContent = item.text
+                parent.appendChild(el)
+                break
+            }
+            case 'wiki': {
+                const el = document.createElement('span')
+                el.className =
+                    'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded font-medium'
+                el.textContent = item.text
+                parent.appendChild(el)
+                break
+            }
+            case 'link': {
+                // Same class/attributes as inline links so Editor's Ctrl+Click handler
+                // opens them from inside the table too.
+                const el = document.createElement('span')
+                el.className =
+                    'cm-link text-blue-600 dark:text-blue-400 underline underline-offset-2 decoration-blue-300 dark:decoration-blue-600 hover:decoration-blue-500 cursor-pointer'
+                el.setAttribute('data-url', item.url)
+                el.title = `Ctrl+Click to open ${item.url}`
+                appendTableInlines(el, item.children)
+                parent.appendChild(el)
+                break
+            }
+            default: {
+                const el = document.createElement(
+                    item.t === 'strong' ? 'strong' : item.t === 'em' ? 'em' : 's'
+                )
+                if (item.t === 'strong') el.className = 'font-bold text-neutral-900 dark:text-neutral-100'
+                if (item.t === 'strike') el.className = 'line-through opacity-70'
+                appendTableInlines(el, item.children)
+                parent.appendChild(el)
+            }
+        }
+    }
+}
+
+export class TableWidget extends WidgetType {
+    private readonly key: string
+
+    constructor(
+        readonly data: TableData,
+        readonly tableFrom: number
+    ) {
+        super()
+        this.key = JSON.stringify(data)
+    }
+
+    eq(other: TableWidget) {
+        return this.tableFrom === other.tableFrom && this.key === other.key
+    }
+
+    toDOM(view: EditorView) {
+        // Padding rather than margin: see HrWidget for why block-decoration widgets must
+        // confine their own height to padding/border instead of (uncounted) margins.
+        const wrap = document.createElement('div')
+        wrap.className = 'cm-table-widget py-2 overflow-x-auto'
+        const table = document.createElement('table')
+        table.className = 'cm-table'
+
+        const addRow = (section: HTMLElement, cells: TableCellData[], tag: 'th' | 'td') => {
+            const tr = document.createElement('tr')
+            cells.forEach((cell, i) => {
+                const el = document.createElement(tag)
+                const align = this.data.aligns[i]
+                if (align) el.style.textAlign = align
+                el.setAttribute('data-from', String(cell.from))
+                appendTableInlines(el, cell.content)
+                tr.appendChild(el)
+            })
+            section.appendChild(tr)
+        }
+
+        const thead = document.createElement('thead')
+        addRow(thead, this.data.header, 'th')
+        table.appendChild(thead)
+        if (this.data.rows.length) {
+            const tbody = document.createElement('tbody')
+            for (const row of this.data.rows) addRow(tbody, row, 'td')
+            table.appendChild(tbody)
+        }
+        wrap.appendChild(table)
+
+        // Clicking a cell reveals the raw markdown with the cursor at that cell. Ctrl/Cmd
+        // clicks on links are left alone so Editor's link handler can open them.
+        wrap.addEventListener('mousedown', (e) => {
+            const target = e.target as HTMLElement | null
+            if ((e.ctrlKey || e.metaKey) && target?.closest('.cm-link')) return
+            e.preventDefault()
+            const cellEl = target?.closest('[data-from]')
+            const pos = cellEl ? Number(cellEl.getAttribute('data-from')) : this.tableFrom
+            view.dispatch({ selection: { anchor: pos } })
+            view.focus()
+        })
         return wrap
     }
 }
@@ -334,8 +632,14 @@ function buildDecorations(state: EditorState): BuildResult {
     // keep the raw-text WikiLink scan below from decorating "[[...]]" examples that
     // appear inside code rather than as actual prose links.
     const codeRanges: InteractiveRange[] = []
+    // Tables currently replaced by a TableWidget; the WikiLink scan below must not add
+    // decorations inside them (the widget renders "[[...]]" itself).
+    const renderedTableRanges: InteractiveRange[] = []
     const visitedHeadingLines = new Set<number>()
-    const visitedBlockquoteLines = new Set<number>()
+    // Deepest blockquote nesting level seen on each line (keyed by line.from). Filled while
+    // walking the tree and turned into line decorations once the walk is done, because an
+    // outer Blockquote is entered before its nested ones and must not claim their lines.
+    const blockquoteDepth = new Map<number, number>()
     const visitedCodeblockLines = new Set<number>()
 
     const tree = syntaxTree(state)
@@ -682,20 +986,123 @@ function buildDecorations(state: EditorState): BuildResult {
                 return
             }
 
+            // 9b. GFM Table: rendered as an HTML table unless the selection touches it,
+            // in which case the raw markdown is shown with dimmed pipes.
+            if (name === 'Table') {
+                const startLine = doc.lineAt(nodeFrom)
+                const endLine = doc.lineAt(nodeTo)
+                interactiveRanges.push({ from: startLine.from, to: endLine.to })
+                const isActive = state.selection.ranges.some(
+                    (r) => r.from <= endLine.to && r.to >= startLine.from
+                )
+                // Only top-level tables become a block widget: inside a blockquote or list
+                // item the replaced lines would also swallow the container's markers.
+                const isTopLevel = node.node.parent?.name === 'Document'
+                if (isActive || !isTopLevel) return
+                const data = buildTableData(doc, node.node)
+                if (!data) return
+                renderedTableRanges.push({ from: startLine.from, to: endLine.to })
+                decorations.push(
+                    Decoration.replace({
+                        widget: new TableWidget(data, startLine.from),
+                        block: true,
+                    }).range(startLine.from, endLine.to)
+                )
+                // The widget renders the cell contents itself.
+                return false
+            }
+
+            if (name === 'TableDelimiter') {
+                decorations.push(
+                    Decoration.mark({
+                        class: 'cm-formatting text-neutral-400 dark:text-neutral-500',
+                    }).range(nodeFrom, nodeTo)
+                )
+                return
+            }
+
+            // 9c. Unordered list marker (-, *, +): replaced by a bullet glyph chosen by
+            // nesting level when the cursor is off the line, shown dimmed when it is on it.
+            // Ordered list markers ("1.") are left as they are.
+            if (name === 'ListMark') {
+                const item = node.node.parent
+                const list = item?.parent
+                const line = doc.lineAt(nodeFrom)
+                // Nested-list indentation is plain spaces, which are very narrow in the
+                // proportional editor font. Render it in monospace (in both modes, so the
+                // text does not shift when the cursor enters the line).
+                if (nodeFrom > line.from && /^[ \t]+$/.test(doc.sliceString(line.from, nodeFrom))) {
+                    decorations.push(
+                        Decoration.mark({ class: 'cm-list-indent' }).range(line.from, nodeFrom)
+                    )
+                }
+                if (!item || list?.name !== 'BulletList') return
+                const isLineActive = selFrom <= line.to && selTo >= line.from
+                interactiveRanges.push({ from: line.from, to: line.to })
+                if (isLineActive) {
+                    decorations.push(
+                        Decoration.mark({
+                            // No font-mono here: a second font's metrics would make the
+                            // line taller than in view mode.
+                            class: 'cm-formatting text-neutral-400 dark:text-neutral-500',
+                        }).range(nodeFrom, nodeTo)
+                    )
+                    return
+                }
+                if (item.getChild('Task')) {
+                    // Task items already show a checkbox; hide the marker and its space.
+                    let markTo = nodeTo
+                    const next = doc.sliceString(markTo, markTo + 1)
+                    if (next === ' ' || next === '\t') markTo++
+                    decorations.push(Decoration.replace({}).range(nodeFrom, markTo))
+                    return
+                }
+                let depth = 0
+                for (let p: SyntaxNode | null = list; p; p = p.parent) {
+                    if (p.name === 'BulletList' || p.name === 'OrderedList') depth++
+                }
+                decorations.push(
+                    Decoration.replace({ widget: new BulletWidget(depth) }).range(nodeFrom, nodeTo)
+                )
+                return
+            }
+
             // 10. Blockquote
             if (name === 'Blockquote') {
+                let depth = 1
+                for (let p = node.node.parent; p; p = p.parent) {
+                    if (p.name === 'Blockquote') depth++
+                }
                 const startLine = doc.lineAt(nodeFrom)
                 const endLine = doc.lineAt(nodeTo)
                 for (let l = startLine.number; l <= endLine.number; l++) {
-                    const curLine = doc.line(l)
-                    if (!visitedBlockquoteLines.has(curLine.from)) {
-                        visitedBlockquoteLines.add(curLine.from)
-                        decorations.push(
-                            Decoration.line({
-                                class: 'cm-blockquote border-l-4 border-neutral-300 dark:border-neutral-700 pl-3 italic text-neutral-600 dark:text-neutral-400 my-1',
-                            }).range(curLine.from)
-                        )
+                    const lineFrom = doc.line(l).from
+                    if ((blockquoteDepth.get(lineFrom) ?? 0) < depth) {
+                        blockquoteDepth.set(lineFrom, depth)
                     }
+                }
+                // No `return false`: children (QuoteMark, nested Blockquote, inline
+                // formatting) still need to be visited.
+                return
+            }
+
+            // 10b. Blockquote marker (each `>`): hidden together with its following
+            // space when the cursor is off the line, shown dimmed when it is on it.
+            if (name === 'QuoteMark') {
+                const line = doc.lineAt(nodeFrom)
+                const isLineActive = selFrom <= line.to && selTo >= line.from
+                interactiveRanges.push({ from: line.from, to: line.to })
+                let markTo = nodeTo
+                const next = doc.sliceString(markTo, markTo + 1)
+                if (next === ' ' || next === '\t') markTo++
+                if (!isLineActive) {
+                    decorations.push(Decoration.replace({}).range(nodeFrom, markTo))
+                } else {
+                    decorations.push(
+                        Decoration.mark({
+                            class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono not-italic',
+                        }).range(nodeFrom, nodeTo)
+                    )
                 }
                 return
             }
@@ -861,6 +1268,7 @@ function buildDecorations(state: EditorState): BuildResult {
         // Skip "[[...]]" examples that appear inside inline code or fenced code blocks;
         // those are literal text, not WikiLinks.
         if (rangesOverlap(codeRanges, matchFrom, matchTo)) continue
+        if (rangesOverlap(renderedTableRanges, matchFrom, matchTo)) continue
         interactiveRanges.push({ from: matchFrom, to: matchTo })
         const isCursorInside = selFrom <= matchTo && selTo >= matchFrom
         if (!isCursorInside) {
@@ -892,6 +1300,18 @@ function buildDecorations(state: EditorState): BuildResult {
                 }).range(matchTo - 2, matchTo)
             )
         }
+    }
+
+    // Blockquote lines: one vertical bar per nesting level (drawn in CSS from --bq-depth).
+    // The line box is identical whether or not the `>` markers are revealed, so moving the
+    // cursor into a quote does not shift the layout.
+    for (const [lineFrom, depth] of blockquoteDepth) {
+        decorations.push(
+            Decoration.line({
+                class: `cm-blockquote cm-blockquote-depth-${depth} italic text-neutral-600 dark:text-neutral-400`,
+                attributes: { style: `--bq-depth: ${depth}` },
+            }).range(lineFrom)
+        )
     }
 
     return {

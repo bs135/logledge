@@ -430,3 +430,129 @@ test('Language Resolution: correctly maps aliases and standard names', async () 
     // Verify markdownHighlightStyle is defined
     assert.ok(markdownHighlightStyle, 'markdownHighlightStyle should be defined')
 })
+
+test('Blockquote: hides > markers when cursor is away, reveals them when cursor is on the line', () => {
+    const doc = '> quote\nplain'
+    // Cursor away (on "plain")
+    const plugin1 = new LivePreviewPlugin(createTestView(doc, doc.length))
+    let hidden = false
+    plugin1.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 2 && !val.spec?.class && !val.spec?.widget) hidden = true
+    })
+    assert.strictEqual(hidden, true, '"> " should be hidden when cursor is away')
+
+    // Cursor on the quote line
+    const plugin2 = new LivePreviewPlugin(createTestView(doc, 3))
+    let shown = false
+    let hidden2 = false
+    plugin2.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 1 && val.spec?.class?.includes('cm-formatting')) shown = true
+        if (from === 0 && to === 2 && !val.spec?.class && !val.spec?.widget) hidden2 = true
+    })
+    assert.strictEqual(shown, true, '> should be shown dimmed when cursor is on the line')
+    assert.strictEqual(hidden2, false, '> should not be hidden when cursor is on the line')
+})
+
+test('Blockquote: nested quotes get one depth level per >, all markers hidden', () => {
+    const doc = '> a\n>> b\n>>> c\n\nplain'
+    const plugin = new LivePreviewPlugin(createTestView(doc, doc.length))
+    const depths = new Map()
+    const hiddenRanges = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        const m = val.spec?.class?.match(/cm-blockquote-depth-(\d+)/)
+        if (m) depths.set(from, Number(m[1]))
+        if (to > from && !val.spec?.class && !val.spec?.widget) hiddenRanges.push([from, to])
+    })
+    assert.deepStrictEqual([...depths.entries()], [[0, 1], [4, 2], [9, 3]])
+    // Every ">" (and the space after the last one on each line) is hidden.
+    for (const pos of [0, 4, 5, 9, 10, 11]) {
+        assert.ok(
+            hiddenRanges.some(([f, t]) => f <= pos && t > pos),
+            `> at ${pos} should be hidden`
+        )
+    }
+})
+
+function findTableWidget(plugin, docLength) {
+    let found = null
+    plugin.decorations.between(0, docLength, (from, to, val) => {
+        if (val.spec?.widget?.constructor?.name === 'TableWidget') found = {from, to, widget: val.spec.widget, block: val.spec.block}
+    })
+    return found
+}
+
+test('Table: rendered as a block widget when cursor is away, raw markdown when cursor is inside', () => {
+    const doc = 'intro\n| A | B |\n|---|---|\n| 1 | 2 |\n\nafter'
+    const tableFrom = 6
+    const tableTo = doc.indexOf('\n\nafter')
+
+    const away = findTableWidget(new LivePreviewPlugin(createTestView(doc, 0)), doc.length)
+    assert.ok(away, 'table should be replaced by a TableWidget when cursor is away')
+    assert.strictEqual(away.block, true)
+    assert.strictEqual(away.from, tableFrom)
+    assert.strictEqual(away.to, tableTo)
+
+    const inside = findTableWidget(new LivePreviewPlugin(createTestView(doc, tableFrom + 2)), doc.length)
+    assert.strictEqual(inside, null, 'table should show raw markdown when cursor is inside')
+})
+
+test('Table: data model keeps alignment, inline formatting, empty and missing cells', () => {
+    const doc = '| Left | **Mid** | Right |\n|:--|:-:|--:|\n| `x` |  | [l](https://a.b) |\n| only |\n\nend'
+    const found = findTableWidget(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.ok(found)
+    const {aligns, header, rows} = found.widget.data
+    assert.deepStrictEqual(aligns, ['left', 'center', 'right'])
+    assert.strictEqual(header.length, 3)
+    assert.deepStrictEqual(header[1].content, [{t: 'strong', children: [{t: 'text', text: 'Mid'}]}])
+    assert.strictEqual(rows.length, 2)
+    assert.deepStrictEqual(rows[0][0].content, [{t: 'code', text: 'x'}])
+    assert.deepStrictEqual(rows[0][1].content, [], 'empty cell stays in its column')
+    assert.deepStrictEqual(rows[0][2].content, [{t: 'link', url: 'https://a.b', children: [{t: 'text', text: 'l'}]}])
+    assert.strictEqual(rows[1].length, 3, 'short row is padded to the header width')
+    assert.deepStrictEqual(rows[1][0].content, [{t: 'text', text: 'only'}])
+})
+
+test('Table: [[WikiLink]] inside a cell is kept as a wiki item, not split by the Link parse', () => {
+    const doc = '| Note |\n|---|\n| see [[Some Note]] here |\n\nend'
+    const found = findTableWidget(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.ok(found)
+    assert.deepStrictEqual(found.widget.data.rows[0][0].content, [
+        {t: 'text', text: 'see '},
+        {t: 'wiki', text: 'Some Note'},
+        {t: 'text', text: ' here'},
+    ])
+})
+
+function collectListMarks(plugin, docLength) {
+    const bullets = []
+    const hidden = []
+    const dimmed = []
+    plugin.decorations.between(0, docLength, (from, to, val) => {
+        const w = val.spec?.widget
+        if (w?.constructor?.name === 'BulletWidget') bullets.push([from, to, w.depth])
+        else if (!w && !val.spec?.class && to > from) hidden.push([from, to])
+        else if (val.spec?.class?.includes('cm-formatting')) dimmed.push([from, to])
+    })
+    return {bullets, hidden, dimmed}
+}
+
+test('Bullet list: markers become level-based bullets when cursor is away', () => {
+    const doc = '* a\n  * b\n    - c\n1. one\n   + nested\n\nend'
+    const {bullets} = collectListMarks(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    // "1." is an ordered list marker and is not replaced.
+    assert.deepStrictEqual(bullets, [[0, 1, 1], [6, 7, 2], [14, 15, 3], [28, 29, 2]])
+})
+
+test('Bullet list: marker is shown dimmed when cursor is on the line', () => {
+    const doc = '* a\n* b'
+    const {bullets, dimmed} = collectListMarks(new LivePreviewPlugin(createTestView(doc, 2)), doc.length)
+    assert.deepStrictEqual(bullets, [[4, 5, 1]], 'only the inactive line gets a bullet widget')
+    assert.ok(dimmed.some(([f, t]) => f === 0 && t === 1), 'active line marker is dimmed raw text')
+})
+
+test('Bullet list: task item hides its marker instead of adding a bullet', () => {
+    const doc = '- [ ] task\n\nend'
+    const {bullets, hidden} = collectListMarks(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.deepStrictEqual(bullets, [])
+    assert.ok(hidden.some(([f, t]) => f === 0 && t === 2), '"- " is hidden for task items')
+})
