@@ -98,7 +98,7 @@ jobs:
       matrix:
         include:
           - platform: macOS Universal
-            os: macos-14
+            os: macos-15
             rust_target: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin
           # NSIS only: its installer hook removes the old Wails build, which
