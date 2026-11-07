@@ -33,6 +33,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 
 ### Markdown Live Preview Editor (Obsidian-Style)
 - **CodeMirror 6 Live Preview**: Seamless hybrid editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, links, WikiLinks `[[note]]`). Delimiters hide when viewing and reveal in-place on cursor focus.
+- **Formatting Shortcuts**: `Ctrl+B` (bold), `Ctrl+I` (italic) and `Ctrl+Shift+X` (strikethrough) and `Ctrl+E` (inline code) toggle the markers around the selection; pressing again removes them.
 - **Code Syntax Highlighting**: Multi-language syntax highlighting powered by CodeMirror.
 - **Sans-Serif Typography**: Clean, modern `Nunito` sans-serif typography across all headings and editor body.
 - **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.
