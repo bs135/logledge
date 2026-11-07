@@ -8,6 +8,7 @@ import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {saveAttachment} from '../lib/api'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
+import {toggleInlineMarker} from './formatting'
 import {livePreview, notePathFacet} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 
@@ -24,36 +25,8 @@ interface EditorProps {
     onRename?: (newName: string) => void
 }
 
-function toggleWrap(view: EditorView, before: string, after: string = before): boolean {
-    const sel = view.state.selection.main
-    const text = view.state.sliceDoc(sel.from, sel.to)
-    if (text.startsWith(before) && text.endsWith(after) && text.length >= before.length + after.length) {
-        // Unwrap
-        view.dispatch({
-            changes: {
-                from: sel.from,
-                to: sel.to,
-                insert: text.slice(before.length, text.length - after.length),
-            },
-            selection: {
-                anchor: sel.from,
-                head: sel.to - before.length - after.length,
-            },
-        })
-    } else {
-        // Wrap
-        view.dispatch({
-            changes: {
-                from: sel.from,
-                to: sel.to,
-                insert: `${before}${text}${after}`,
-            },
-            selection: {
-                anchor: sel.from + before.length,
-                head: sel.to + before.length,
-            },
-        })
-    }
+function toggleWrap(view: EditorView, marker: string): boolean {
+    view.dispatch(view.state.update(toggleInlineMarker(view.state, marker), {userEvent: 'input.format'}))
     return true
 }
 
