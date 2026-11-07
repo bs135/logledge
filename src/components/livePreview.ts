@@ -335,7 +335,10 @@ function buildDecorations(state: EditorState): BuildResult {
     // appear inside code rather than as actual prose links.
     const codeRanges: InteractiveRange[] = []
     const visitedHeadingLines = new Set<number>()
-    const visitedBlockquoteLines = new Set<number>()
+    // Deepest blockquote nesting level seen on each line (keyed by line.from). Filled while
+    // walking the tree and turned into line decorations once the walk is done, because an
+    // outer Blockquote is entered before its nested ones and must not claim their lines.
+    const blockquoteDepth = new Map<number, number>()
     const visitedCodeblockLines = new Set<number>()
 
     const tree = syntaxTree(state)
@@ -684,18 +687,40 @@ function buildDecorations(state: EditorState): BuildResult {
 
             // 10. Blockquote
             if (name === 'Blockquote') {
+                let depth = 1
+                for (let p = node.node.parent; p; p = p.parent) {
+                    if (p.name === 'Blockquote') depth++
+                }
                 const startLine = doc.lineAt(nodeFrom)
                 const endLine = doc.lineAt(nodeTo)
                 for (let l = startLine.number; l <= endLine.number; l++) {
-                    const curLine = doc.line(l)
-                    if (!visitedBlockquoteLines.has(curLine.from)) {
-                        visitedBlockquoteLines.add(curLine.from)
-                        decorations.push(
-                            Decoration.line({
-                                class: 'cm-blockquote border-l-4 border-neutral-300 dark:border-neutral-700 pl-3 italic text-neutral-600 dark:text-neutral-400 my-1',
-                            }).range(curLine.from)
-                        )
+                    const lineFrom = doc.line(l).from
+                    if ((blockquoteDepth.get(lineFrom) ?? 0) < depth) {
+                        blockquoteDepth.set(lineFrom, depth)
                     }
+                }
+                // No `return false`: children (QuoteMark, nested Blockquote, inline
+                // formatting) still need to be visited.
+                return
+            }
+
+            // 10b. Blockquote marker (each `>`): hidden together with its following
+            // space when the cursor is off the line, shown dimmed when it is on it.
+            if (name === 'QuoteMark') {
+                const line = doc.lineAt(nodeFrom)
+                const isLineActive = selFrom <= line.to && selTo >= line.from
+                interactiveRanges.push({ from: line.from, to: line.to })
+                let markTo = nodeTo
+                const next = doc.sliceString(markTo, markTo + 1)
+                if (next === ' ' || next === '\t') markTo++
+                if (!isLineActive) {
+                    decorations.push(Decoration.replace({}).range(nodeFrom, markTo))
+                } else {
+                    decorations.push(
+                        Decoration.mark({
+                            class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono not-italic',
+                        }).range(nodeFrom, nodeTo)
+                    )
                 }
                 return
             }
@@ -892,6 +917,18 @@ function buildDecorations(state: EditorState): BuildResult {
                 }).range(matchTo - 2, matchTo)
             )
         }
+    }
+
+    // Blockquote lines: one vertical bar per nesting level (drawn in CSS from --bq-depth).
+    // The line box is identical whether or not the `>` markers are revealed, so moving the
+    // cursor into a quote does not shift the layout.
+    for (const [lineFrom, depth] of blockquoteDepth) {
+        decorations.push(
+            Decoration.line({
+                class: `cm-blockquote cm-blockquote-depth-${depth} italic text-neutral-600 dark:text-neutral-400`,
+                attributes: { style: `--bq-depth: ${depth}` },
+            }).range(lineFrom)
+        )
     }
 
     return {

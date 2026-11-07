@@ -430,3 +430,45 @@ test('Language Resolution: correctly maps aliases and standard names', async () 
     // Verify markdownHighlightStyle is defined
     assert.ok(markdownHighlightStyle, 'markdownHighlightStyle should be defined')
 })
+
+test('Blockquote: hides > markers when cursor is away, reveals them when cursor is on the line', () => {
+    const doc = '> quote\nplain'
+    // Cursor away (on "plain")
+    const plugin1 = new LivePreviewPlugin(createTestView(doc, doc.length))
+    let hidden = false
+    plugin1.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 2 && !val.spec?.class && !val.spec?.widget) hidden = true
+    })
+    assert.strictEqual(hidden, true, '"> " should be hidden when cursor is away')
+
+    // Cursor on the quote line
+    const plugin2 = new LivePreviewPlugin(createTestView(doc, 3))
+    let shown = false
+    let hidden2 = false
+    plugin2.decorations.between(0, doc.length, (from, to, val) => {
+        if (from === 0 && to === 1 && val.spec?.class?.includes('cm-formatting')) shown = true
+        if (from === 0 && to === 2 && !val.spec?.class && !val.spec?.widget) hidden2 = true
+    })
+    assert.strictEqual(shown, true, '> should be shown dimmed when cursor is on the line')
+    assert.strictEqual(hidden2, false, '> should not be hidden when cursor is on the line')
+})
+
+test('Blockquote: nested quotes get one depth level per >, all markers hidden', () => {
+    const doc = '> a\n>> b\n>>> c\n\nplain'
+    const plugin = new LivePreviewPlugin(createTestView(doc, doc.length))
+    const depths = new Map()
+    const hiddenRanges = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        const m = val.spec?.class?.match(/cm-blockquote-depth-(\d+)/)
+        if (m) depths.set(from, Number(m[1]))
+        if (to > from && !val.spec?.class && !val.spec?.widget) hiddenRanges.push([from, to])
+    })
+    assert.deepStrictEqual([...depths.entries()], [[0, 1], [4, 2], [9, 3]])
+    // Every ">" (and the space after the last one on each line) is hidden.
+    for (const pos of [0, 4, 5, 9, 10, 11]) {
+        assert.ok(
+            hiddenRanges.some(([f, t]) => f <= pos && t > pos),
+            `> at ${pos} should be hidden`
+        )
+    }
+})
