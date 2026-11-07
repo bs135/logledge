@@ -286,3 +286,25 @@ html.dark .cm-table th {
 html.dark .cm-table tbody tr:nth-child(even) td {
     background-color: rgba(38, 38, 38, 0.35);
 }
+
+/* Unordered list bullets rendered by BulletWidget (view mode). Fixed width so the item
+   text sits where it would after the raw "-"/"*" marker. */
+.cm-list-bullet {
+    display: inline-block;
+    width: 0.75em;
+    text-align: center;
+    color: #737373;
+    font-size: 1.15em;
+    line-height: 1;
+}
+
+html.dark .cm-list-bullet {
+    color: #a3a3a3;
+}
+
+/* Leading indentation of nested list items: monospace spaces give a visible step per level. */
+.cm-list-indent {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* Keep the monospace font's metrics from making indented lines taller. */
+    line-height: 1;
+}

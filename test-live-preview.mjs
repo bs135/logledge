@@ -522,3 +522,37 @@ test('Table: [[WikiLink]] inside a cell is kept as a wiki item, not split by the
         {t: 'text', text: ' here'},
     ])
 })
+
+function collectListMarks(plugin, docLength) {
+    const bullets = []
+    const hidden = []
+    const dimmed = []
+    plugin.decorations.between(0, docLength, (from, to, val) => {
+        const w = val.spec?.widget
+        if (w?.constructor?.name === 'BulletWidget') bullets.push([from, to, w.depth])
+        else if (!w && !val.spec?.class && to > from) hidden.push([from, to])
+        else if (val.spec?.class?.includes('cm-formatting')) dimmed.push([from, to])
+    })
+    return {bullets, hidden, dimmed}
+}
+
+test('Bullet list: markers become level-based bullets when cursor is away', () => {
+    const doc = '* a\n  * b\n    - c\n1. one\n   + nested\n\nend'
+    const {bullets} = collectListMarks(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    // "1." is an ordered list marker and is not replaced.
+    assert.deepStrictEqual(bullets, [[0, 1, 1], [6, 7, 2], [14, 15, 3], [28, 29, 2]])
+})
+
+test('Bullet list: marker is shown dimmed when cursor is on the line', () => {
+    const doc = '* a\n* b'
+    const {bullets, dimmed} = collectListMarks(new LivePreviewPlugin(createTestView(doc, 2)), doc.length)
+    assert.deepStrictEqual(bullets, [[4, 5, 1]], 'only the inactive line gets a bullet widget')
+    assert.ok(dimmed.some(([f, t]) => f === 0 && t === 1), 'active line marker is dimmed raw text')
+})
+
+test('Bullet list: task item hides its marker instead of adding a bullet', () => {
+    const doc = '- [ ] task\n\nend'
+    const {bullets, hidden} = collectListMarks(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.deepStrictEqual(bullets, [])
+    assert.ok(hidden.some(([f, t]) => f === 0 && t === 2), '"- " is hidden for task items')
+})
