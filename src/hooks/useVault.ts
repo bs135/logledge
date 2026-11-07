@@ -1,8 +1,8 @@
 import {useCallback, useEffect, useState} from 'react'
 import {
-    createFile,
+    createFile as apiCreateFile,
     copyEntry,
-    createFolder,
+    createFolder as apiCreateFolder,
     deleteEntry,
     duplicateEntry,
     getTree,
@@ -113,7 +113,7 @@ export function useVault(): UseVaultResult {
     const createFile = useCallback(
         async (parentRelPath: string, name: string): Promise<string | undefined> => {
             try {
-                const newPath = await createFile(parentRelPath, name)
+                const newPath = await apiCreateFile(parentRelPath, name)
                 refresh()
                 return newPath
             } catch (err) {
@@ -126,7 +126,7 @@ export function useVault(): UseVaultResult {
     const createFolder = useCallback(
         async (parentRelPath: string, name: string): Promise<string | undefined> => {
             try {
-                const newPath = await createFolder(parentRelPath, name)
+                const newPath = await apiCreateFolder(parentRelPath, name)
                 refresh()
                 return newPath
             } catch (err) {
