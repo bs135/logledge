@@ -20,6 +20,18 @@ where
     Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
 
+/// Deserializes `null` as `true`, for settings that default to on.
+fn null_true<'de, D>(d: D) -> std::result::Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or(true))
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct VaultEntry {
@@ -127,6 +139,12 @@ pub struct Config {
     /// File filter preferences for the explorer tree.
     #[serde(deserialize_with = "null_default")]
     pub file_filter: FileFilterConfig,
+
+    /// Start Logledge (hidden in the tray) when the user logs in. On by
+    /// default: a missing field means enabled, and only `false` is written,
+    /// so configs from older builds (and the Go build) keep working.
+    #[serde(skip_serializing_if = "is_true", deserialize_with = "null_true")]
+    pub launch_at_startup: bool,
 }
 
 impl Default for Config {
@@ -140,6 +158,7 @@ impl Default for Config {
             git_branch: String::new(),
             git_auth_method: String::new(),
             file_filter: FileFilterConfig::default_filter(),
+            launch_at_startup: true,
         }
     }
 }
@@ -247,6 +266,30 @@ mod tests {
         assert!(!cfg.file_filter.enabled);
         assert_eq!(cfg.file_filter.mode, "blacklist");
         assert!(cfg.file_filter.whitelist.is_empty());
+        assert!(cfg.launch_at_startup, "missing field must mean enabled");
+    }
+
+    #[test]
+    fn launch_at_startup_defaults_on_and_persists_off() {
+        assert!(Config::default().launch_at_startup);
+        let parsed: Config = serde_json::from_str(r#"{"launchAtStartup":null}"#).unwrap();
+        assert!(parsed.launch_at_startup);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let off = Config {
+            launch_at_startup: false,
+            ..Config::default()
+        };
+        save_to(&path, &off).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(value["launchAtStartup"], false);
+        assert!(!load_from(&path).unwrap().launch_at_startup);
+
+        save_to(&path, &Config::default()).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(value.get("launchAtStartup").is_none());
+        assert!(load_from(&path).unwrap().launch_at_startup);
     }
 
     #[test]

@@ -1,3 +1,4 @@
+mod autostart;
 mod commands;
 mod config;
 mod error;
@@ -28,8 +29,11 @@ pub fn run() {
     tauri::Builder::default()
         // Must be registered first so a second launch exits before other
         // plugins initialize; the running instance is focused instead.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            lifecycle::show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A login launch while already running changes nothing.
+            if !autostart::launched_at_login(&args) {
+                lifecycle::show_main_window(app);
+            }
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -48,6 +52,24 @@ pub fn run() {
                 }),
             );
             tray::init(app.handle(), &state.language())?;
+
+            // The window starts hidden (tauri.conf.json); a login launch stays
+            // in the tray.
+            if !autostart::launched_at_login(std::env::args()) {
+                lifecycle::show_main_window(app.handle());
+            }
+            // Keep the OS login entry in line with the saved setting (on by
+            // default, so the first run registers it). Skipped in debug builds
+            // so `tauri dev` doesn't register the dev binary at login.
+            if !cfg!(debug_assertions) {
+                let enabled = state.launch_at_startup();
+                std::thread::spawn(move || {
+                    if let Err(e) = autostart::apply(enabled) {
+                        eprintln!("{e}");
+                    }
+                });
+            }
+
             app.manage(state);
             Ok(())
         })
@@ -64,6 +86,8 @@ pub fn run() {
             commands::get_app_settings,
             commands::get_language,
             commands::save_app_settings,
+            commands::get_launch_at_startup,
+            commands::set_launch_at_startup,
             commands::get_file_filter_config,
             commands::save_file_filter_config,
             commands::get_tree,

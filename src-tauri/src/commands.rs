@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::autostart;
 use crate::config::{Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, Status};
@@ -130,6 +131,23 @@ pub async fn save_app_settings(
         s.save_app_settings(&theme, &language)?;
         tray::set_language(&app, &s.language());
         Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_launch_at_startup(state: AppStateRef<'_>) -> Result<bool> {
+    blocking(&state, |s| Ok(s.launch_at_startup())).await
+}
+
+/// Registers/unregisters the login launch, then saves the choice. Nothing is
+/// saved when the OS refuses, so the toggle never shows a state that isn't
+/// applied.
+#[tauri::command]
+pub async fn set_launch_at_startup(state: AppStateRef<'_>, enabled: bool) -> Result<()> {
+    blocking(&state, move |s| {
+        autostart::set(enabled)?;
+        s.save_launch_at_startup(enabled)
     })
     .await
 }

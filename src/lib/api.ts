@@ -30,6 +30,10 @@ export const removeVault = (targetPath: string) => invoke<void>('remove_vault', 
 export const getAppSettings = () => invoke<AppConfig>('get_app_settings')
 export const saveAppSettings = (theme: string, language: string) =>
     invoke<void>('save_app_settings', {theme, language})
+// Launch at login (hidden in the tray); on by default.
+export const getLaunchAtStartup = () => invoke<boolean>('get_launch_at_startup')
+export const setLaunchAtStartup = (enabled: boolean) =>
+    invoke<void>('set_launch_at_startup', {enabled})
 export const getFileFilterConfig = () => invoke<FileFilterConfig>('get_file_filter_config')
 export const saveFileFilterConfig = (filter: FileFilterConfig) =>
     invoke<void>('save_file_filter_config', {filter})

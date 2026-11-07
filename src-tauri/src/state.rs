@@ -307,6 +307,19 @@ impl AppState {
         self.save_config(&cfg)
     }
 
+    /// Whether the app should start when the user logs in (on by default).
+    pub fn launch_at_startup(&self) -> bool {
+        self.load_config()
+            .map(|cfg| cfg.launch_at_startup)
+            .unwrap_or(true)
+    }
+
+    pub fn save_launch_at_startup(&self, enabled: bool) -> Result<()> {
+        let mut cfg = self.load_config()?;
+        cfg.launch_at_startup = enabled;
+        self.save_config(&cfg)
+    }
+
     pub fn get_file_filter_config(&self) -> Result<FileFilterConfig> {
         Ok(self.load_config()?.file_filter)
     }
@@ -497,6 +510,19 @@ mod tests {
             .map(|v| v.name)
             .collect();
         assert_eq!(names, ["b"]);
+    }
+
+    #[test]
+    fn launch_at_startup_setting() {
+        let t = new_app();
+        assert!(t.app.launch_at_startup());
+        t.app.save_launch_at_startup(false).unwrap();
+        assert!(!t.app.launch_at_startup());
+        // Other settings writes keep the choice.
+        t.app.save_app_settings("dark", "vi").unwrap();
+        assert!(!t.app.launch_at_startup());
+        t.app.save_launch_at_startup(true).unwrap();
+        assert!(t.app.launch_at_startup());
     }
 
     #[test]

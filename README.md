@@ -59,6 +59,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 ### Desktop Shell & Ergonomics
 - **Custom Frameless Title Bar**: Draggable header, active vault & note indicator, centered search trigger, and custom window controls (minimize, maximize/restore, close to tray).
 - **System Tray Integration**: Runs in background with tray menu (Open Logledge, Sync Now, Quit) and single-instance lock to prevent duplicate processes.
+- **Launch at Startup**: Starts hidden in the system tray when you sign in (on by default; toggle in Settings → General). Uses the per-user `Run` registry key on Windows, a LaunchAgent on macOS and an XDG autostart entry on Linux.
 - **Theming**: Full Dark, Light, and System Default theme support across the window shell, modals, and editor.
 - **Internationalization (i18n)**: Complete English (`en`) and Vietnamese (`vi`) localization across all UI elements, system tray, and dialogs.
 - **Settings & Quick Help**: Comprehensive tabbed settings dialog and quick help modal with markdown syntax tips and keyboard shortcuts.
@@ -216,13 +217,14 @@ Running the workflow manually (`workflow_dispatch`) builds the same matrix witho
 │   │   ├── lib.rs              # Tauri builder: plugins, state, command registration
 │   │   ├── commands.rs         # Tauri commands exposed to the frontend
 │   │   ├── state.rs            # AppState: services plus multi-vault configuration
-│   │   ├── config.rs           # config.json (multi-vault, active vault, theme, language, filter)
+│   │   ├── config.rs           # config.json (multi-vault, active vault, theme, language, filter, launch at startup)
 │   │   ├── vault.rs            # VaultService: file/folder tree CRUD, attachments, trash
 │   │   ├── watcher.rs          # notify wrapper with debounce and self-write suppression
 │   │   ├── search.rs           # SQLite FTS5 indexer and Global Search
 │   │   ├── fuzzy.rs            # Quick Switcher fuzzy matching
 │   │   ├── gitsync/            # Git sync engine, git CLI execution, keychain credentials
 │   │   ├── tray.rs             # System tray menu
+│   │   ├── autostart.rs        # Launch at login (Run key / LaunchAgent / XDG autostart)
 │   │   └── lifecycle.rs        # Hide-to-tray and graceful quit with final sync
 │   ├── capabilities/           # Tauri permissions for the main window
 │   ├── icons/                  # App icons (source artwork in icons/source/)

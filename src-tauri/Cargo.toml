@@ -14,6 +14,7 @@ crate-type = ["staticlib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+auto-launch = "0.6"
 base64 = "0.22"
 chrono = "0.4"
 dirs = "6"
@@ -34,3 +35,6 @@ walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"
+
+[target."cfg(windows)".dependencies]
+windows-registry = "0.6"

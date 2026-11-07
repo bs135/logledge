@@ -25,6 +25,8 @@ export interface AppConfig {
     gitBranch?: string
     gitAuthMethod?: string
     fileFilter: FileFilterConfig
+    /** Absent means enabled (only `false` is stored). Use getLaunchAtStartup. */
+    launchAtStartup?: boolean
 }
 
 export interface VaultNode {
