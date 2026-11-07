@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react'
 import {
     detectVaultInfo,
+    getLaunchAtStartup,
     getVaultList,
     pickVaultFolder,
     removeVault,
@@ -8,6 +9,7 @@ import {
     saveFileFilterConfig,
     saveVault,
     setGitHubPAT,
+    setLaunchAtStartup,
     switchVault,
     syncNow,
 } from '../lib/api'
@@ -79,6 +81,30 @@ export function SettingsModal({
     useEffect(() => {
         refreshVaults()
     }, [])
+
+    // Launch at login (null until loaded)
+    const [launchAtStartup, setLaunchAtStartupState] = useState<boolean | null>(null)
+    const [launchSaving, setLaunchSaving] = useState(false)
+    const [launchError, setLaunchError] = useState('')
+
+    useEffect(() => {
+        getLaunchAtStartup()
+            .then(setLaunchAtStartupState)
+            .catch(() => setLaunchAtStartupState(true))
+    }, [])
+
+    async function handleLaunchAtStartupChange(enabled: boolean) {
+        setLaunchSaving(true)
+        setLaunchError('')
+        try {
+            await setLaunchAtStartup(enabled)
+            setLaunchAtStartupState(enabled)
+        } catch (err) {
+            setLaunchError(String(err))
+        } finally {
+            setLaunchSaving(false)
+        }
+    }
 
     async function handleAddVault() {
         try {
@@ -308,6 +334,30 @@ export function SettingsModal({
                                             </div>
                                         </label>
                                     </div>
+                                </div>
+
+                                <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4">
+                                    <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('startupTitle')}</h3>
+                                    <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-800/30">
+                                        <div className="text-xs">
+                                            <div className="font-semibold text-neutral-900 dark:text-neutral-100">{t('launchAtStartupLabel')}</div>
+                                            <div className="mt-0.5 text-neutral-500 dark:text-neutral-400">{t('launchAtStartupDesc')}</div>
+                                        </div>
+                                        <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={t('launchAtStartupLabel')}
+                                                checked={launchAtStartup ?? false}
+                                                disabled={launchAtStartup === null || launchSaving}
+                                                onChange={(e) => handleLaunchAtStartupChange(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-disabled:opacity-60 dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-neutral-600 peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+                                    {launchError && (
+                                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{launchError}</p>
+                                    )}
                                 </div>
 
                                 <div className="border-t border-neutral-200 dark:border-neutral-800 pt-4">

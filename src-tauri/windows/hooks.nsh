@@ -36,3 +36,13 @@
   !insertmacro REMOVE_WAILS_BUILD HKLM
   !insertmacro REMOVE_WAILS_BUILD HKCU
 !macroend
+
+; "Launch at startup" (src-tauri/src/autostart.rs) writes a per-user Run
+; value. Remove it on a real uninstall so Windows doesn't try to start a
+; missing exe at login; an upgrade (/UPDATE) keeps it.
+!macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $UpdateMode <> 1
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Logledge"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "Logledge"
+  ${EndIf}
+!macroend
