@@ -430,3 +430,53 @@ test('Language Resolution: correctly maps aliases and standard names', async () 
     // Verify markdownHighlightStyle is defined
     assert.ok(markdownHighlightStyle, 'markdownHighlightStyle should be defined')
 })
+
+function findTableWidget(plugin, docLength) {
+    let found = null
+    plugin.decorations.between(0, docLength, (from, to, val) => {
+        if (val.spec?.widget?.constructor?.name === 'TableWidget') found = {from, to, widget: val.spec.widget, block: val.spec.block}
+    })
+    return found
+}
+
+test('Table: rendered as a block widget when cursor is away, raw markdown when cursor is inside', () => {
+    const doc = 'intro\n| A | B |\n|---|---|\n| 1 | 2 |\n\nafter'
+    const tableFrom = 6
+    const tableTo = doc.indexOf('\n\nafter')
+
+    const away = findTableWidget(new LivePreviewPlugin(createTestView(doc, 0)), doc.length)
+    assert.ok(away, 'table should be replaced by a TableWidget when cursor is away')
+    assert.strictEqual(away.block, true)
+    assert.strictEqual(away.from, tableFrom)
+    assert.strictEqual(away.to, tableTo)
+
+    const inside = findTableWidget(new LivePreviewPlugin(createTestView(doc, tableFrom + 2)), doc.length)
+    assert.strictEqual(inside, null, 'table should show raw markdown when cursor is inside')
+})
+
+test('Table: data model keeps alignment, inline formatting, empty and missing cells', () => {
+    const doc = '| Left | **Mid** | Right |\n|:--|:-:|--:|\n| `x` |  | [l](https://a.b) |\n| only |\n\nend'
+    const found = findTableWidget(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.ok(found)
+    const {aligns, header, rows} = found.widget.data
+    assert.deepStrictEqual(aligns, ['left', 'center', 'right'])
+    assert.strictEqual(header.length, 3)
+    assert.deepStrictEqual(header[1].content, [{t: 'strong', children: [{t: 'text', text: 'Mid'}]}])
+    assert.strictEqual(rows.length, 2)
+    assert.deepStrictEqual(rows[0][0].content, [{t: 'code', text: 'x'}])
+    assert.deepStrictEqual(rows[0][1].content, [], 'empty cell stays in its column')
+    assert.deepStrictEqual(rows[0][2].content, [{t: 'link', url: 'https://a.b', children: [{t: 'text', text: 'l'}]}])
+    assert.strictEqual(rows[1].length, 3, 'short row is padded to the header width')
+    assert.deepStrictEqual(rows[1][0].content, [{t: 'text', text: 'only'}])
+})
+
+test('Table: [[WikiLink]] inside a cell is kept as a wiki item, not split by the Link parse', () => {
+    const doc = '| Note |\n|---|\n| see [[Some Note]] here |\n\nend'
+    const found = findTableWidget(new LivePreviewPlugin(createTestView(doc, doc.length)), doc.length)
+    assert.ok(found)
+    assert.deepStrictEqual(found.widget.data.rows[0][0].content, [
+        {t: 'text', text: 'see '},
+        {t: 'wiki', text: 'Some Note'},
+        {t: 'text', text: ' here'},
+    ])
+})
