@@ -12,6 +12,9 @@ use tauri::{AppHandle, Manager, Wry};
 use crate::lifecycle::{graceful_quit, show_main_window};
 use crate::state::AppState;
 
+/// Id of the single tray icon.
+const TRAY_ID: &str = "main";
+
 const MENU_SHOW: &str = "show";
 const MENU_SYNC: &str = "sync";
 const MENU_QUIT: &str = "quit";
@@ -42,7 +45,7 @@ pub fn init(app: &AppHandle, language: &str) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&show, &sync, &separator, &quit])?;
 
-    let mut builder = TrayIconBuilder::with_id("main")
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Logledge")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -76,6 +79,14 @@ pub fn init(app: &AppHandle, language: &str) -> tauri::Result<()> {
 
     app.manage(TrayMenu { show, sync, quit });
     Ok(())
+}
+
+/// Removes the icon from the tray right away, so an app that is still running
+/// its final sync on quit neither looks hung nor takes stray clicks.
+pub fn hide(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_visible(false);
+    }
 }
 
 /// Relabels the tray menu after the UI language changes.

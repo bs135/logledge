@@ -10,6 +10,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, Window, WindowEvent};
 
 use crate::state::AppState;
+use crate::tray;
 
 /// Label of the single application window declared in tauri.conf.json.
 pub const MAIN_WINDOW: &str = "main";
@@ -22,8 +23,12 @@ const FINAL_SYNC_TIMEOUT: Duration = Duration::from_secs(8);
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
 /// Brings the main window to the foreground, restoring it if it was minimized
-/// or hidden to the tray.
+/// or hidden to the tray. Does nothing once quitting has started, so a second
+/// launch during the final sync cannot bring back a window that is about to go.
 pub fn show_main_window(app: &AppHandle) {
+    if QUITTING.load(Ordering::SeqCst) {
+        return;
+    }
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
         let _ = window.show();
         let _ = window.unminimize();
@@ -32,7 +37,7 @@ pub fn show_main_window(app: &AppHandle) {
 }
 
 /// Quits the app after a final sync (at most [`FINAL_SYNC_TIMEOUT`]). The
-/// window is hidden first so quitting feels immediate. Repeated calls are
+/// window and the tray icon are hidden first so quitting feels immediate. Repeated calls are
 /// ignored.
 pub fn graceful_quit(app: &AppHandle) {
     if QUITTING.swap(true, Ordering::SeqCst) {
@@ -41,6 +46,7 @@ pub fn graceful_quit(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
         let _ = window.hide();
     }
+    tray::hide(app);
     let app = app.clone();
     thread::spawn(move || {
         if let Some(state) = app.try_state::<Arc<AppState>>() {
