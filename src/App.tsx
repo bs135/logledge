@@ -417,7 +417,8 @@ function App() {
     // Keyboard shortcuts:
     // Ctrl+P: Quick Switcher
     // Ctrl+Shift+F: Global Search
-    // Ctrl+B: Toggle sidebar
+    // Ctrl+\: Toggle sidebar (works everywhere, including inside the editor)
+    // Ctrl+B: Toggle sidebar outside the editor (inside it, the editor uses Ctrl+B for bold)
     // Ctrl+,: Settings
     useEffect(() => {
         function onKeyDown(e: globalThis.KeyboardEvent) {
@@ -431,7 +432,12 @@ function App() {
                 e.preventDefault()
                 setQuickSwitcherOpen(false)
                 setGlobalSearchOpen(true)
-            } else if (ctrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'b') {
+            } else if (
+                ctrlOrCmd &&
+                !e.shiftKey &&
+                // e.code keeps Ctrl+\ layout-independent; skip Ctrl+B if the editor already handled it (bold)
+                (e.code === 'Backslash' || (e.key.toLowerCase() === 'b' && !e.defaultPrevented))
+            ) {
                 e.preventDefault()
                 setSidebarOpen((s) => {
                     const next = !s

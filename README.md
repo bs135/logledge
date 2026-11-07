@@ -28,7 +28,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) with quick toggle support.
 - **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.
-- **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+B`) to toggle visibility.
+- **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+\`; `Ctrl+B` also works outside the editor, where it does not mean bold) to toggle visibility.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `notify` with debounce (300ms) and self-write suppression.
 
 ### Markdown Live Preview Editor (Obsidian-Style)

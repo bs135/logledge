@@ -70,7 +70,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                         <div className="grid grid-cols-2 gap-2">
                             <ShortcutItem keys="Ctrl + P" desc={t('quickSwitcherDesc')} />
                             <ShortcutItem keys="Ctrl + Shift + F" desc={t('globalSearchDesc')} />
-                            <ShortcutItem keys="Ctrl + B" desc={t('toggleSidebarDesc')} />
+                            <ShortcutItem keys="Ctrl + \" desc={t('toggleSidebarDesc')} />
                             <ShortcutItem keys="Ctrl + ," desc={t('settingsSyncDesc')} />
                             <ShortcutItem keys="F2" desc={t('renameShortcutDesc')} />
                             <ShortcutItem keys="Delete" desc={t('deleteShortcutDesc')} />
