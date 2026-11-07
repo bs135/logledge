@@ -60,6 +60,31 @@ class CheckboxWidget extends WidgetType {
     }
 }
 
+// Bullet glyphs by list nesting level (1-based), cycling for deeper levels.
+const BULLET_GLYPHS = ['•', '◦', '▪']
+
+export class BulletWidget extends WidgetType {
+    constructor(readonly depth: number) {
+        super()
+    }
+
+    eq(other: BulletWidget) {
+        return this.depth === other.depth
+    }
+
+    toDOM() {
+        const el = document.createElement('span')
+        el.className = `cm-list-bullet cm-list-bullet-${((this.depth - 1) % BULLET_GLYPHS.length) + 1}`
+        el.textContent = BULLET_GLYPHS[(this.depth - 1) % BULLET_GLYPHS.length]
+        el.setAttribute('aria-hidden', 'true')
+        return el
+    }
+
+    ignoreEvent() {
+        return false
+    }
+}
+
 class HrWidget extends WidgetType {
     eq() {
         return true
@@ -992,6 +1017,52 @@ function buildDecorations(state: EditorState): BuildResult {
                     Decoration.mark({
                         class: 'cm-formatting text-neutral-400 dark:text-neutral-500',
                     }).range(nodeFrom, nodeTo)
+                )
+                return
+            }
+
+            // 9c. Unordered list marker (-, *, +): replaced by a bullet glyph chosen by
+            // nesting level when the cursor is off the line, shown dimmed when it is on it.
+            // Ordered list markers ("1.") are left as they are.
+            if (name === 'ListMark') {
+                const item = node.node.parent
+                const list = item?.parent
+                const line = doc.lineAt(nodeFrom)
+                // Nested-list indentation is plain spaces, which are very narrow in the
+                // proportional editor font. Render it in monospace (in both modes, so the
+                // text does not shift when the cursor enters the line).
+                if (nodeFrom > line.from && /^[ \t]+$/.test(doc.sliceString(line.from, nodeFrom))) {
+                    decorations.push(
+                        Decoration.mark({ class: 'cm-list-indent' }).range(line.from, nodeFrom)
+                    )
+                }
+                if (!item || list?.name !== 'BulletList') return
+                const isLineActive = selFrom <= line.to && selTo >= line.from
+                interactiveRanges.push({ from: line.from, to: line.to })
+                if (isLineActive) {
+                    decorations.push(
+                        Decoration.mark({
+                            // No font-mono here: a second font's metrics would make the
+                            // line taller than in view mode.
+                            class: 'cm-formatting text-neutral-400 dark:text-neutral-500',
+                        }).range(nodeFrom, nodeTo)
+                    )
+                    return
+                }
+                if (item.getChild('Task')) {
+                    // Task items already show a checkbox; hide the marker and its space.
+                    let markTo = nodeTo
+                    const next = doc.sliceString(markTo, markTo + 1)
+                    if (next === ' ' || next === '\t') markTo++
+                    decorations.push(Decoration.replace({}).range(nodeFrom, markTo))
+                    return
+                }
+                let depth = 0
+                for (let p: SyntaxNode | null = list; p; p = p.parent) {
+                    if (p.name === 'BulletList' || p.name === 'OrderedList') depth++
+                }
+                decorations.push(
+                    Decoration.replace({ widget: new BulletWidget(depth) }).range(nodeFrom, nodeTo)
                 )
                 return
             }
