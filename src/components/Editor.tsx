@@ -91,6 +91,10 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 key: 'Mod-Shift-x',
                 run: (view) => toggleWrap(view, '~~'),
             },
+            {
+                key: 'Mod-e',
+                run: (view) => toggleWrap(view, '`'),
+            },
             ...defaultKeymap,
             ...historyKeymap,
             indentWithTab,

@@ -75,6 +75,13 @@ test('selection with only marker chars is wrapped, not unwrapped', () => {
     assert.strictEqual(toggle('[**]', '**'), '**[**]**')
 })
 
+test('inline code marker toggles', () => {
+    const once = toggle('run [npm test] now', '`')
+    assert.strictEqual(once, 'run `[npm test]` now')
+    assert.strictEqual(toggle(once, '`'), 'run [npm test] now')
+    assert.strictEqual(toggle('run [`npm test`] now', '`'), 'run [npm test] now')
+})
+
 test('strikethrough marker toggles', () => {
     const once = toggle('[x]', '~~')
     assert.strictEqual(once, '~~[x]~~')
