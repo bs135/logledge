@@ -10,6 +10,7 @@ import {TitleBar} from './components/TitleBar'
 import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} from './components/FileTree'
 import {Editor, type EditorStats} from './components/Editor'
 import {EditorStatus, type SaveState} from './components/EditorStatus'
+import {EmptyState} from './components/EmptyState'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
 import {SyncStatusBar} from './components/SyncStatusBar'
@@ -1003,9 +1004,21 @@ function App() {
                             }}
                         />
                     ) : (
-                        <div className="flex h-full items-center justify-center text-neutral-400 dark:text-neutral-500">
-                            {t('selectNotePlaceholder')}
-                        </div>
+                        <EmptyState
+                            {...switcherSections(noteLists.lists.pinned, noteLists.lists.recent, new Set(notePaths), null, 8)}
+                            vaultIsEmpty={vault.tree !== null && !notePaths.some((p) => /\.(md|markdown)$/i.test(p))}
+                            onOpen={(path) => openFile(path)}
+                            onNewNote={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}
+                            onQuickSwitcher={() => {
+                                setGlobalSearchOpen(false)
+                                setQuickSwitcherOpen(true)
+                            }}
+                            onSearch={() => {
+                                setQuickSwitcherOpen(false)
+                                setGlobalSearchOpen(true)
+                            }}
+                            onHelp={() => setQuickHelpOpen(true)}
+                        />
                     )}
                 </main>
             </div>
