@@ -21,6 +21,7 @@ import {
     PinOff,
 } from 'lucide-react'
 import {useI18n} from '../i18n'
+import {DEFAULT_TREE_SORT, sortTree, type TreeSort} from '../lib/treeSort'
 
 export type InlineActionType = 'create-file' | 'create-folder' | 'rename'
 
@@ -70,12 +71,7 @@ function filterNode(node: VaultNode, filter?: FileFilterConfig): VaultNode | nul
         .map((child) => filterNode(child, filter))
         .filter((child): child is VaultNode => child !== null)
 
-    return ({
-        name: node.name,
-        path: node.path,
-        isDir: node.isDir,
-        children: filteredChildren,
-    })
+    return {...node, children: filteredChildren}
 }
 
 function findNode(node: VaultNode, path: string): VaultNode | null {
@@ -123,6 +119,8 @@ export interface FileTreeProps {
     onActivePathChange?: (path: string | null) => void
     /** Notes pinned to the Quick Switcher; shown with a pin icon. */
     pinnedPaths?: string[]
+    /** Order of entries within each folder (default: folders first, A→Z). */
+    sort?: TreeSort
     onTogglePin?: (path: string) => void
 }
 
@@ -137,13 +135,17 @@ export function FileTree({
     onActivePathChange,
     pinnedPaths,
     onTogglePin,
+    sort = DEFAULT_TREE_SORT,
     ...props
 }: FileTreeProps) {
     const {t} = useI18n()
     const pinContext = useMemo(() => ({pinned: new Set(pinnedPaths), onTogglePin}), [pinnedPaths, onTogglePin])
     const containerRef = useRef<HTMLDivElement>(null)
     const [activePath, setActivePath] = useState<string | null>(props.selectedPath)
-    const filteredRoot = filterNode(props.root, filter) || props.root
+    const filteredRoot = useMemo(
+        () => sortTree(filterNode(props.root, filter) || props.root, sort),
+        [props.root, filter, sort],
+    )
     const isCreatingAtRoot = Boolean(
         inlineAction && inlineAction.type !== 'rename' && inlineAction.targetPath === ''
     )

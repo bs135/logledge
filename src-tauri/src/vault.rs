@@ -34,6 +34,13 @@ pub struct Node {
     pub is_dir: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
+    /// Last modification time, in milliseconds since the Unix epoch (file-tree sorting).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified: Option<u64>,
+    /// Creation time in milliseconds since the Unix epoch; absent when the platform or
+    /// file system does not record it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<u64>,
 }
 
 /// Outcome of [`VaultService::write_file_if_unchanged`].
@@ -423,6 +430,20 @@ impl VaultService {
     }
 }
 
+/// Converts a file time to milliseconds since the Unix epoch.
+fn epoch_millis(time: io::Result<SystemTime>) -> Option<u64> {
+    let since = time.ok()?.duration_since(UNIX_EPOCH).ok()?;
+    u64::try_from(since.as_millis()).ok()
+}
+
+/// Modification and creation times of an entry, each `None` when unavailable.
+fn entry_times(meta: Option<fs::Metadata>) -> (Option<u64>, Option<u64>) {
+    match meta {
+        Some(m) => (epoch_millis(m.modified()), epoch_millis(m.created())),
+        None => (None, None),
+    }
+}
+
 fn build_node(root: &Path, abs: &Path, name: String) -> Result<Node> {
     let mut children = Vec::new();
     for entry in fs::read_dir(abs)?.flatten() {
@@ -438,11 +459,14 @@ fn build_node(root: &Path, abs: &Path, name: String) -> Result<Node> {
                 children.push(node);
             }
         } else {
+            let (modified, created) = entry_times(entry.metadata().ok());
             children.push(Node {
                 name: child_name,
                 path: rel_from_abs(root, &child_abs),
                 is_dir: false,
                 children: Vec::new(),
+                modified,
+                created,
             });
         }
     }
@@ -451,11 +475,14 @@ fn build_node(root: &Path, abs: &Path, name: String) -> Result<Node> {
             .cmp(&a.is_dir)
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
+    let (modified, created) = entry_times(fs::metadata(abs).ok());
     Ok(Node {
         name,
         path: rel_from_abs(root, abs),
         is_dir: true,
         children,
+        modified,
+        created,
     })
 }
 
@@ -695,7 +722,8 @@ mod tests {
     fn tree_json_matches_go_shape() {
         let v = new_vault();
         v.svc.create_folder("", "empty").unwrap();
-        let json = serde_json::to_value(v.svc.tree().unwrap()).unwrap();
+        let mut json = serde_json::to_value(v.svc.tree().unwrap()).unwrap();
+        strip_times(&mut json);
         assert_eq!(
             json,
             serde_json::json!({
@@ -703,6 +731,43 @@ mod tests {
                 "children": [{ "name": "empty", "path": "empty", "isDir": true }]
             })
         );
+    }
+
+    /// Removes the machine-dependent "modified"/"created" fields from a tree's JSON.
+    fn strip_times(value: &mut serde_json::Value) {
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("modified");
+            obj.remove("created");
+            if let Some(children) = obj.get_mut("children").and_then(|c| c.as_array_mut()) {
+                children.iter_mut().for_each(strip_times);
+            }
+        }
+    }
+
+    #[test]
+    fn tree_reports_modification_times() {
+        let v = new_vault();
+        v.svc.create_folder("", "dir").unwrap();
+        v.svc.create_file("dir", "note").unwrap();
+        let before = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
+        let tree = v.svc.tree().unwrap();
+        let dir = &tree.children[0];
+        let note = &dir.children[0];
+        for node in [dir, note] {
+            let modified = node.modified.expect("modified time");
+            // Written moments ago: within a minute of now (allows coarse FS clocks).
+            assert!(
+                modified + 60_000 >= before && modified <= before + 60_000,
+                "{}",
+                node.path
+            );
+        }
+        let json = serde_json::to_value(note).unwrap();
+        assert!(json["modified"].is_u64());
     }
 
     #[test]

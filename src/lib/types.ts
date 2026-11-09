@@ -34,6 +34,10 @@ export interface VaultNode {
     path: string
     isDir: boolean
     children?: VaultNode[]
+    /** Last modification time, ms since the Unix epoch (absent if unknown). */
+    modified?: number
+    /** Creation time, ms since the Unix epoch (absent if the platform has none). */
+    created?: number
 }
 
 export interface WriteResult {
