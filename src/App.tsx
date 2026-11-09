@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
+import {useNoteLists} from './hooks/useNoteLists'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
@@ -15,6 +16,7 @@ import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {runStartupUpdateCheck} from './components/updateCheck'
 import {collectFilePaths, newNoteLocation, parseWikiLink, resolveWikiLink} from './lib/wikilink'
+import {addRecent, removeFromList, renameInList, switcherSections, togglePin} from './lib/noteLists'
 import {canGoBack, canGoForward, emptyHistory, NavHistory, pushHistory, removeFromHistory, renameInHistory, stepHistory} from './lib/navHistory'
 import {createFile as apiCreateFile, createFolder as apiCreateFolder, detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
 import type {FileFilterConfig, VaultEntry} from './lib/types'
@@ -85,6 +87,8 @@ function App() {
     // A WikiLink to a missing note waiting for the user to confirm creating it.
     const [pendingNoteCreate, setPendingNoteCreate] = useState<{parent: string; name: string; heading: string | null} | null>(null)
     const notePaths = useMemo(() => collectFilePaths(vault.tree), [vault.tree])
+    // Pinned and recently opened notes of this vault (Quick Switcher, file tree pin icon).
+    const noteLists = useNoteLists(vault.vaultPath)
     // Back/Forward history of opened notes. The ref mirrors the state so handlers that
     // run outside React's render cycle (keyboard and mouse listeners) see the latest value.
     const [navHistory, setNavHistoryState] = useState<NavHistory>(emptyHistory)
@@ -103,6 +107,21 @@ function App() {
             })
             .catch(() => {})
     }, [])
+
+    // Reopen the last viewed note of a vault once its file tree is loaded: at startup and
+    // after switching vaults. Skipped when a note is already open. Waits for `loading` to
+    // clear, because while a vault switch is in flight `tree` still belongs to the old vault.
+    const restoredVaultRef = useRef<string | null>(null)
+    useEffect(() => {
+        const path = vault.vaultPath
+        if (!path || vault.loading || !vault.tree || restoredVaultRef.current === path) return
+        restoredVaultRef.current = path
+        if (selectedPath) return
+        const existing = new Set(notePaths)
+        const last = noteLists.lists.recent.find((p) => existing.has(p))
+        if (last) openFile(last)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vault.vaultPath, vault.loading, vault.tree])
 
     // Check for a new release once per launch, deferred so it never competes with cold start.
     useEffect(() => {
@@ -191,6 +210,7 @@ function App() {
             followSelectedPath(to + selectedPath.slice(from.length))
         }
         setNavHistory((h) => renameInHistory(h, from, to))
+        noteLists.update((l) => ({pinned: renameInList(l.pinned, from, to), recent: renameInList(l.recent, from, to)}))
     }
 
     // Opens the previous (-1) or next (+1) note in the history. Entries for notes that no
@@ -225,6 +245,7 @@ function App() {
         }
         loadNote(path, text)
         if (recordHistory) setNavHistory((h) => pushHistory(h, path))
+        noteLists.update((l) => ({...l, recent: addRecent(l.recent, path)}))
         setScrollTarget(heading ? {heading, seq: Date.now()} : null)
         setQuickSwitcherOpen(false)
         setGlobalSearchOpen(false)
@@ -392,6 +413,7 @@ function App() {
         setDeleteTarget(null)
         await vault.remove(pathToDelete)
         setNavHistory((h) => removeFromHistory(h, pathToDelete))
+        noteLists.update((l) => ({pinned: removeFromList(l.pinned, pathToDelete), recent: removeFromList(l.recent, pathToDelete)}))
         if (selectedPath === pathToDelete || (selectedPath && selectedPath.startsWith(pathToDelete + '/'))) {
             diskRef.current = {path: null, content: ''}
             setSelectedPath(null)
@@ -781,6 +803,8 @@ function App() {
                                         onCut={(path) => setFileClipboard({mode: 'cut', path})}
                                         onPaste={handlePaste}
                                         onMove={handleDragMove}
+                                        pinnedPaths={noteLists.lists.pinned}
+                                        onTogglePin={(path) => noteLists.update((l) => ({...l, pinned: togglePin(l.pinned, path)}))}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
                                     />
@@ -901,7 +925,12 @@ function App() {
                 setSettingsOpen(true)
             }} />
             {quickSwitcherOpen && (
-                <QuickSwitcher onOpen={openFile} onClose={() => setQuickSwitcherOpen(false)} />
+                <QuickSwitcher
+                    onOpen={(path) => openFile(path)}
+                    onClose={() => setQuickSwitcherOpen(false)}
+                    sections={switcherSections(noteLists.lists.pinned, noteLists.lists.recent, new Set(notePaths), selectedPath)}
+                    pinnedPaths={noteLists.lists.pinned}
+                />
             )}
             {globalSearchOpen && (
                 <GlobalSearch onOpen={openFile} onClose={() => setGlobalSearchOpen(false)} />

@@ -30,6 +30,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+\`; `Ctrl+B` also works outside the editor, where it does not mean bold) to toggle visibility.
 - **Back / Forward Navigation**: `Alt+←` / `Alt+→` (`⌘⌥←` / `⌘⌥→` on macOS), the mouse back/forward buttons, or the arrows in the title bar move through the notes opened in this session. Renames, moves and deletes keep the history in sync.
+- **Recent & Pinned Notes**: Pin notes from the file-tree context menu. With an empty query, the Quick Switcher (`Ctrl+P`) lists pinned notes first, then recently opened ones, then the rest. Stored per vault and kept in sync with renames, moves and deletes. On startup (and when switching vaults) the last viewed note is reopened.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `notify` with debounce (300ms) and self-write suppression.
 
 ### Markdown Live Preview Editor (Obsidian-Style)

@@ -1,20 +1,31 @@
 import {useEffect, useRef, useState} from 'react'
 import type {KeyboardEvent} from 'react'
 import {quickSwitch} from '../lib/api'
-import {Search, FileText} from 'lucide-react'
+import {Search, FileText, Pin, Clock} from 'lucide-react'
 import {useI18n} from '../i18n'
 
 interface QuickSwitcherProps {
     onOpen: (path: string) => void
     onClose: () => void
+    /** Shown first when the query is empty (see switcherSections). */
+    sections?: {pinned: string[]; recent: string[]}
+    /** Pinned notes, marked with a pin icon in every result list. */
+    pinnedPaths?: string[]
+}
+
+type Kind = 'pinned' | 'recent' | 'all'
+
+interface Item {
+    path: string
+    kind: Kind
 }
 
 // QuickSwitcher is the Command Palette (Ctrl+P): quickly finds files by name
 // using fuzzy search, opening immediately on Enter or result click.
-export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
+export function QuickSwitcher({onOpen, onClose, sections, pinnedPaths = []}: QuickSwitcherProps) {
     const {t} = useI18n()
     const [query, setQuery] = useState('')
-    const [results, setResults] = useState<string[]>([])
+    const [found, setFound] = useState<string[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -26,17 +37,37 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
         const timer = setTimeout(() => {
             quickSwitch(query)
                 .then((paths) => {
-                    setResults(paths || [])
+                    setFound(paths || [])
                     setActiveIndex(0)
                 })
-                .catch(() => setResults([]))
+                .catch(() => setFound([]))
         }, 100)
         return () => clearTimeout(timer)
     }, [query])
 
+    const pinnedSet = new Set(pinnedPaths)
+    // Empty query: pinned, then recent, then the rest of the notes. Otherwise: fuzzy matches.
+    let results: Item[]
+    if (!query.trim() && sections) {
+        const shown = new Set([...sections.pinned, ...sections.recent])
+        results = [
+            ...sections.pinned.map((path): Item => ({path, kind: 'pinned'})),
+            ...sections.recent.map((path): Item => ({path, kind: 'recent'})),
+            ...found.filter((p) => !shown.has(p)).map((path): Item => ({path, kind: 'all'})),
+        ]
+    } else {
+        results = found.map((path) => ({path, kind: pinnedSet.has(path) ? 'pinned' : 'all'}))
+    }
+    const showHeaders = !query.trim() && Boolean(sections) && (sections!.pinned.length > 0 || sections!.recent.length > 0)
+    const headerFor: Record<Kind, string> = {
+        pinned: t('switcherPinned'),
+        recent: t('switcherRecent'),
+        all: t('switcherAllNotes'),
+    }
+
     function openAt(index: number) {
-        const path = results[index]
-        if (path) onOpen(path)
+        const item = results[index]
+        if (item) onOpen(item.path)
     }
 
     function handleKeyDown(e: KeyboardEvent) {
@@ -72,8 +103,13 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                     />
                 </div>
                 <ul className="max-h-80 overflow-y-auto py-1">
-                    {results.map((path, i) => (
+                    {results.map(({path, kind}, i) => (
                         <li key={path}>
+                            {showHeaders && (i === 0 || results[i - 1].kind !== kind) && (
+                                <div className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 select-none">
+                                    {headerFor[kind]}
+                                </div>
+                            )}
                             <button
                                 className={`flex items-center w-full truncate px-4 py-2 text-left text-sm transition-colors ${
                                     i === activeIndex
@@ -83,7 +119,13 @@ export function QuickSwitcher({onOpen, onClose}: QuickSwitcherProps) {
                                 onMouseEnter={() => setActiveIndex(i)}
                                 onClick={() => openAt(i)}
                             >
-                                <FileText className={`h-3.5 w-3.5 mr-2 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                {kind === 'pinned' ? (
+                                    <Pin className={`h-3.5 w-3.5 mr-2 shrink-0 ${i === activeIndex ? 'text-white' : 'text-blue-500 dark:text-blue-400'}`} />
+                                ) : kind === 'recent' ? (
+                                    <Clock className={`h-3.5 w-3.5 mr-2 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                ) : (
+                                    <FileText className={`h-3.5 w-3.5 mr-2 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
+                                )}
                                 <span className="truncate">{path}</span>
                             </button>
                         </li>

@@ -44,7 +44,7 @@ item needs a big refactor of something already shipped:
 | 1.1 | WikiLink navigation | ✅ | `feat/wikilink-navigation` |
 | 1.2 | `[[` autocomplete | ✅ | `feat/wikilink-autocomplete` |
 | 1.3 | Back / Forward history | ✅ | `feat/nav-history` |
-| 1.4 | Recent & pinned notes | ⬜ | |
+| 1.4 | Recent & pinned notes | ✅ | `feat/recent-pinned` |
 
 ### 1.1 WikiLink navigation
 - `Ctrl/Cmd+Click` on `[[Note]]` opens the note (same gesture as external links).
@@ -115,8 +115,21 @@ item needs a big refactor of something already shipped:
   Tabs).
 
 ### 1.4 Recent & pinned notes
-- Quick Switcher with an empty query lists pinned notes, then recent notes.
-- Pin/unpin from the file-tree context menu; stored per vault in the config.
+- Quick Switcher (`Ctrl+P`) with an empty query lists, under section headers: pinned
+  notes (pin order), the 10 most recent notes (not pinned, not the open note), then all
+  other notes. While typing, pinned notes keep their pin icon among the matches.
+- Pin / Unpin from the file-tree context menu (notes only); pinned notes show a small
+  pin icon in the tree.
+- Renames, moves and deletes update both lists; notes deleted outside the app are
+  hidden. Every opened note counts as recent, including via Back/Forward.
+- On startup and after switching vaults, the vault's last viewed note is reopened (the
+  most recent one that still exists), once its file tree has loaded.
+- **As built:** pure `src/lib/noteLists.ts` (tests: `test-note-lists.mjs`); stored per
+  vault in `localStorage` by `src/hooks/useNoteLists.ts` (key
+  `logledge:noteLists:<vault path>`) instead of the Rust config planned above: no
+  backend change needed, same approach as the sidebar width. Up to 30 recent notes are
+  remembered. `FileTree` gets pins through a React context rather than threading props
+  through every `TreeEntry`.
 
 ## Phase 2 — Editor & file-tree polish
 
