@@ -108,7 +108,7 @@ pub fn extract_links(text: &str) -> Vec<Link> {
 }
 
 /// The fence character and run length when `line` opens or closes a fenced block.
-fn fence_marker(line: &str) -> Option<(char, usize)> {
+pub(crate) fn fence_marker(line: &str) -> Option<(char, usize)> {
     let ch = line.chars().next()?;
     if ch != '`' && ch != '~' {
         return None;
@@ -119,7 +119,7 @@ fn fence_marker(line: &str) -> Option<(char, usize)> {
 
 /// Replaces inline code spans (`` `x` ``, ``` ``x`` ```) with spaces so links inside
 /// them are not found. An unmatched backtick run is kept as text.
-fn strip_inline_code(line: &str) -> String {
+pub(crate) fn strip_inline_code(line: &str) -> String {
     let chars: Vec<char> = line.chars().collect();
     let mut out = String::with_capacity(line.len());
     let mut i = 0;

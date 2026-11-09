@@ -648,3 +648,13 @@ test('Escapes: inside a link they are revealed together with the link syntax', (
     // Cursor anywhere in the link reveals both escapes.
     assert.deepStrictEqual(escapeDecos(doc, doc.indexOf('https')), {hidden: [], dimmed: [7, 12]})
 })
+
+test('Tags: #tags are marked with data-tag, but not in code or front matter', () => {
+    const doc = '---\ntags: [x]\n#notInFrontMatter\n---\nPlan #Work and `#code` here\n\n```\n#fenced\n```\nend #a/b'
+    const plugin = new LivePreviewPlugin(createTestView(doc, doc.length))
+    const found = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-tag')) found.push([doc.slice(from, to), val.spec.attributes['data-tag']])
+    })
+    assert.deepStrictEqual(found, [['#Work', 'work'], ['#a/b', 'a/b']])
+})

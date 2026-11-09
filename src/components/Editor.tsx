@@ -33,6 +33,8 @@ interface EditorProps {
     onRename?: (newName: string) => void
     /** Called with the raw text inside "[[...]]" when a WikiLink is Ctrl/Cmd+Clicked. */
     onOpenWikiLink?: (raw: string) => void
+    /** Called with the tag (no "#") when a #tag is Ctrl/Cmd+Clicked. */
+    onOpenTag?: (tag: string) => void
     /** Heading to scroll to (from a [[Note#Heading]] link); `seq` changes on every request. */
     /**
      * Where to scroll: a heading by text (from a [[Note#Heading]] link) or a document
@@ -96,7 +98,7 @@ function toggleWrap(view: EditorView, marker: string): boolean {
 // Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
 // preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
 // and debounced auto-save at 600ms.
-export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths, onStatsChange, onOutlineChange, onReadingPosChange}: EditorProps) {
+export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, onOpenTag, scrollTarget, notePaths, onStatsChange, onOutlineChange, onReadingPosChange}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
@@ -107,6 +109,8 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     pathRef.current = path
     const onOpenWikiLinkRef = useRef(onOpenWikiLink)
     onOpenWikiLinkRef.current = onOpenWikiLink
+    const onOpenTagRef = useRef(onOpenTag)
+    onOpenTagRef.current = onOpenTag
     const notePathsRef = useRef(notePaths)
     notePathsRef.current = notePaths
     const onStatsChangeRef = useRef(onStatsChange)
@@ -302,6 +306,13 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 e.preventDefault()
                 e.stopPropagation()
                 onOpenWikiLinkRef.current?.(raw)
+                return
+            }
+            const tag = el?.closest?.('[data-tag]')?.getAttribute('data-tag')
+            if (tag) {
+                e.preventDefault()
+                e.stopPropagation()
+                onOpenTagRef.current?.(tag)
                 return
             }
             const url = el?.closest?.('.cm-link')?.getAttribute('data-url')

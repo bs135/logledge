@@ -14,7 +14,7 @@ use crate::config::{Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, Status};
 use crate::lifecycle;
-use crate::search::{LinkRef, SearchResult};
+use crate::search::{LinkRef, SearchResult, TagCount};
 use crate::state::{AppState, SyncSettings};
 use crate::tray;
 use crate::vault::{clean_path, Node, WriteResult};
@@ -364,6 +364,18 @@ pub async fn search_notes(state: AppStateRef<'_>, query: String) -> Result<Vec<S
 #[tauri::command]
 pub async fn backlinks(state: AppStateRef<'_>, path: String) -> Result<Vec<LinkRef>> {
     blocking(&state, move |s| s.search.backlinks(&path)).await
+}
+
+/// Every tag in the vault with its note count.
+#[tauri::command]
+pub async fn all_tags(state: AppStateRef<'_>) -> Result<Vec<TagCount>> {
+    blocking(&state, |s| s.search.all_tags()).await
+}
+
+/// Notes carrying `tag` or a tag nested under it.
+#[tauri::command]
+pub async fn notes_with_tag(state: AppStateRef<'_>, tag: String) -> Result<Vec<String>> {
+    blocking(&state, move |s| s.search.notes_with_tag(&tag)).await
 }
 
 /// Notes mentioning `phrase` (a note title) in their text.

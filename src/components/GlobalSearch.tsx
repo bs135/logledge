@@ -8,13 +8,15 @@ import {useI18n} from '../i18n'
 interface GlobalSearchProps {
     onOpen: (path: string) => void
     onClose: () => void
+    /** Query to start with, e.g. "tag:work" from a Ctrl+Clicked tag. */
+    initialQuery?: string
 }
 
 // GlobalSearch is a full-text search modal (Ctrl+Shift+F): searches across
 // all note content in the Vault, displaying highlighted context snippets.
-export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
+export function GlobalSearch({onOpen, onClose, initialQuery = ''}: GlobalSearchProps) {
     const {t} = useI18n()
-    const [query, setQuery] = useState('')
+    const [query, setQuery] = useState(initialQuery)
     const [results, setResults] = useState<SearchResult[]>([])
     const [activeIndex, setActiveIndex] = useState(0)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -92,7 +94,8 @@ export function GlobalSearch({onOpen, onClose}: GlobalSearchProps) {
                                     <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeIndex ? 'text-white' : 'text-neutral-400'}`} />
                                     <span className="truncate">{r.title}</span>
                                 </div>
-                                <div className="mt-0.5 truncate text-xs opacity-80">{highlightSnippet(r.snippet)}</div>
+                                {/* Tag-only searches ("tag:work") have no snippet. */}
+                                {r.snippet && <div className="mt-0.5 truncate text-xs opacity-80">{highlightSnippet(r.snippet)}</div>}
                                 <div className="mt-0.5 truncate text-xs opacity-50">{r.path}</div>
                             </button>
                         </li>

@@ -13,6 +13,7 @@ import type {
     WriteResult,
 } from './types'
 import type {LinkRef} from './backlinks'
+import type {TagCount} from './tags'
 
 // Vault list and selection
 
@@ -79,6 +80,10 @@ export const quickSwitch = (query: string) => invoke<string[]>('quick_switch', {
 export const backlinks = (path: string) => invoke<LinkRef[]>('backlinks', {path})
 /** Notes whose text contains `phrase`, e.g. a note title (unlinked mentions). */
 export const mentions = (phrase: string) => invoke<SearchResult[]>('mentions', {phrase})
+/** Every tag in the vault with its note count. */
+export const allTags = () => invoke<TagCount[]>('all_tags')
+/** Notes with `tag` or a tag nested under it. */
+export const notesWithTag = (tag: string) => invoke<string[]>('notes_with_tag', {tag})
 
 // Git sync
 

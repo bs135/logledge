@@ -217,7 +217,7 @@ item needs a big refactor of something already shipped:
 |---|------|--------|--------|
 | 3.1 | Right panel + Outline | ✅ | `feat/right-panel-outline` |
 | 3.2 | Backlinks & unresolved links | ✅ | `feat/backlinks` |
-| 3.3 | Tags | ⬜ | |
+| 3.3 | Tags | ✅ | `feat/tags` |
 | 3.4 | Advanced search & replace | ⬜ | |
 
 - **3.1** Collapsible, resizable right panel (`Ctrl+Shift+\``) with tabs. First tab:
@@ -272,6 +272,23 @@ item needs a big refactor of something already shipped:
     A `search:indexed` event is emitted after every index update.
 - **3.3** `#tag` / `#nested/tag` highlighted in the editor, indexed in a `tags` table,
   tag list in the panel, `tag:foo` filter in Global Search, YAML `tags:` front matter.
+  - **As built:** tag rules (shared by the indexer `src-tauri/src/tags.rs` and the
+    editor `src/lib/tags.ts`, same test cases): `#` at line start or after whitespace,
+    `(`, `,`, `;`; letters (any script), digits, `_`, `-`, `/`; at least one
+    non-digit (`#123` is not a tag); case-insensitive, stored lower-case; trailing
+    `/` dropped. Not tags: `a#b`, URLs, `](#anchor)`, `\#escaped`, code. Front
+    matter `tags:` / `tag:` as `[a, b]`, `a, b` or a `- a` list.
+  - Editor: tags are shown as small sky-blue pills (also inside headings; not in
+    code, front matter or rendered tables); Ctrl+Click opens Global Search with
+    `tag:<tag>`.
+  - Right panel **Tags** tab: tag tree (nested tags under their parent, exact
+    counts), expand a tag to list its notes (nested tags included), search button
+    per tag. Refreshes on `search:indexed`.
+  - Global Search: `tag:name` tokens filter (AND, nested tags included); tags alone
+    list matching notes by path. Placeholder mentions it.
+  - Index: `tags` table, `PRAGMA user_version` 2 (rebuilds older indexes once);
+    `all_tags`, `notes_with_tag` commands. LIKE patterns are escaped so `_` in a tag
+    is not a wildcard.
 - **3.4** Global Search: filter by folder, case-sensitive and regex modes, replace in
   one note or across the vault (preview + confirm, writes go through the normal save
   path so sync and the watcher see them).

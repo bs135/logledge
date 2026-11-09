@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
-import {ArrowUpToLine, Link2, ListTree, X} from 'lucide-react'
+import {ArrowUpToLine, Hash, Link2, ListTree, X} from 'lucide-react'
 import {BacklinksView} from './BacklinksView'
+import {TagsView} from './TagsView'
 import {useI18n} from '../i18n'
 import {outlineIndents, type OutlineItem} from '../lib/outline'
 
@@ -8,7 +9,7 @@ export const RIGHT_PANEL_DEFAULT_WIDTH = 260
 export const RIGHT_PANEL_MIN_WIDTH = 180
 export const RIGHT_PANEL_MAX_WIDTH = 560
 
-export type RightPanelTab = 'outline' | 'backlinks'
+export type RightPanelTab = 'outline' | 'backlinks' | 'tags'
 
 interface RightPanelProps {
     width: number
@@ -25,15 +26,18 @@ interface RightPanelProps {
     notePaths: string[]
     /** Opens a note, optionally at a 1-based line. */
     onOpenNote: (path: string, line?: number) => void
+    /** Opens Global Search with "tag:<tag>". */
+    onSearchTag: (tag: string) => void
 }
 
 // RightPanel is the collapsible, resizable panel on the right of the editor. Its tabs
 // hold note-related views; the first one is the outline of the open note.
-export function RightPanel({width, onWidthChange, onClose, outline, activeIndex, onSelectHeading, onSelectTop, notePath, notePaths, onOpenNote}: RightPanelProps) {
+export function RightPanel({width, onWidthChange, onClose, outline, activeIndex, onSelectHeading, onSelectTop, notePath, notePaths, onOpenNote, onSearchTag}: RightPanelProps) {
     const {t} = useI18n()
-    const [tab, setTab] = useState<RightPanelTab>(() =>
-        localStorage.getItem('logledge:rightPanelTab') === 'backlinks' ? 'backlinks' : 'outline',
-    )
+    const [tab, setTab] = useState<RightPanelTab>(() => {
+        const saved = localStorage.getItem('logledge:rightPanelTab')
+        return saved === 'backlinks' || saved === 'tags' ? saved : 'outline'
+    })
     const selectTab = (next: RightPanelTab) => {
         setTab(next)
         localStorage.setItem('logledge:rightPanelTab', next)
@@ -105,6 +109,7 @@ export function RightPanel({width, onWidthChange, onClose, outline, activeIndex,
                         [
                             {id: 'outline', icon: <ListTree className="h-3.5 w-3.5" />, label: t('outlineTab')},
                             {id: 'backlinks', icon: <Link2 className="h-3.5 w-3.5" />, label: t('backlinksTab')},
+                            {id: 'tags', icon: <Hash className="h-3.5 w-3.5" />, label: t('tagsTab')},
                         ] as const
                     ).map((tb) => (
                         <button
@@ -130,7 +135,9 @@ export function RightPanel({width, onWidthChange, onClose, outline, activeIndex,
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-1.5">
-                    {tab === 'backlinks' ? (
+                    {tab === 'tags' ? (
+                        <TagsView onOpenNote={(path) => onOpenNote(path)} onSearchTag={onSearchTag} />
+                    ) : tab === 'backlinks' ? (
                         notePath ? (
                             <BacklinksView path={notePath} notePaths={notePaths} onOpen={onOpenNote} />
                         ) : (
