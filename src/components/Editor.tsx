@@ -4,7 +4,7 @@ import {EditorView, keymap} from '@codemirror/view'
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands'
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
 import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
-import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
+import {defaultHighlightStyle, syntaxHighlighting, syntaxTree} from '@codemirror/language'
 import {autocompletion} from '@codemirror/autocomplete'
 import {readFile, saveAttachment} from '../lib/api'
 import {findHeadingLine} from '../lib/wikilink'
@@ -17,6 +17,8 @@ import {livePreview, notePathFacet, notePathsField, setNotePaths} from './livePr
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 import {wikiLinkCompletion} from './wikiComplete'
 import {pasteUrlAsLink} from './pasteLink'
+import {outlineFromState} from './outlineExtract'
+import type {OutlineItem} from '../lib/outline'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -32,7 +34,15 @@ interface EditorProps {
     /** Called with the raw text inside "[[...]]" when a WikiLink is Ctrl/Cmd+Clicked. */
     onOpenWikiLink?: (raw: string) => void
     /** Heading to scroll to (from a [[Note#Heading]] link); `seq` changes on every request. */
-    scrollTarget?: {heading: string; seq: number} | null
+    /**
+     * Where to scroll: a heading by text (from a [[Note#Heading]] link) or a document
+     * position (from the outline). `seq` changes on every request.
+     */
+    scrollTarget?: {heading?: string; pos?: number; seq: number} | null
+    /** Headings of the note (for the outline), updated as the note changes. */
+    onOutlineChange?: (items: OutlineItem[]) => void
+    /** Document position at the top of the visible area, updated while scrolling. */
+    onReadingPosChange?: (pos: number) => void
     /** Every file path in the vault, so links to missing notes can be styled. */
     notePaths?: string[]
     /** Word/character counts of the note and of the selection (null when nothing is selected). */
@@ -46,6 +56,29 @@ export interface EditorStats {
 
 // Counting walks the whole document, so it is debounced while typing.
 const STATS_DEBOUNCE_MS = 150
+
+// The outline walks the syntax tree; debounced while typing.
+const OUTLINE_DEBOUNCE_MS = 200
+// A heading counts as "being read" once it is this close to the top of the editor.
+const READING_OFFSET_PX = 48
+
+// Reports the position that decides the highlighted outline heading: the cursor while
+// its line is on screen (so the heading just clicked or being edited is highlighted,
+// even near the end of the note where it can't scroll to the top), otherwise the
+// position near the top of the visible area.
+function reportReadingPos(view: EditorView, listener: ((pos: number) => void) | undefined) {
+    if (!listener) return
+    const rect = view.scrollDOM.getBoundingClientRect()
+    // Visible range in document coordinates (heights from the top of the document).
+    const viewTop = rect.top - view.documentTop
+    const viewBottom = rect.bottom - view.documentTop
+    const cursorLine = view.lineBlockAt(view.state.selection.main.head)
+    if (cursorLine.bottom > viewTop && cursorLine.top < viewBottom) {
+        listener(view.state.selection.main.head)
+        return
+    }
+    listener(view.lineBlockAtHeight(viewTop + READING_OFFSET_PX).from)
+}
 
 function computeStats(state: EditorState): EditorStats {
     const selected = state.selection.ranges
@@ -63,7 +96,7 @@ function toggleWrap(view: EditorView, marker: string): boolean {
 // Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
 // preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
 // and debounced auto-save at 600ms.
-export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths, onStatsChange}: EditorProps) {
+export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths, onStatsChange, onOutlineChange, onReadingPosChange}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
@@ -79,6 +112,11 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     const onStatsChangeRef = useRef(onStatsChange)
     onStatsChangeRef.current = onStatsChange
     const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const onOutlineChangeRef = useRef(onOutlineChange)
+    onOutlineChangeRef.current = onOutlineChange
+    const onReadingPosChangeRef = useRef(onReadingPosChange)
+    onReadingPosChangeRef.current = onReadingPosChange
+    const outlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const initialTitle = path.split('/').pop()?.replace(/\.md$/, '') || ''
@@ -138,6 +176,15 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
         ])
 
         const updateListener = EditorView.updateListener.of((update) => {
+            // The outline follows edits and the background parser filling in the tree.
+            if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+                if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current)
+                const state = update.state
+                outlineTimerRef.current = setTimeout(() => onOutlineChangeRef.current?.(outlineFromState(state)), OUTLINE_DEBOUNCE_MS)
+            }
+            if (update.docChanged || update.geometryChanged || update.selectionSet) {
+                reportReadingPos(update.view, onReadingPosChangeRef.current)
+            }
             if (update.docChanged || update.selectionSet) {
                 if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
                 const state = update.state
@@ -185,6 +232,18 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
         })
         viewRef.current = view
         onStatsChangeRef.current?.(computeStats(view.state))
+        onOutlineChangeRef.current?.(outlineFromState(view.state))
+
+        // Reading position for the outline highlight, at most once per frame while scrolling.
+        let scrollFrame = 0
+        function onScroll() {
+            if (scrollFrame) return
+            scrollFrame = requestAnimationFrame(() => {
+                scrollFrame = 0
+                reportReadingPos(view, onReadingPosChangeRef.current)
+            })
+        }
+        view.scrollDOM.addEventListener('scroll', onScroll, {passive: true})
 
         // Handle image paste into editor
         async function onPaste(e: ClipboardEvent) {
@@ -262,8 +321,11 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             dom.removeEventListener('paste', onPaste)
             dom.removeEventListener('drop', onDrop)
             dom.removeEventListener('mousedown', onEditorMouseDown, true)
+            view.scrollDOM.removeEventListener('scroll', onScroll)
+            if (scrollFrame) cancelAnimationFrame(scrollFrame)
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
             if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
+            if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current)
             view.destroy()
             viewRef.current = null
         }
@@ -281,9 +343,14 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     useEffect(() => {
         const view = viewRef.current
         if (!view || !scrollTarget) return
-        const line = findHeadingLine(view.state.doc.toString(), scrollTarget.heading)
-        if (line === null) return
-        const pos = view.state.doc.line(line).from
+        let pos: number
+        if (scrollTarget.pos !== undefined) {
+            pos = Math.min(Math.max(0, scrollTarget.pos), view.state.doc.length)
+        } else {
+            const line = scrollTarget.heading ? findHeadingLine(view.state.doc.toString(), scrollTarget.heading) : null
+            if (line === null) return
+            pos = view.state.doc.line(line).from
+        }
         view.dispatch({selection: {anchor: pos}, effects: EditorView.scrollIntoView(pos, {y: 'start', yMargin: 24})})
         view.focus()
         // eslint-disable-next-line react-hooks/exhaustive-deps

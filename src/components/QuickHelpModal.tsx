@@ -71,6 +71,7 @@ export function QuickHelpModal({onClose}: QuickHelpModalProps) {
                             <ShortcutItem keys="Ctrl + P" desc={t('quickSwitcherDesc')} />
                             <ShortcutItem keys="Ctrl + Shift + F" desc={t('globalSearchDesc')} />
                             <ShortcutItem keys="Ctrl + \" desc={t('toggleSidebarDesc')} />
+                            <ShortcutItem keys="Ctrl + Shift + \" desc={t('toggleRightPanelDesc')} />
                             <ShortcutItem keys="Ctrl + ," desc={t('settingsSyncDesc')} />
                             <ShortcutItem keys="Ctrl + = / - / 0" desc={t('zoomShortcutDesc')} />
                             <ShortcutItem keys="Alt + ← / →" desc={t('navHistoryShortcutDesc')} />
