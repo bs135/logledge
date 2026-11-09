@@ -228,6 +228,8 @@ item needs a big refactor of something already shipped:
     a title-bar button or the panel's ×. Drag its left edge to resize (180–560 px),
     double-click to reset to 260; open state and width are remembered. Tab bar with
     one tab for now (Outline), ready for Backlinks (3.2) and Tags (3.3).
+    Later refined: the tabs are icon-only (Outline, Backlinks, Tags), with the name
+    as tooltip and accessible label, so the bar fits narrow panels.
   - Outline: ATX and setext headings from the syntax tree (headings in code are not
     included), indented relative to the shallowest level, inline Markdown removed from
     the text. Click scrolls to the heading and puts the cursor there. The highlighted
