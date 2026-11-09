@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
@@ -14,7 +14,8 @@ import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {runStartupUpdateCheck} from './components/updateCheck'
-import {detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
+import {collectFilePaths, newNoteLocation, parseWikiLink, resolveWikiLink} from './lib/wikilink'
+import {createFile as apiCreateFile, createFolder as apiCreateFolder, detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
 import type {FileFilterConfig, VaultEntry} from './lib/types'
 import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
 
@@ -75,6 +76,11 @@ function App() {
     const [addingVault, setAddingVault] = useState<VaultEntry | null>(null)
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+    // Heading to scroll to after following a [[Note#Heading]] link.
+    const [scrollTarget, setScrollTarget] = useState<{heading: string; seq: number} | null>(null)
+    // A WikiLink to a missing note waiting for the user to confirm creating it.
+    const [pendingNoteCreate, setPendingNoteCreate] = useState<{parent: string; name: string; heading: string | null} | null>(null)
+    const notePaths = useMemo(() => collectFilePaths(vault.tree), [vault.tree])
 
     useEffect(() => {
         getFileFilterConfig()
@@ -164,7 +170,7 @@ function App() {
         setSelectedPath(newPath)
     }
 
-    async function openFile(path: string) {
+    async function openFile(path: string, heading: string | null = null) {
         // Let in-flight auto-saves of the current note finish before switching.
         await saveQueueRef.current
         let text = ''
@@ -174,8 +180,49 @@ function App() {
             // Open as empty note if it cannot be read.
         }
         loadNote(path, text)
+        setScrollTarget(heading ? {heading, seq: Date.now()} : null)
         setQuickSwitcherOpen(false)
         setGlobalSearchOpen(false)
+    }
+
+    // Follows a WikiLink: opens the resolved note, or creates it when it does not exist yet.
+    async function handleOpenWikiLink(raw: string) {
+        const {target, heading} = parseWikiLink(raw)
+        if (!target) {
+            // [[#Heading]]: a link inside the open note.
+            if (heading) setScrollTarget({heading, seq: Date.now()})
+            return
+        }
+        const existing = resolveWikiLink(target, notePaths, selectedPath)
+        if (existing) {
+            if (existing === selectedPath) {
+                if (heading) setScrollTarget({heading, seq: Date.now()})
+            } else {
+                await openFile(existing, heading)
+            }
+            return
+        }
+        // Ask first, so a typo in a link does not silently create a stray note.
+        setPendingNoteCreate({...newNoteLocation(target, selectedPath), heading})
+    }
+
+    async function handleConfirmNoteCreate() {
+        if (!pendingNoteCreate) return
+        const {parent, name, heading} = pendingNoteCreate
+        setPendingNoteCreate(null)
+        try {
+            // Create missing parent folders one level at a time; existing ones are fine.
+            let dir = ''
+            for (const part of parent ? parent.split('/') : []) {
+                await apiCreateFolder(dir, part).catch(() => {})
+                dir = dir ? `${dir}/${part}` : part
+            }
+            const newPath = await apiCreateFile(parent, name)
+            vault.refresh()
+            await openFile(newPath, heading)
+        } catch (err) {
+            alert(t('wikiLinkCreateFailed') + String(err))
+        }
     }
 
     function handleVaultSwitched(_newPath: string) {
@@ -728,6 +775,9 @@ function App() {
                             key={`${selectedPath}-${editorKey}`}
                             path={selectedPath}
                             initialContent={initialContent}
+                            scrollTarget={scrollTarget}
+                            notePaths={notePaths}
+                            onOpenWikiLink={handleOpenWikiLink}
                             onContentChange={(markdown) => {
                                 currentContentRef.current = markdown
                             }}
@@ -804,6 +854,16 @@ function App() {
                 itemName={deleteTarget ? deleteTarget.split('/').pop() : undefined}
                 onConfirm={handleConfirmDelete}
                 onClose={() => setDeleteTarget(null)}
+            />
+            <ConfirmModal
+                isOpen={pendingNoteCreate !== null}
+                isDestructive={false}
+                title={t('wikiLinkCreateTitle')}
+                message={t('wikiLinkCreateDesc')}
+                itemName={pendingNoteCreate ? (pendingNoteCreate.parent ? `${pendingNoteCreate.parent}/` : '') + pendingNoteCreate.name : undefined}
+                confirmLabel={t('createBtn')}
+                onConfirm={handleConfirmNoteCreate}
+                onClose={() => setPendingNoteCreate(null)}
             />
             {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
         </div>

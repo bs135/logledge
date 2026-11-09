@@ -6,11 +6,12 @@ import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
 import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
 import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {saveAttachment} from '../lib/api'
+import {findHeadingLine} from '../lib/wikilink'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
 import {emoticonToEmoji} from './emoji'
 import {toggleInlineMarker} from './formatting'
-import {livePreview, notePathFacet} from './livePreview'
+import {livePreview, notePathFacet, notePathsField, setNotePaths} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 
 interface EditorProps {
@@ -24,6 +25,12 @@ interface EditorProps {
     onChange: (markdown: string) => void
     /** Called when the inline note title is updated to rename the note file. */
     onRename?: (newName: string) => void
+    /** Called with the raw text inside "[[...]]" when a WikiLink is Ctrl/Cmd+Clicked. */
+    onOpenWikiLink?: (raw: string) => void
+    /** Heading to scroll to (from a [[Note#Heading]] link); `seq` changes on every request. */
+    scrollTarget?: {heading: string; seq: number} | null
+    /** Every file path in the vault, so links to missing notes can be styled. */
+    notePaths?: string[]
 }
 
 function toggleWrap(view: EditorView, marker: string): boolean {
@@ -34,7 +41,7 @@ function toggleWrap(view: EditorView, marker: string): boolean {
 // Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
 // preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
 // and debounced auto-save at 600ms.
-export function Editor({path, initialContent, onContentChange, onChange, onRename}: EditorProps) {
+export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
@@ -43,6 +50,10 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     onContentChangeRef.current = onContentChange
     const pathRef = useRef(path)
     pathRef.current = path
+    const onOpenWikiLinkRef = useRef(onOpenWikiLink)
+    onOpenWikiLinkRef.current = onOpenWikiLink
+    const notePathsRef = useRef(notePaths)
+    notePathsRef.current = notePaths
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const initialTitle = path.split('/').pop()?.replace(/\.md$/, '') || ''
@@ -125,6 +136,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 syntaxHighlightExtension,
                 syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
                 notePathFacet.of(path),
+                notePathsField.init(() => notePathsRef.current ?? null),
                 livePreview,
                 emoticonToEmoji,
                 customKeymap,
@@ -184,32 +196,62 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             }
         }
 
-        function onEditorClick(e: MouseEvent) {
-            if (e.ctrlKey || e.metaKey) {
-                const target = (e.target as HTMLElement)?.closest?.('.cm-link') as HTMLElement | null
-                const url = target?.getAttribute('data-url')
-                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                    e.preventDefault()
-                    openUrl(url).catch(() => {})
-                }
+        // Ctrl/Cmd+Click on a link is handled on mousedown, in the capture phase, before
+        // CodeMirror sees the event. Otherwise CodeMirror moves the cursor into the link on
+        // mousedown, Live Preview redraws it as raw markdown, and the later `click` lands on
+        // a replaced element that no longer carries the link data.
+        function onEditorMouseDown(e: MouseEvent) {
+            if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return
+            const el = e.target as HTMLElement | null
+            const raw = el?.closest?.('[data-wiki-target]')?.getAttribute('data-wiki-target')
+            if (raw) {
+                e.preventDefault()
+                e.stopPropagation()
+                onOpenWikiLinkRef.current?.(raw)
+                return
+            }
+            const url = el?.closest?.('.cm-link')?.getAttribute('data-url')
+            if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                e.preventDefault()
+                e.stopPropagation()
+                openUrl(url).catch(() => {})
             }
         }
 
         const dom = view.dom
         dom.addEventListener('paste', onPaste)
         dom.addEventListener('drop', onDrop)
-        dom.addEventListener('click', onEditorClick)
+        dom.addEventListener('mousedown', onEditorMouseDown, true)
 
         return () => {
             dom.removeEventListener('paste', onPaste)
             dom.removeEventListener('drop', onDrop)
-            dom.removeEventListener('click', onEditorClick)
+            dom.removeEventListener('mousedown', onEditorMouseDown, true)
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
             view.destroy()
             viewRef.current = null
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [path])
+
+    // Restyle WikiLinks when notes are created, renamed or deleted.
+    useEffect(() => {
+        const view = viewRef.current
+        if (!view || !notePaths || view.state.field(notePathsField, false) === notePaths) return
+        view.dispatch({effects: setNotePaths.of(notePaths)})
+    }, [notePaths])
+
+    // Declared after the effect that creates the view, so the view exists on first run.
+    useEffect(() => {
+        const view = viewRef.current
+        if (!view || !scrollTarget) return
+        const line = findHeadingLine(view.state.doc.toString(), scrollTarget.heading)
+        if (line === null) return
+        const pos = view.state.doc.line(line).from
+        view.dispatch({selection: {anchor: pos}, effects: EditorView.scrollIntoView(pos, {y: 'start', yMargin: 24})})
+        view.focus()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scrollTarget?.seq])
 
     return (
         <div
