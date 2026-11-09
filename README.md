@@ -29,6 +29,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+\`; `Ctrl+B` also works outside the editor, where it does not mean bold) to toggle visibility.
+- **Back / Forward Navigation**: `Alt+←` / `Alt+→` (`⌘⌥←` / `⌘⌥→` on macOS), the mouse back/forward buttons, or the arrows in the title bar move through the notes opened in this session. Renames, moves and deletes keep the history in sync.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `notify` with debounce (300ms) and self-write suppression.
 
 ### Markdown Live Preview Editor (Obsidian-Style)

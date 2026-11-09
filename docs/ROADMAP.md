@@ -43,7 +43,7 @@ item needs a big refactor of something already shipped:
 |---|------|--------|--------|
 | 1.1 | WikiLink navigation | ✅ | `feat/wikilink-navigation` |
 | 1.2 | `[[` autocomplete | ✅ | `feat/wikilink-autocomplete` |
-| 1.3 | Back / Forward history | ⬜ | |
+| 1.3 | Back / Forward history | ✅ | `feat/nav-history` |
 | 1.4 | Recent & pinned notes | ⬜ | |
 
 ### 1.1 WikiLink navigation
@@ -95,9 +95,24 @@ item needs a big refactor of something already shipped:
   `test-wikilink.mjs` and `test-wiki-complete.mjs` (runs the real source).
 
 ### 1.3 Back / Forward history
-- Per-session stack of opened notes in `App.tsx`; `Alt+←` / `Alt+→` and mouse
-  buttons 4/5; back/forward buttons in the title bar.
-- Renames, moves and deletes update or drop entries.
+- Per-session history of opened notes (max 100); re-opening the current note adds
+  nothing; opening a note after going back drops the forward entries (browser-style).
+- `Alt+←` / `Alt+→` on Windows/Linux, `⌘⌥←` / `⌘⌥→` on macOS, mouse back/forward
+  buttons, and ←/→ buttons in the title bar (disabled when there is nowhere to go).
+- Renames and moves (inline rename, title rename, Cut+Paste, drag-and-drop) update
+  entries, folders included; deletes drop them. Entries whose note vanished outside the
+  app (sync, file manager) are dropped when navigating. Switching vault clears it.
+- After deleting the open note, Back reopens the note you were on before it.
+- **As built:** pure, immutable `src/lib/navHistory.ts` (tests: `test-nav-history.mjs`);
+  `App.tsx` keeps it in state plus a ref (`navigate`, `handleEntryMoved`). Keys are
+  caught on `window` in the capture phase, ahead of CodeMirror's `Alt+←/→`
+  (`cursorSyntaxLeft/Right`, which is therefore no longer reachable on Windows/Linux).
+  `⌘[`/`⌘]` were avoided because CodeMirror uses them for indent.
+- Side fix: drag-and-drop in the file tree now uses `moveTo` like Cut+Paste, so a moved
+  open note keeps its new path and move errors are shown (before, `vault.move`
+  swallowed errors and the open note kept its old path).
+- Not done: restoring the scroll/cursor position when going back (candidate for 6.1
+  Tabs).
 
 ### 1.4 Recent & pinned notes
 - Quick Switcher with an empty query lists pinned notes, then recent notes.
