@@ -104,25 +104,29 @@ export function RightPanel({width, onWidthChange, onClose, outline, activeIndex,
                 className="flex shrink-0 flex-col overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/40"
                 aria-label={t('rightPanel')}
             >
-                <div className="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800 px-2 py-1">
+                {/* Icon-only tabs; the name is the tooltip and the accessible label. */}
+                <div className="flex items-center gap-0.5 border-b border-neutral-200 dark:border-neutral-800 px-2 py-1" role="tablist">
                     {(
                         [
-                            {id: 'outline', icon: <ListTree className="h-3.5 w-3.5" />, label: t('outlineTab')},
-                            {id: 'backlinks', icon: <Link2 className="h-3.5 w-3.5" />, label: t('backlinksTab')},
-                            {id: 'tags', icon: <Hash className="h-3.5 w-3.5" />, label: t('tagsTab')},
+                            {id: 'outline', icon: <ListTree className="h-4 w-4" />, label: t('outlineTab')},
+                            {id: 'backlinks', icon: <Link2 className="h-4 w-4" />, label: t('backlinksTab')},
+                            {id: 'tags', icon: <Hash className="h-4 w-4" />, label: t('tagsTab')},
                         ] as const
                     ).map((tb) => (
                         <button
                             key={tb.id}
+                            role="tab"
+                            aria-selected={tab === tb.id}
+                            aria-label={tb.label}
+                            title={tb.label}
                             onClick={() => selectTab(tb.id)}
-                            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
+                            className={`flex items-center justify-center rounded p-1.5 transition-colors ${
                                 tab === tb.id
-                                    ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-medium'
-                                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60'
+                                    ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
+                                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 hover:text-neutral-800 dark:hover:text-neutral-200'
                             }`}
                         >
                             {tb.icon}
-                            {tb.label}
                         </button>
                     ))}
                     <button
