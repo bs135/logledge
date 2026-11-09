@@ -45,6 +45,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.
 - **Dedicated Inline Title Bar**: Synchronizes note filename with input on blur/Enter, with automatic sanitization of invalid OS characters.
 - **Debounced Auto-Save**: Background auto-save (600ms debounce) with no manual `Ctrl+S` required.
+- **Editor Status Bar**: Shows whether the note is saved (Saved / Unsaved / Saving… / changed on disk / failed), plus word and character counts (of the selection too) and an estimated reading time.
 - **Attachment Handling**: Paste images from clipboard or drag-and-drop into notes; saved automatically to `.attachments/` at the Vault root with relative markdown links.
 - **Editor Context Menu**: Right-click menu for Cut, Copy, Paste, Select All, Undo, and Redo.
 - **Remote Update Detection**: Alerts user when an active note is modified externally (via Git pull or external editor) with options to reload or preserve draft.

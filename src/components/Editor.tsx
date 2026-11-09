@@ -8,6 +8,7 @@ import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
 import {autocompletion} from '@codemirror/autocomplete'
 import {readFile, saveAttachment} from '../lib/api'
 import {findHeadingLine} from '../lib/wikilink'
+import {textStats, type TextStats} from '../lib/textStats'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
 import {emoticonToEmoji} from './emoji'
@@ -33,6 +34,24 @@ interface EditorProps {
     scrollTarget?: {heading: string; seq: number} | null
     /** Every file path in the vault, so links to missing notes can be styled. */
     notePaths?: string[]
+    /** Word/character counts of the note and of the selection (null when nothing is selected). */
+    onStatsChange?: (stats: EditorStats) => void
+}
+
+export interface EditorStats {
+    doc: TextStats
+    selection: TextStats | null
+}
+
+// Counting walks the whole document, so it is debounced while typing.
+const STATS_DEBOUNCE_MS = 150
+
+function computeStats(state: EditorState): EditorStats {
+    const selected = state.selection.ranges
+        .filter((r) => !r.empty)
+        .map((r) => state.sliceDoc(r.from, r.to))
+        .join('\n')
+    return {doc: textStats(state.doc.toString()), selection: selected ? textStats(selected) : null}
 }
 
 function toggleWrap(view: EditorView, marker: string): boolean {
@@ -43,7 +62,7 @@ function toggleWrap(view: EditorView, marker: string): boolean {
 // Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
 // preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
 // and debounced auto-save at 600ms.
-export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths}: EditorProps) {
+export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, scrollTarget, notePaths, onStatsChange}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
@@ -56,6 +75,9 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     onOpenWikiLinkRef.current = onOpenWikiLink
     const notePathsRef = useRef(notePaths)
     notePathsRef.current = notePaths
+    const onStatsChangeRef = useRef(onStatsChange)
+    onStatsChangeRef.current = onStatsChange
+    const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const initialTitle = path.split('/').pop()?.replace(/\.md$/, '') || ''
@@ -115,6 +137,11 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
         ])
 
         const updateListener = EditorView.updateListener.of((update) => {
+            if (update.docChanged || update.selectionSet) {
+                if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
+                const state = update.state
+                statsTimerRef.current = setTimeout(() => onStatsChangeRef.current?.(computeStats(state)), STATS_DEBOUNCE_MS)
+            }
             if (update.docChanged) {
                 const markdownText = update.state.doc.toString()
                 onContentChangeRef.current?.(markdownText)
@@ -155,6 +182,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             parent: containerRef.current,
         })
         viewRef.current = view
+        onStatsChangeRef.current?.(computeStats(view.state))
 
         // Handle image paste into editor
         async function onPaste(e: ClipboardEvent) {
@@ -233,6 +261,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             dom.removeEventListener('drop', onDrop)
             dom.removeEventListener('mousedown', onEditorMouseDown, true)
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+            if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
             view.destroy()
             viewRef.current = null
         }

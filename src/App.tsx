@@ -5,7 +5,8 @@ import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
 import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} from './components/FileTree'
-import {Editor} from './components/Editor'
+import {Editor, type EditorStats} from './components/Editor'
+import {EditorStatus, type SaveState} from './components/EditorStatus'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
 import {SyncStatusBar} from './components/SyncStatusBar'
@@ -38,6 +39,17 @@ function App() {
     const [initialContent, setInitialContent] = useState('')
     const [editorKey, setEditorKey] = useState(0)
     const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null)
+    // Status bar: save state of the open note and its word/character counts.
+    const [saveState, setSaveState] = useState<{state: SaveState; error?: string}>({state: 'saved'})
+    const [editorStats, setEditorStats] = useState<EditorStats | null>(null)
+    // The open note's file disappeared from disk (deleted or moved outside the app).
+    // While set, auto-save is paused so the file is not silently recreated.
+    const [noteDeleted, setNoteDeletedState] = useState(false)
+    const noteDeletedRef = useRef(false)
+    const setNoteDeleted = (value: boolean) => {
+        noteDeletedRef.current = value
+        setNoteDeletedState(value)
+    }
     // Latest editor content, including edits not yet auto-saved.
     const currentContentRef = useRef('')
     // Content known to be on disk for the open note (last read or successfully saved).
@@ -164,6 +176,9 @@ function App() {
         currentContentRef.current = text
         diskRef.current = {path, content: text}
         setExternalChangeNotice(null)
+        setNoteDeleted(false)
+        setSaveState({state: 'saved'})
+        if (!path) setEditorStats(null)
         setInitialContent(text)
         setSelectedPath(path)
         setEditorKey((k) => k + 1)
@@ -177,16 +192,24 @@ function App() {
         const run = async () => {
             // The note was closed or renamed while this save was queued.
             if (diskRef.current.path !== path) return
+            // Don't recreate a file that was deleted outside the app; the user decides
+            // with Restore / Close in the banner.
+            if (noteDeletedRef.current) return
+            setSaveState({state: 'saving'})
             try {
                 const res = await writeFileIfUnchanged(path, markdown, diskRef.current.content)
                 if (diskRef.current.path !== path) return
                 if (res.saved) {
                     diskRef.current = {path, content: markdown}
+                    // Typing may have continued while the write was in flight.
+                    setSaveState({state: currentContentRef.current === markdown ? 'saved' : 'unsaved'})
                 } else {
                     setExternalChangeNotice(res.diskContent)
+                    setSaveState({state: 'conflict'})
                 }
             } catch (err) {
                 console.error('Auto-save failed:', err)
+                if (diskRef.current.path === path) setSaveState({state: 'error', error: String(err)})
             }
         }
         saveQueueRef.current = saveQueueRef.current.then(run)
@@ -197,6 +220,11 @@ function App() {
     // changes because the note or one of its parent folders was renamed.
     function followSelectedPath(newPath: string) {
         diskRef.current = {...diskRef.current, path: newPath}
+        // A check that raced with the rename may have read the old, now missing path.
+        if (noteDeletedRef.current) {
+            setNoteDeleted(false)
+            setSaveState({state: currentContentRef.current === diskRef.current.content ? 'saved' : 'unsaved'})
+        }
         setInitialContent(currentContentRef.current)
         setSelectedPath(newPath)
     }
@@ -426,27 +454,39 @@ function App() {
 
         async function checkExternalChange() {
             if (!selectedPath) return
+            let diskContent: string
             try {
-                const diskContent = await readFile(selectedPath)
-                const known = diskRef.current
-                if (known.path !== selectedPath || diskContent === known.content) {
-                    // Nothing changed on disk since we last read or saved the note:
-                    // unsaved edits in the editor are not an external change.
-                    return
-                }
-                if (diskContent === currentContentRef.current) {
-                    // Our own in-flight auto-save has already reached the disk.
-                    diskRef.current = {path: selectedPath, content: diskContent}
-                    return
-                }
-                if (currentContentRef.current === known.content) {
-                    // No unsaved edits: silently show the new version.
-                    loadNote(selectedPath, diskContent)
-                } else {
-                    setExternalChangeNotice(diskContent)
-                }
+                diskContent = await readFile(selectedPath)
             } catch {
-                // file may have been moved or removed
+                // The file is gone: deleted, or moved/renamed outside the app. Ignore it
+                // when the app itself moved, renamed or closed the note meanwhile.
+                if (diskRef.current.path !== selectedPath) return
+                setNoteDeleted(true)
+                setExternalChangeNotice(null)
+                setSaveState({state: 'deleted'})
+                return
+            }
+            if (noteDeletedRef.current) {
+                // The file came back (restored from the trash, or by sync).
+                setNoteDeleted(false)
+                setSaveState({state: currentContentRef.current === diskContent ? 'saved' : 'unsaved'})
+            }
+            const known = diskRef.current
+            if (known.path !== selectedPath || diskContent === known.content) {
+                // Nothing changed on disk since we last read or saved the note:
+                // unsaved edits in the editor are not an external change.
+                return
+            }
+            if (diskContent === currentContentRef.current) {
+                // Our own in-flight auto-save has already reached the disk.
+                diskRef.current = {path: selectedPath, content: diskContent}
+                return
+            }
+            if (currentContentRef.current === known.content) {
+                // No unsaved edits: silently show the new version.
+                loadNote(selectedPath, diskContent)
+            } else {
+                setExternalChangeNotice(diskContent)
             }
         }
 
@@ -861,6 +901,29 @@ function App() {
                 </>
             )}
                 <main className="flex-1 overflow-hidden p-4 flex flex-col bg-white dark:bg-neutral-900">
+                    {noteDeleted && selectedPath && (
+                        <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
+                            <span>{t('noteDeletedNotice')}</span>
+                            <div className="flex shrink-0 gap-2">
+                                <button
+                                    onClick={() => {
+                                        // Write the editor content back to the same path.
+                                        setNoteDeleted(false)
+                                        queueSave(selectedPath, currentContentRef.current)
+                                    }}
+                                    className="rounded bg-amber-600 px-2.5 py-0.5 font-medium text-white hover:bg-amber-500"
+                                >
+                                    {t('restoreNoteBtn')}
+                                </button>
+                                <button
+                                    onClick={() => loadNote(null, '')}
+                                    className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-0.5"
+                                >
+                                    {t('closeNoteBtn')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {externalChangeNotice !== null && (
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
                             <span>{t('externalUpdateNotice')}</span>
@@ -897,7 +960,17 @@ function App() {
                             onOpenWikiLink={handleOpenWikiLink}
                             onContentChange={(markdown) => {
                                 currentContentRef.current = markdown
+                                // Same-value updates are ignored by React, so this only
+                                // re-renders when the state actually flips.
+                                setSaveState((s) =>
+                                    s.state === 'conflict' || s.state === 'saving' || s.state === 'deleted'
+                                        ? s
+                                        : markdown === diskRef.current.content
+                                          ? s.state === 'saved' ? s : {state: 'saved'}
+                                          : s.state === 'unsaved' ? s : {state: 'unsaved'},
+                                )
                             }}
+                            onStatsChange={setEditorStats}
                             onChange={(markdown) => {
                                 currentContentRef.current = markdown
                                 queueSave(selectedPath, markdown)
@@ -920,10 +993,16 @@ function App() {
                     )}
                 </main>
             </div>
-            <SyncStatusBar onOpenSettings={() => {
-                setSettingsTab('vaults')
-                setSettingsOpen(true)
-            }} />
+            <SyncStatusBar
+                onOpenSettings={() => {
+                    setSettingsTab('vaults')
+                    setSettingsOpen(true)
+                }}
+            >
+                {selectedPath && editorStats && (
+                    <EditorStatus stats={editorStats} saveState={saveState.state} saveError={saveState.error} />
+                )}
+            </SyncStatusBar>
             {quickSwitcherOpen && (
                 <QuickSwitcher
                     onOpen={(path) => openFile(path)}
