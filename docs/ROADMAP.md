@@ -218,7 +218,7 @@ item needs a big refactor of something already shipped:
 | 3.1 | Right panel + Outline | ✅ | `feat/right-panel-outline` |
 | 3.2 | Backlinks & unresolved links | ✅ | `feat/backlinks` |
 | 3.3 | Tags | ✅ | `feat/tags` |
-| 3.4 | Advanced search & replace | ⬜ | |
+| 3.4 | Advanced search & replace | ✅ | `feat/advanced-search` |
 
 - **3.1** Collapsible, resizable right panel (`Ctrl+Shift+\``) with tabs. First tab:
   outline from the CodeMirror syntax tree; click scrolls to the heading, current
@@ -292,6 +292,31 @@ item needs a big refactor of something already shipped:
 - **3.4** Global Search: filter by folder, case-sensitive and regex modes, replace in
   one note or across the vault (preview + confirm, writes go through the normal save
   path so sync and the watcher see them).
+  - **As built:** Global Search keeps its ranked full-text mode by default. Turning
+    on **Aa** (match case, Alt+C), whole word (Alt+W), **.\*** (regex, Alt+R) or the **Replace** toggle
+    switches to an exact, line-by-line mode: results grouped by note (collapsible,
+    match count), each line with its number and highlighted matches; click a line to
+    open the note there. `path:folder` (one or more, OR) joins `tag:name` as a filter
+    in both modes; folder names with spaces are quoted (`path:"My Notes"` or
+    `path:'My Notes'`; an unclosed quote takes the rest of the query while typing).
+    The rest of the query keeps its spacing (matters for regex).
+    Results are capped (200 notes, 50 lines per note, 2000 lines) with a notice.
+  - Whole word uses Unicode word boundaries; in plain mode only on a side that starts
+    or ends with a letter/digit/`_` (so `#tag` still matches, as in VS Code), in regex
+    mode around the whole pattern.
+  - Replace: per-note checkboxes, matches shown struck through while a replacement is
+    typed, "Replace all" asks for confirmation (count, notes, replacement). Regex mode
+    expands `$1`; plain mode is literal. Line by line, so the preview count equals what
+    is replaced. A note whose current match count differs from the preview is skipped
+    and reported (never overwritten blindly). Before replacing, the open note's
+    pending edits are saved; after, it is reloaded if it changed. Written notes are
+    re-indexed at once.
+  - Code: Rust `src-tauri/src/grep.rs` (pattern building, rejects invalid and
+    empty-matching patterns; UTF-16 match ranges; tests), `search.rs`
+    (`parse_filters`, folder filter, `grep`), `state.rs#replace_in_notes` (test),
+    commands `grep_notes` / `replace_in_notes`. `regex` crate added (already in the
+    dependency tree). Frontend `src/lib/grep.ts` (tests: `test-grep.mjs`),
+    `GlobalSearch.tsx` rewritten.
 
 ## Phase 4 — Workflow
 

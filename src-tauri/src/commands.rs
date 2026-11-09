@@ -13,9 +13,10 @@ use crate::autostart;
 use crate::config::{Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, Status};
+use crate::grep::GrepOptions;
 use crate::lifecycle;
-use crate::search::{LinkRef, SearchResult, TagCount};
-use crate::state::{AppState, SyncSettings};
+use crate::search::{GrepResult, LinkRef, SearchResult, TagCount};
+use crate::state::{AppState, ReplaceOutcome, ReplaceTarget, SyncSettings};
 use crate::tray;
 use crate::vault::{clean_path, Node, WriteResult};
 
@@ -364,6 +365,45 @@ pub async fn search_notes(state: AppStateRef<'_>, query: String) -> Result<Vec<S
 #[tauri::command]
 pub async fn backlinks(state: AppStateRef<'_>, path: String) -> Result<Vec<LinkRef>> {
     blocking(&state, move |s| s.search.backlinks(&path)).await
+}
+
+/// Exact search (case-sensitive / regex), line by line, honouring `tag:`/`path:`.
+#[tauri::command]
+pub async fn grep_notes(
+    state: AppStateRef<'_>,
+    query: String,
+    case_sensitive: bool,
+    regex: bool,
+    whole_word: bool,
+) -> Result<GrepResult> {
+    let opts = GrepOptions {
+        case_sensitive,
+        regex,
+        whole_word,
+    };
+    blocking(&state, move |s| s.search.grep(&query, opts)).await
+}
+
+/// Replaces matches in the previewed notes; see `AppState::replace_in_notes`.
+#[tauri::command]
+pub async fn replace_in_notes(
+    state: AppStateRef<'_>,
+    query: String,
+    case_sensitive: bool,
+    regex: bool,
+    whole_word: bool,
+    replacement: String,
+    targets: Vec<ReplaceTarget>,
+) -> Result<Vec<ReplaceOutcome>> {
+    let opts = GrepOptions {
+        case_sensitive,
+        regex,
+        whole_word,
+    };
+    blocking(&state, move |s| {
+        s.replace_in_notes(&query, opts, &replacement, &targets)
+    })
+    .await
 }
 
 /// Every tag in the vault with its note count.

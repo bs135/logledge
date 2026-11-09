@@ -2143,6 +2143,7 @@ dependencies = [
  "keyring",
  "mime_guess",
  "notify",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
