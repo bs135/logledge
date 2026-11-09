@@ -116,6 +116,13 @@ function App() {
         }
     }, [treeSort])
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+    // Query Global Search opens with (e.g. "tag:work" from a tag); reset on close.
+    const [globalSearchQuery, setGlobalSearchQuery] = useState('')
+    const searchTag = (tag: string) => {
+        setQuickSwitcherOpen(false)
+        setGlobalSearchQuery(`tag:${tag}`)
+        setGlobalSearchOpen(true)
+    }
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
@@ -1046,6 +1053,7 @@ function App() {
                             scrollTarget={scrollTarget}
                             notePaths={notePaths}
                             onOpenWikiLink={handleOpenWikiLink}
+                            onOpenTag={searchTag}
                             onContentChange={(markdown) => {
                                 currentContentRef.current = markdown
                                 // Same-value updates are ignored by React, so this only
@@ -1105,6 +1113,7 @@ function App() {
                         onSelectTop={() => setScrollTarget({pos: 0, seq: Date.now()})}
                         notePath={selectedPath}
                         notePaths={notePaths}
+                        onSearchTag={searchTag}
                         onOpenNote={(path, line) => {
                             if (path === selectedPath) {
                                 if (line) setScrollTarget({line, seq: Date.now()})
@@ -1134,7 +1143,16 @@ function App() {
                 />
             )}
             {globalSearchOpen && (
-                <GlobalSearch onOpen={openFile} onClose={() => setGlobalSearchOpen(false)} />
+                <GlobalSearch
+                    // A new tag search while open restarts it with that query.
+                    key={globalSearchQuery}
+                    onOpen={(path) => openFile(path)}
+                    onClose={() => {
+                        setGlobalSearchOpen(false)
+                        setGlobalSearchQuery('')
+                    }}
+                    initialQuery={globalSearchQuery}
+                />
             )}
             {settingsOpen && (
                 <SettingsModal

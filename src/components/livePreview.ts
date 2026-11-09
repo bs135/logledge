@@ -10,6 +10,7 @@ import type { SyntaxNode } from '@lezer/common'
 import { readAttachmentDataURL } from '../lib/api'
 import { translate } from '../i18n'
 import { parseWikiLink, resolveWikiLink, wikiLinkLabel } from '../lib/wikilink'
+import { findInlineTags, frontMatterLength } from '../lib/tags'
 
 // All file paths in the vault, used to tell WikiLinks to existing notes apart from links
 // to missing ones. `null` until the editor has been given the list: nothing is styled
@@ -1395,6 +1396,29 @@ function buildDecorations(state: EditorState): BuildResult {
                     class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                 }).range(matchTo - 2, matchTo)
             )
+        }
+    }
+
+    // 13. Tags (#tag, #nested/tag): same rules as the indexer (lib/tags.ts). Not in
+    // code, rendered tables or YAML front matter. Ctrl+Click searches the tag.
+    {
+        const bodyStart = frontMatterLength(fullText)
+        let lineStart = 0
+        for (const lineText of fullText.split('\n')) {
+            const lineFrom = lineStart
+            lineStart += lineText.length + 1
+            if (lineFrom < bodyStart || !lineText.includes('#')) continue
+            for (const m of findInlineTags(lineText)) {
+                const from = lineFrom + m.from
+                const to = lineFrom + m.to
+                if (rangesOverlap(codeRanges, from, to) || rangesOverlap(renderedTableRanges, from, to)) continue
+                decorations.push(
+                    Decoration.mark({
+                        class: 'cm-tag text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/50 rounded px-1 py-0.5 cursor-pointer',
+                        attributes: { 'data-tag': m.tag, title: translate('tagTitle') },
+                    }).range(from, to)
+                )
+            }
         }
     }
 

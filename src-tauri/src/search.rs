@@ -1,6 +1,7 @@
 //! SearchService: SQLite FTS5 index of the Vault's .md files, powering Global
 //! Search (full text with highlighted snippets), the Quick Switcher (fuzzy
-//! file names) and backlinks (a `links` table of every note-to-note link). The index lives outside the Vault, in the user cache directory,
+//! file names), backlinks (a `links` table of every note-to-note link) and
+//! tags (a `tags` table; `tag:name` filters in Global Search). The index lives outside the Vault, in the user cache directory,
 //! at the same path and with the same schema as the Go build, so existing
 //! indexes are reused after an upgrade.
 
@@ -11,18 +12,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::error::{Error, Result};
 use crate::fuzzy;
 use crate::links::{extract_links, target_key, LinkKind};
+use crate::tags::{extract_tags, normalize_tag};
 use crate::watcher::OnChange;
 
 /// Schema version stored in `PRAGMA user_version`. Version 1 added the `links`
-/// table; an older index is rebuilt once so every note gets its links indexed.
-const SCHEMA_VERSION: i64 = 1;
+/// table, version 2 the `tags` table; an older index is rebuilt once so every
+/// note gets them indexed.
+const SCHEMA_VERSION: i64 = 2;
+
+/// A tag and the number of notes carrying it (exactly, not counting nested tags).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TagCount {
+    pub tag: String,
+    pub count: u32,
+}
 
 /// A link found in `source` whose target may point at the note asked about (same
 /// file name). The frontend resolves `target` to decide whether it really does.
@@ -141,14 +152,20 @@ impl SearchService {
                 context    TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS links_by_key ON links(target_key);
-            CREATE INDEX IF NOT EXISTS links_by_src ON links(src_id);",
+            CREATE INDEX IF NOT EXISTS links_by_src ON links(src_id);
+            CREATE TABLE IF NOT EXISTS tags (
+                src_id INTEGER NOT NULL,
+                tag    TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS tags_by_tag ON tags(tag);
+            CREATE INDEX IF NOT EXISTS tags_by_src ON tags(src_id);",
         )?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version < SCHEMA_VERSION {
-            // Notes indexed before links existed have none: forget them so the next
-            // reindex reads every note again.
+            // Notes indexed before links/tags existed have none: forget them so the
+            // next reindex reads every note again.
             conn.execute_batch(&format!(
-                "DELETE FROM links; DELETE FROM notes_fts; DELETE FROM files;
+                "DELETE FROM tags; DELETE FROM links; DELETE FROM notes_fts; DELETE FROM files;
                  PRAGMA user_version = {SCHEMA_VERSION};"
             ))?;
         }
@@ -383,30 +400,87 @@ impl SearchService {
     }
 
     /// Full-text search (FTS5 MATCH), returning up to `limit` results ranked by
-    /// relevance, with snippets highlighted using `**`.
+    /// relevance, with snippets highlighted using `**`. `tag:name` tokens keep only
+    /// notes with that tag (or a nested `name/...` tag); a query of tags alone lists
+    /// those notes by path, without snippets.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         let (_, conn) = self.snapshot().ok_or_else(not_open)?;
-        let query = query.trim();
-        if query.is_empty() {
+        let (tags, text) = split_tag_filters(query);
+        if tags.is_empty() && text.is_empty() {
             return Ok(Vec::new());
         }
         let limit = if limit == 0 { 20 } else { limit };
 
+        let mut args: Vec<Value> = Vec::new();
+        let mut tag_sql = String::new();
+        for tag in &tags {
+            tag_sql.push_str(
+                " AND f.id IN (SELECT src_id FROM tags WHERE tag = ? OR tag LIKE ? ESCAPE '\\')",
+            );
+            args.push(Value::Text(tag.clone()));
+            args.push(Value::Text(format!("{}/%", escape_like(tag))));
+        }
+        let sql = if text.is_empty() {
+            format!(
+                "SELECT f.path, n.title, ''
+                 FROM files f JOIN notes_fts n ON n.rowid = f.id
+                 WHERE 1 = 1{tag_sql}
+                 ORDER BY f.path
+                 LIMIT ?"
+            )
+        } else {
+            args.insert(0, Value::Text(fts_query(&text)));
+            format!(
+                "SELECT f.path, n.title, snippet(notes_fts, 1, '**', '**', '...', 10)
+                 FROM notes_fts n
+                 JOIN files f ON f.id = n.rowid
+                 WHERE notes_fts MATCH ?{tag_sql}
+                 ORDER BY rank
+                 LIMIT ?"
+            )
+        };
+        args.push(Value::Integer(limit as i64));
+
         let conn = lock(&conn);
-        let mut stmt = conn.prepare(
-            "SELECT f.path, n.title, snippet(notes_fts, 1, '**', '**', '...', 10)
-             FROM notes_fts n
-             JOIN files f ON f.id = n.rowid
-             WHERE notes_fts MATCH ?1
-             ORDER BY rank
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![fts_query(query), limit as i64], |r| {
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(args.iter()), |r| {
             Ok(SearchResult {
                 path: r.get(0)?,
                 title: r.get(1)?,
                 snippet: r.get(2)?,
             })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Every tag in the vault with its note count, sorted by tag.
+    pub fn all_tags(&self) -> Result<Vec<TagCount>> {
+        let (_, conn) = self.snapshot().ok_or_else(not_open)?;
+        let conn = lock(&conn);
+        let mut stmt = conn.prepare("SELECT tag, COUNT(*) FROM tags GROUP BY tag ORDER BY tag")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(TagCount {
+                tag: r.get(0)?,
+                count: r.get(1)?,
+            })
+        })?;
+        Ok(rows.flatten().collect())
+    }
+
+    /// Notes with `tag` or a tag nested under it (`tag/...`), sorted by path.
+    pub fn notes_with_tag(&self, tag: &str) -> Result<Vec<String>> {
+        let (_, conn) = self.snapshot().ok_or_else(not_open)?;
+        let Some(tag) = normalize_tag(tag) else {
+            return Ok(Vec::new());
+        };
+        let conn = lock(&conn);
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT f.path FROM tags t JOIN files f ON f.id = t.src_id
+             WHERE t.tag = ?1 OR t.tag LIKE ?2 ESCAPE '\\'
+             ORDER BY f.path",
+        )?;
+        let rows = stmt.query_map(params![tag, format!("{}/%", escape_like(&tag))], |r| {
+            r.get(0)
         })?;
         Ok(rows.flatten().collect())
     }
@@ -451,6 +525,7 @@ fn store_note(
         Some(id) => {
             let _ = conn.execute("DELETE FROM notes_fts WHERE rowid = ?1", [id]);
             let _ = conn.execute("DELETE FROM links WHERE src_id = ?1", [id]);
+            let _ = conn.execute("DELETE FROM tags WHERE src_id = ?1", [id]);
             let _ = conn.execute(
                 "UPDATE files SET mtime = ?1 WHERE id = ?2",
                 params![mtime, id],
@@ -474,6 +549,12 @@ fn store_note(
         "INSERT INTO notes_fts(rowid, title, body) VALUES (?1, ?2, ?3)",
         params![id, title, body],
     );
+    for tag in extract_tags(body) {
+        let _ = conn.execute(
+            "INSERT INTO tags(src_id, tag) VALUES (?1, ?2)",
+            params![id, tag],
+        );
+    }
     for link in extract_links(body) {
         let _ = conn.execute(
             "INSERT INTO links(src_id, target, target_key, kind, line, context)
@@ -490,11 +571,35 @@ fn store_note(
     }
 }
 
-/// Removes a note and its links from the index.
+/// Removes a note, its links and its tags from the index.
 fn delete_note(conn: &Connection, id: i64) {
+    let _ = conn.execute("DELETE FROM tags WHERE src_id = ?1", [id]);
     let _ = conn.execute("DELETE FROM links WHERE src_id = ?1", [id]);
     let _ = conn.execute("DELETE FROM notes_fts WHERE rowid = ?1", [id]);
     let _ = conn.execute("DELETE FROM files WHERE id = ?1", [id]);
+}
+
+/// Splits a search query into `tag:name` filters (normalized; invalid ones are
+/// dropped) and the remaining full-text words.
+fn split_tag_filters(query: &str) -> (Vec<String>, String) {
+    let mut tags = Vec::new();
+    let mut words = Vec::new();
+    for token in query.split_whitespace() {
+        let lower = token.to_lowercase();
+        if let Some(rest) = lower.strip_prefix("tag:") {
+            tags.extend(normalize_tag(rest));
+        } else {
+            words.push(token);
+        }
+    }
+    (tags, words.join(" "))
+}
+
+/// Escapes `%`, `_` and `\` for a LIKE pattern used with `ESCAPE '\'`.
+fn escape_like(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 /// Quotes each token and adds a prefix wildcard, joined by FTS5's implicit AND,
@@ -638,6 +743,61 @@ mod tests {
             .map(|r| r.source)
             .collect();
         assert_eq!(sources, ["c.md", "dir/b.md", "dir/b.md"]);
+    }
+
+    #[test]
+    fn tags_are_indexed_listed_and_searchable() {
+        let t = new_search();
+        let root = t.vault.path();
+        write_note(root, "a.md", "#Work planning for #work/q3 with apples");
+        write_note(root, "b.md", "---\ntags: [work, home]\n---\napples too");
+        write_note(root, "c.md", "#home only, no fruit");
+        write_note(root, "d.md", "#a_b and #axb/c");
+        t.svc.reindex().unwrap();
+
+        let tags: Vec<_> = t
+            .svc
+            .all_tags()
+            .unwrap()
+            .into_iter()
+            .map(|t| (t.tag, t.count))
+            .collect();
+        assert_eq!(
+            tags,
+            vec![
+                ("a_b".into(), 1),
+                ("axb/c".into(), 1),
+                ("home".into(), 2),
+                ("work".into(), 2),
+                ("work/q3".into(), 1),
+            ]
+        );
+        // Nested tags count for their parent.
+        assert_eq!(t.svc.notes_with_tag("Work").unwrap(), ["a.md", "b.md"]);
+        assert_eq!(t.svc.notes_with_tag("work/q3").unwrap(), ["a.md"]);
+        // "_" is not a LIKE wildcard here: "a_b/%" must not match "axb/c".
+        assert_eq!(t.svc.notes_with_tag("a_b").unwrap(), ["d.md"]);
+
+        let paths = |q: &str| -> Vec<String> {
+            t.svc
+                .search(q, 10)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.path)
+                .collect()
+        };
+        assert_eq!(paths("tag:home"), ["b.md", "c.md"]);
+        assert_eq!(paths("tag:work apples").len(), 2);
+        assert_eq!(paths("apples tag:home"), ["b.md"]);
+        assert_eq!(paths("tag:work tag:home"), ["b.md"]);
+        assert!(paths("tag:nope").is_empty());
+        // An invalid tag filter is dropped, leaving no query at all.
+        assert!(paths("tag:123").is_empty());
+
+        // Re-indexing a note replaces its tags.
+        write_note(root, "c.md", "no tags now");
+        t.svc.reindex_file("c.md").unwrap();
+        assert_eq!(t.svc.notes_with_tag("home").unwrap(), ["b.md"]);
     }
 
     #[test]

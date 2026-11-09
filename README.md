@@ -54,6 +54,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Editor Context Menu**: Right-click menu for Cut, Copy, Paste, Select All, Undo, and Redo.
 - **Outline Panel**: `Ctrl+Shift+\` (or the title-bar button) shows a resizable right panel with the note's headings; click one to jump to it, and the heading you are reading stays highlighted.
 - **Backlinks**: The right panel's Backlinks tab lists the notes that link to the open note (`[[WikiLinks]]` and Markdown links), with the linking lines, plus notes that mention its title without a link.
+- **Tags**: `#tag` and `#nested/tag` (or `tags:` in front matter) are highlighted in the editor and indexed. The right panel's Tags tab shows the tag tree with note counts; `tag:name` filters Global Search; Ctrl+Click a tag to search it.
 - **Remote Update Detection**: Alerts user when an active note is modified externally (via Git pull or external editor) with options to reload or preserve draft.
 
 ### Full-Text & Fuzzy Search

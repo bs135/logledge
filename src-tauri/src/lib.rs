@@ -8,6 +8,7 @@ mod lifecycle;
 mod links;
 mod search;
 mod state;
+mod tags;
 mod tray;
 mod vault;
 mod watcher;
@@ -118,6 +119,8 @@ pub fn run() {
             commands::quick_switch,
             commands::backlinks,
             commands::mentions,
+            commands::all_tags,
+            commands::notes_with_tag,
             commands::get_sync_settings,
             commands::configure_sync,
             commands::set_github_pat,
