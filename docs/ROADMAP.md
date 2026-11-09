@@ -135,7 +135,7 @@ item needs a big refactor of something already shipped:
 
 | # | Item | Status | Branch |
 |---|------|--------|--------|
-| 2.1 | Editor status bar | ⬜ | |
+| 2.1 | Editor status bar | ✅ | `feat/editor-status-bar` |
 | 2.2 | Typography settings & zoom | ⬜ | |
 | 2.3 | Paste URL over selection | ⬜ | |
 | 2.4 | Empty state | ⬜ | |
@@ -143,6 +143,23 @@ item needs a big refactor of something already shipped:
 
 - **2.1** Word/character count (selection-aware), reading time, and save state
   ("Saving…", "Saved", "Not saved — conflict") in the existing status bar.
+  - **As built:** right side of the bottom bar while a note is open: save state
+    (Saved / Unsaved / Saving… / Not saved — file changed on disk / Save failed, with
+    the error as tooltip), then words, characters and reading time (200 wpm). With a
+    selection: `selected / total`. Words are letter/digit runs (so Markdown markers and
+    link URLs don't count; Vietnamese works); characters exclude line breaks. Counts
+    and reading time hide progressively on narrow windows.
+  - Code: pure `src/lib/textStats.ts` (tests: `test-text-stats.mjs`);
+    `Editor.tsx#onStatsChange` (debounced 150 ms); save state set from `queueSave` and
+    `onContentChange` in `App.tsx`; `src/components/EditorStatus.tsx` rendered through a
+    new `children` slot of `SyncStatusBar`.
+  - Side fix found while testing: when the open note's file is deleted or moved outside
+    the app, the editor used to keep showing it as "Saved", and the next auto-save
+    silently recreated the file. Now a banner says so, offering **Restore** (write the
+    editor content back) or **Close**; the status shows "Deleted on disk — not saving"
+    and auto-save is paused until Restore. If the file comes back (trash restore, sync)
+    the banner clears by itself. A move/rename outside the app counts as a delete,
+    since the app cannot tell where the file went.
 - **2.2** Settings → Appearance: editor font size, readable line width toggle/width,
   font family. `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom.
 - **2.3** Pasting a URL while text is selected produces `[text](url)`.
