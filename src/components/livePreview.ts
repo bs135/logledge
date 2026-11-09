@@ -230,6 +230,10 @@ interface TableData {
     rows: TableCellData[][]
 }
 
+// Inline elements whose markup is revealed as a whole when the cursor is inside them; an
+// escape inside one is revealed at the same time.
+const INLINE_SCOPE_NODES = new Set(['Link', 'Image', 'Emphasis', 'StrongEmphasis', 'Strikethrough'])
+
 // Syntax nodes that are pure markup inside inline formatting and never shown as text.
 const INLINE_MARK_NODES = new Set(['EmphasisMark', 'StrikethroughMark', 'CodeMark', 'LinkMark'])
 
@@ -750,6 +754,22 @@ function buildDecorations(state: EditorState): BuildResult {
                         }
                     }
                 }
+                return
+            }
+
+            // Backslash escapes (\[ \* \# ...): the backslash is hidden like other markup.
+            // It is revealed together with the inline element it belongs to (a link's
+            // syntax is revealed as a whole), or on its own in plain text.
+            if (name === 'Escape') {
+                const parent = node.node.parent
+                const scope = parent && INLINE_SCOPE_NODES.has(parent.name) ? parent : node.node
+                const isCursorInside = selFrom <= scope.to && selTo >= scope.from
+                interactiveRanges.push({ from: scope.from, to: scope.to })
+                decorations.push(
+                    isCursorInside
+                        ? Decoration.mark({ class: 'cm-formatting text-neutral-400 dark:text-neutral-500' }).range(nodeFrom, nodeFrom + 1)
+                        : Decoration.replace({}).range(nodeFrom, nodeFrom + 1)
+                )
                 return
             }
 
