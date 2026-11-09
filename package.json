@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "node --test test-live-preview.mjs test-updater.mjs test-formatting.mjs test-emoji.mjs test-wikilink.mjs test-wiki-complete.mjs test-nav-history.mjs test-note-lists.mjs test-text-stats.mjs"
+    "test": "node --test test-live-preview.mjs test-updater.mjs test-formatting.mjs test-emoji.mjs test-wikilink.mjs test-wiki-complete.mjs test-nav-history.mjs test-note-lists.mjs test-text-stats.mjs test-typography.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

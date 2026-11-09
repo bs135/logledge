@@ -554,7 +554,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
         if (this.lang) {
             const langBadge = document.createElement('span')
             langBadge.className =
-                'font-mono text-[10px] font-medium tracking-wider uppercase text-neutral-400 dark:text-neutral-500 leading-none select-none'
+                'font-mono text-[0.625em] font-medium tracking-wider uppercase text-neutral-400 dark:text-neutral-500 leading-none select-none'
             langBadge.textContent = this.lang
             leftWrap.appendChild(langBadge)
         }
@@ -564,7 +564,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
         const copyBtn = document.createElement('button')
         copyBtn.type = 'button'
         copyBtn.className =
-            'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[10px] leading-none'
+            'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[0.625em] leading-none'
         copyBtn.title = translate('codeCopyTitle')
 
         copyBtn.innerHTML = `
@@ -633,7 +633,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
 // in font size, line height, padding or margin makes the block change height on toggle.
 function codeblockLineClass(first: boolean, last: boolean, footer: boolean): string {
     let cls =
-        'cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5'
+        'cm-codeblock-line font-mono text-[0.875em] bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5'
     if (first) cls += ' cm-codeblock-first'
     if (last) cls += ' cm-codeblock-last'
     if (footer) cls += ' cm-codeblock-footer'
@@ -898,7 +898,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeFrom, nodeFrom + openLen)
                         )
                         decorations.push(
@@ -908,7 +908,7 @@ function buildDecorations(state: EditorState): BuildResult {
                         )
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeTo - closeLen, nodeTo)
                         )
                     }
@@ -995,7 +995,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeFrom, nodeFrom + 1)
                         )
                         decorations.push(
@@ -1005,7 +1005,7 @@ function buildDecorations(state: EditorState): BuildResult {
                         )
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(labelEnd, nodeTo)
                         )
                     }
@@ -1040,7 +1040,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting font-mono text-xs text-neutral-400 dark:text-neutral-500',
+                                class: 'cm-formatting font-mono text-[0.75em] text-neutral-400 dark:text-neutral-500',
                             }).range(nodeFrom, nodeTo)
                         )
                     }
@@ -1241,7 +1241,7 @@ function buildDecorations(state: EditorState): BuildResult {
                             const fenceMarkLen = fenceMatch[2].length
                             decorations.push(
                                 Decoration.mark({
-                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs select-none',
+                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em] select-none',
                                 }).range(
                                     startLine.from + indentLen,
                                     startLine.from + indentLen + fenceMarkLen
@@ -1255,7 +1255,7 @@ function buildDecorations(state: EditorState): BuildResult {
                                 if (langStart !== -1) {
                                     decorations.push(
                                         Decoration.mark({
-                                            class: 'cm-formatting text-purple-600 dark:text-purple-400 font-mono text-xs font-semibold',
+                                            class: 'cm-formatting text-purple-600 dark:text-purple-400 font-mono text-[0.75em] font-semibold',
                                         }).range(
                                             startLine.from + langStart,
                                             startLine.from + langStart + fenceMatch[3].length
@@ -1306,7 +1306,7 @@ function buildDecorations(state: EditorState): BuildResult {
                             const fenceMarkLen = endMatch[2].length
                             decorations.push(
                                 Decoration.mark({
-                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs select-none',
+                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em] select-none',
                                 }).range(
                                     endLine.from + indentLen,
                                     endLine.from + indentLen + fenceMarkLen
@@ -1359,7 +1359,7 @@ function buildDecorations(state: EditorState): BuildResult {
         } else {
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                 }).range(matchFrom, matchFrom + 2)
             )
             decorations.push(
@@ -1372,7 +1372,7 @@ function buildDecorations(state: EditorState): BuildResult {
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                 }).range(matchTo - 2, matchTo)
             )
         }
