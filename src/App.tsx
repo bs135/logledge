@@ -3,7 +3,7 @@ import {useVault} from './hooks/useVault'
 import {useTheme} from './hooks/useTheme'
 import {useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
-import {FileClipboard, FileTree, InlineAction, parentOf} from './components/FileTree'
+import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} from './components/FileTree'
 import {Editor} from './components/Editor'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -53,6 +53,8 @@ function App() {
     const [isResizing, setIsResizing] = useState(false)
     const [sidebarContextMenuPos, setSidebarContextMenuPos] = useState<{x: number; y: number} | null>(null)
     const [fileClipboard, setFileClipboard] = useState<FileClipboard | null>(null)
+    // Active (focused) item in the file tree; toolbar New Note/New Folder create relative to it.
+    const [treeActivePath, setTreeActivePath] = useState<string | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const lastResizeMouseDownTimeRef = useRef(0)
     const isDraggingSidebarRef = useRef(false)
@@ -602,14 +604,14 @@ function App() {
                                         )}
                                     </button>
                                     <button
-                                        onClick={() => handleCreateNote('')}
+                                        onClick={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}
                                         title={t('newNote')}
                                         className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                     >
                                         <FilePlus className="h-3.5 w-3.5" />
                                     </button>
                                     <button
-                                        onClick={() => handleCreateFolder('')}
+                                        onClick={() => handleCreateFolder(resolveCreateParent(vault.tree, treeActivePath))}
                                         title={t('newFolder')}
                                         className="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
                                     >
@@ -627,6 +629,7 @@ function App() {
                                         onSelectFile={openFile}
                                         onCreateFile={handleCreateNote}
                                         onCreateFolder={handleCreateFolder}
+                                        onActivePathChange={setTreeActivePath}
                                         onRename={handleStartRename}
                                         onDelete={(path) => setDeleteTarget(path)}
                                         onDuplicate={handleDuplicate}
