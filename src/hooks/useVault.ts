@@ -21,6 +21,8 @@ export interface UseVaultResult {
     error: string | null
     selectFolder: () => Promise<void>
     reload: () => Promise<void>
+    /** Re-reads the file tree without the loading state. */
+    refresh: () => void
     createFile: (parentRelPath: string, name: string) => Promise<string | undefined>
     createFolder: (parentRelPath: string, name: string) => Promise<string | undefined>
     rename: (relPath: string, newName: string) => Promise<string | undefined>
@@ -182,5 +184,5 @@ export function useVault(): UseVaultResult {
         [refresh],
     )
 
-    return {vaultPath, tree, loading, error, selectFolder, reload, createFile, createFolder, rename, move, remove, duplicate, copyTo, moveTo}
+    return {vaultPath, tree, loading, error, selectFolder, reload, refresh, createFile, createFolder, rename, move, remove, duplicate, copyTo, moveTo}
 }

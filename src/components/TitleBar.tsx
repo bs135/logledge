@@ -6,6 +6,8 @@ import {useI18n} from '../i18n'
 import type {ThemeMode} from '../hooks/useTheme'
 import {
     PanelLeft,
+    ArrowLeft,
+    ArrowRight,
     ChevronDown,
     Check,
     Plus,
@@ -22,6 +24,9 @@ import {
 } from 'lucide-react'
 import {VaultModal} from './VaultModal'
 
+const NAV_BUTTON_CLASS =
+    'flex h-6 w-6 items-center justify-center rounded text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors disabled:opacity-30 disabled:pointer-events-none'
+
 interface TitleBarProps {
     vaultPath: string | null
     selectedPath: string | null
@@ -33,6 +38,15 @@ interface TitleBarProps {
     onOpenHelp: () => void
     onToggleTheme?: () => void
     onVaultSwitched?: (path: string) => void
+    /** Back/Forward through opened notes; the buttons are hidden when absent. */
+    nav?: {
+        canGoBack: boolean
+        canGoForward: boolean
+        onGoBack: () => void
+        onGoForward: () => void
+        backShortcut: string
+        forwardShortcut: string
+    }
 }
 
 export function TitleBar({
@@ -46,6 +60,7 @@ export function TitleBar({
     onOpenHelp,
     onToggleTheme,
     onVaultSwitched,
+    nav,
 }: TitleBarProps) {
     const {t, lang} = useI18n()
     const [isMaximised, setIsMaximised] = useState(false)
@@ -141,6 +156,29 @@ export function TitleBar({
                 >
                     <PanelLeft className="h-4 w-4" />
                 </button>
+
+                {nav && (
+                    <div className="flex items-center">
+                        <button
+                            onClick={nav.onGoBack}
+                            disabled={!nav.canGoBack}
+                            title={`${t('navBack')} (${nav.backShortcut})`}
+                            aria-label={t('navBack')}
+                            className={NAV_BUTTON_CLASS}
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={nav.onGoForward}
+                            disabled={!nav.canGoForward}
+                            title={`${t('navForward')} (${nav.forwardShortcut})`}
+                            aria-label={t('navForward')}
+                            className={NAV_BUTTON_CLASS}
+                        >
+                            <ArrowRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                )}
 
                 {vaultDisplayName && (
                     <div className="relative flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500" ref={dropdownRef}>

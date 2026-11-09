@@ -4,11 +4,24 @@ import {
     EditorView,
     WidgetType,
 } from '@codemirror/view'
-import { EditorState, Facet, Range, StateField } from '@codemirror/state'
+import { EditorState, Facet, Range, StateEffect, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import { readAttachmentDataURL } from '../lib/api'
 import { translate } from '../i18n'
+import { parseWikiLink, resolveWikiLink, wikiLinkLabel } from '../lib/wikilink'
+
+// All file paths in the vault, used to tell WikiLinks to existing notes apart from links
+// to missing ones. `null` until the editor has been given the list: nothing is styled
+// as missing then. Updated with the setNotePaths effect whenever the file tree changes.
+export const setNotePaths = StateEffect.define<string[]>()
+export const notePathsField = StateField.define<string[] | null>({
+    create: () => null,
+    update(value, tr) {
+        for (const e of tr.effects) if (e.is(setNotePaths)) value = e.value
+        return value
+    },
+})
 
 // Carries the active note's Vault-relative path into the StateField so the Image
 // decoration can resolve local attachment sources (see ImageWidget/resolveAttachmentSrc).
@@ -198,7 +211,7 @@ class ImageWidget extends WidgetType {
 type TableInline =
     | { t: 'text'; text: string }
     | { t: 'code'; text: string }
-    | { t: 'wiki'; text: string }
+    | { t: 'wiki'; text: string; missing?: boolean }
     | { t: 'strong' | 'em' | 'strike'; children: TableInline[] }
     | { t: 'link'; url: string; children: TableInline[] }
 
@@ -354,6 +367,27 @@ function buildTableData(doc: EditorState['doc'], table: SyntaxNode): TableData |
     return { aligns: header.map((_, i) => aligns[i] ?? null), header, rows }
 }
 
+const WIKILINK_CLASS =
+    'cm-wikilink text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded cursor-pointer font-medium'
+// A link to a note that does not exist yet: same box as WIKILINK_CLASS (padding, radius,
+// weight) so both kinds take the same space, but dimmed, no background, wavy underline.
+const WIKILINK_MISSING_CLASS =
+    'cm-wikilink cm-wikilink-missing text-purple-500/70 dark:text-purple-400/60 px-1.5 py-0.5 rounded cursor-pointer font-medium underline decoration-wavy underline-offset-4 decoration-purple-400/60'
+
+// Flags table-cell WikiLinks that point at missing notes. The flag is part of the widget
+// data, so the table is redrawn when a note is created or deleted.
+function markMissingWikiLinks(data: TableData, isMissing: (raw: string) => boolean) {
+    const walk = (items: TableInline[]) => {
+        for (const item of items) {
+            if (item.t === 'wiki') {
+                if (isMissing(item.text)) item.missing = true
+            } else if ('children' in item) walk(item.children)
+        }
+    }
+    for (const cell of data.header) walk(cell.content)
+    for (const row of data.rows) for (const cell of row) walk(cell.content)
+}
+
 function appendTableInlines(parent: HTMLElement, items: TableInline[]) {
     for (const item of items) {
         switch (item.t) {
@@ -370,9 +404,10 @@ function appendTableInlines(parent: HTMLElement, items: TableInline[]) {
             }
             case 'wiki': {
                 const el = document.createElement('span')
-                el.className =
-                    'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded font-medium'
-                el.textContent = item.text
+                el.className = item.missing ? WIKILINK_MISSING_CLASS : WIKILINK_CLASS
+                el.setAttribute('data-wiki-target', item.text)
+                el.title = translate(item.missing ? 'wikiLinkMissingTitle' : 'wikiLinkTitle')
+                el.textContent = wikiLinkLabel(item.text)
                 parent.appendChild(el)
                 break
             }
@@ -451,7 +486,7 @@ export class TableWidget extends WidgetType {
         // clicks on links are left alone so Editor's link handler can open them.
         wrap.addEventListener('mousedown', (e) => {
             const target = e.target as HTMLElement | null
-            if ((e.ctrlKey || e.metaKey) && target?.closest('.cm-link')) return
+            if ((e.ctrlKey || e.metaKey) && target?.closest('.cm-link, .cm-wikilink')) return
             e.preventDefault()
             const cellEl = target?.closest('[data-from]')
             const pos = cellEl ? Number(cellEl.getAttribute('data-from')) : this.tableFrom
@@ -644,6 +679,14 @@ function buildDecorations(state: EditorState): BuildResult {
     const selFrom = selection.from
     const selTo = selection.to
     const notePath = state.facet(notePathFacet)
+    const notePaths = state.field(notePathsField, false) ?? null
+    // True when the link points at a note that does not exist. Same-note links
+    // ([[#Heading]]) and an unknown file list never count as missing.
+    const isMissingLink = (raw: string): boolean => {
+        if (!notePaths) return false
+        const { target } = parseWikiLink(raw)
+        return target !== '' && resolveWikiLink(target, notePaths, notePath || null) === null
+    }
 
     const decorations: Range<Decoration>[] = []
     const interactiveRanges: InteractiveRange[] = []
@@ -1020,6 +1063,7 @@ function buildDecorations(state: EditorState): BuildResult {
                 if (isActive || !isTopLevel) return
                 const data = buildTableData(doc, node.node)
                 if (!data) return
+                markMissingWikiLinks(data, isMissingLink)
                 renderedTableRanges.push({ from: startLine.from, to: endLine.to })
                 decorations.push(
                     Decoration.replace({
@@ -1290,14 +1334,24 @@ function buildDecorations(state: EditorState): BuildResult {
         if (rangesOverlap(renderedTableRanges, matchFrom, matchTo)) continue
         interactiveRanges.push({ from: matchFrom, to: matchTo })
         const isCursorInside = selFrom <= matchTo && selTo >= matchFrom
+        // Editor's Ctrl+Click handler reads the raw link text from data-wiki-target.
+        const missing = isMissingLink(wikiMatch[1])
+        const wikiAttrs = {
+            'data-wiki-target': wikiMatch[1],
+            title: translate(missing ? 'wikiLinkMissingTitle' : 'wikiLinkTitle'),
+        }
         if (!isCursorInside) {
+            // With an alias ([[Note|Alias]]) only the alias stays visible.
+            const pipe = wikiMatch[1].indexOf('|')
+            const labelFrom = pipe >= 0 && wikiMatch[1].slice(pipe + 1).trim() ? matchFrom + 2 + pipe + 1 : matchFrom + 2
             decorations.push(
-                Decoration.replace({}).range(matchFrom, matchFrom + 2)
+                Decoration.replace({}).range(matchFrom, labelFrom)
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-wikilink text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded cursor-pointer font-medium hover:underline',
-                }).range(matchFrom + 2, matchTo - 2)
+                    class: missing ? WIKILINK_MISSING_CLASS : WIKILINK_CLASS + ' hover:underline',
+                    attributes: wikiAttrs,
+                }).range(labelFrom, matchTo - 2)
             )
             decorations.push(
                 Decoration.replace({}).range(matchTo - 2, matchTo)
@@ -1310,7 +1364,10 @@ function buildDecorations(state: EditorState): BuildResult {
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-wikilink text-purple-600 dark:text-purple-400 font-medium',
+                    class: missing
+                        ? 'cm-wikilink cm-wikilink-missing text-purple-500/70 dark:text-purple-400/60 font-medium'
+                        : 'cm-wikilink text-purple-600 dark:text-purple-400 font-medium',
+                    attributes: wikiAttrs,
                 }).range(matchFrom + 2, matchTo - 2)
             )
             decorations.push(
@@ -1371,7 +1428,7 @@ export const livePreview = StateField.define<LivePreviewState>({
         return buildState(state)
     },
     update(value, tr) {
-        if (tr.docChanged) {
+        if (tr.docChanged || tr.effects.some((e) => e.is(setNotePaths))) {
             return buildState(tr.state)
         }
         if (tr.selection) {
