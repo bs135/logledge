@@ -297,7 +297,9 @@ item needs a big refactor of something already shipped:
     switches to an exact, line-by-line mode: results grouped by note (collapsible,
     match count), each line with its number and highlighted matches; click a line to
     open the note there. `path:folder` (one or more, OR) joins `tag:name` as a filter
-    in both modes; the rest of the query keeps its spacing (matters for regex).
+    in both modes; folder names with spaces are quoted (`path:"My Notes"` or
+    `path:'My Notes'`; an unclosed quote takes the rest of the query while typing).
+    The rest of the query keeps its spacing (matters for regex).
     Results are capped (200 notes, 50 lines per note, 2000 lines) with a notice.
   - Whole word uses Unicode word boundaries; in plain mode only on a side that starts
     or ends with a letter/digit/`_` (so `#tag` still matches, as in VS Code), in regex

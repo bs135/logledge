@@ -60,7 +60,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 ### Full-Text & Fuzzy Search
 - **Quick Switcher (`Ctrl+P`)**: Instant fuzzy search by filename (a port of the `sahilm/fuzzy` ranking).
 - **Global Search (`Ctrl+Shift+F`)**: Full-text search across all notes in the vault using SQLite FTS5 (`rusqlite`, bundled SQLite), displaying contextual snippets with highlighted search terms.
-- **Advanced Search & Replace**: Filter with `tag:name` and `path:folder`; toggle match case (Alt+C), whole word (Alt+W) or regular expressions (Alt+R) for exact, line-by-line results; replace across notes with a per-note selection, a confirmation and `$1` groups in regex mode. Notes changed since the preview are skipped.
+- **Advanced Search & Replace**: Filter with `tag:name` and `path:folder` (`path:"My Notes"` for names with spaces); toggle match case (Alt+C), whole word (Alt+W) or regular expressions (Alt+R) for exact, line-by-line results; replace across notes with a per-note selection, a confirmation and `$1` groups in regex mode. Notes changed since the preview are skipped.
 - **Background Indexing**: Incremental reindexing runs asynchronously on background threads without blocking cold-start or user typing.
 - **Isolated Index Database**: SQLite index database is stored outside the Vault in the user's OS cache directory, preventing repo pollution.
 

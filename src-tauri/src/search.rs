@@ -658,13 +658,36 @@ pub fn parse_filters(query: &str) -> SearchFilters {
         let ws = rest.len() - rest.trim_start().len();
         text.push_str(&rest[..ws]);
         rest = &rest[ws..];
-        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let mut end = rest.find(char::is_whitespace).unwrap_or(rest.len());
         let token = &rest[..end];
         let lower = token.to_lowercase();
+        // `get` instead of slicing: a token may start with multi-byte characters.
+        let is_path = token
+            .get(..5)
+            .is_some_and(|p| p.eq_ignore_ascii_case("path:"));
         if let Some(tag) = lower.strip_prefix("tag:") {
             filters.tags.extend(normalize_tag(tag));
-        } else if token.len() > 5 && token[..5].eq_ignore_ascii_case("path:") {
-            let folder = token[5..].replace('\\', "/").trim_matches('/').to_string();
+        } else if is_path && token.len() > 5 {
+            // path:"My Notes" / path:'My Notes' for folder names with spaces. An
+            // unclosed quote (still typing) takes the rest of the query.
+            let value = &rest[5..];
+            let raw = match value.chars().next() {
+                Some(q @ ('"' | '\'')) => {
+                    let inner = &value[1..];
+                    match inner.find(q) {
+                        Some(close) => {
+                            end = 5 + 1 + close + 1;
+                            &inner[..close]
+                        }
+                        None => {
+                            end = rest.len();
+                            inner
+                        }
+                    }
+                }
+                _ => &token[5..],
+            };
+            let folder = raw.trim().replace('\\', "/").trim_matches('/').to_string();
             if !folder.is_empty() {
                 filters.folders.push(folder);
             }
@@ -926,6 +949,24 @@ mod tests {
         assert_eq!(f.folders, ["notes/2024", "x/y"]);
         assert_eq!(f.text, "a  b");
         assert_eq!(parse_filters("path:").text, "path:");
+    }
+
+    #[test]
+    fn parse_filters_quoted_folders_and_unicode() {
+        let f = parse_filters(r#"meeting path:"My Notes/2024" path:'Dự án' notes"#);
+        assert_eq!(f.folders, ["My Notes/2024", "Dự án"]);
+        // Filters are removed in place; the spaces around them stay.
+        assert_eq!(f.text, "meeting   notes");
+        // Unclosed quote while typing: the rest of the query is the folder.
+        assert_eq!(
+            parse_filters(r#"x path:"Work in prog"#).folders,
+            ["Work in prog"]
+        );
+        // Multi-byte characters at the start of a token must not panic.
+        let f = parse_filters("aaaệ ệệ path:ý tag:ý");
+        assert_eq!(f.text, "aaaệ ệệ");
+        assert_eq!(f.folders, ["ý"]);
+        assert_eq!(f.tags, ["ý"]);
     }
 
     #[test]
