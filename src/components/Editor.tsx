@@ -110,7 +110,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             },
             '.cm-scroller': {
                 overflow: 'auto',
-                fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
+                fontFamily: 'inherit',
             },
         })
 
@@ -309,7 +309,8 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                         }
                     }}
                     placeholder="Untitled"
-                    className="w-full bg-transparent text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
+                    style={{fontSize: 'calc(var(--editor-font-size, 16px) * 1.5)', fontFamily: 'var(--editor-font-family)', maxWidth: 'var(--editor-line-width, none)'}}
+                    className="mx-auto block w-full bg-transparent font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
                 />
             </div>
             <div ref={containerRef} className="flex-1 overflow-hidden" />

@@ -42,6 +42,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Typographic Symbols**: The same way, `(c)` `(r)` `(tm)` (any case), `+-`, `--` and `---` become © ® ™ ± – —. Dashes are only converted after other text on a line without `|`, so horizontal rules, setext headings, front matter and table delimiter rows stay intact.
 - **Code Syntax Highlighting**: Multi-language syntax highlighting powered by CodeMirror.
 - **Sans-Serif Typography**: Clean, modern `Nunito` sans-serif typography across all headings and editor body.
+- **Typography Settings & Zoom**: Settings → Appearance sets the editor font size, font (Sans, Serif, Mono, System) and an optional readable line width. `Ctrl+=` / `Ctrl+-` zoom the editor text, `Ctrl+0` resets it.
 - **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.
 - **Dedicated Inline Title Bar**: Synchronizes note filename with input on blur/Enter, with automatic sanitization of invalid OS characters.
 - **Debounced Auto-Save**: Background auto-save (600ms debounce) with no manual `Ctrl+S` required.

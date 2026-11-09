@@ -40,8 +40,10 @@ html.dark body {
 .cm-editor {
     height: 100%;
     outline: none !important;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
-    font-size: 1rem;
+    /* Typography settings (src/lib/typography.ts) arrive as CSS variables. Everything
+       inside the editor is sized in em so it scales with --editor-font-size. */
+    font-family: var(--editor-font-family, "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif);
+    font-size: var(--editor-font-size, 1rem);
     line-height: 1.7;
 }
 
@@ -54,6 +56,10 @@ html.dark body {
 .cm-editor .cm-content {
     caret-color: #0f172a;
     padding: 0;
+    /* Readable line width: "none" (full width) or a px value, centred. */
+    width: 100%;
+    max-width: var(--editor-line-width, none);
+    margin-inline: auto;
 }
 
 html.dark .cm-editor .cm-content {
@@ -66,7 +72,7 @@ html.dark .cm-editor .cm-content {
 
 /* Headings in CodeMirror */
 .cm-heading {
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif !important;
+    font-family: var(--editor-font-family, "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", sans-serif) !important;
     font-weight: 700;
     color: #0f172a;
 }
@@ -76,40 +82,40 @@ html.dark .cm-heading {
 }
 
 .cm-heading-1 {
-    font-size: 1.875rem !important;
-    line-height: 2.25rem !important;
-    padding-top: 1rem;
-    padding-bottom: 0.25rem;
+    font-size: 1.875em !important;
+    line-height: 1.2 !important;
+    padding-top: 0.533em;
+    padding-bottom: 0.133em;
 }
 
 .cm-heading-2 {
-    font-size: 1.5rem !important;
-    line-height: 2rem !important;
-    padding-top: 0.75rem;
-    padding-bottom: 0.25rem;
+    font-size: 1.5em !important;
+    line-height: 1.333 !important;
+    padding-top: 0.5em;
+    padding-bottom: 0.167em;
 }
 
 .cm-heading-3 {
-    font-size: 1.25rem !important;
-    line-height: 1.75rem !important;
-    padding-top: 0.5rem;
-    padding-bottom: 0.25rem;
+    font-size: 1.25em !important;
+    line-height: 1.4 !important;
+    padding-top: 0.4em;
+    padding-bottom: 0.2em;
 }
 
 .cm-heading-4 {
-    font-size: 1.125rem !important;
-    line-height: 1.5rem !important;
-    padding-top: 0.25rem;
+    font-size: 1.125em !important;
+    line-height: 1.333 !important;
+    padding-top: 0.222em;
 }
 
 .cm-heading-5 {
-    font-size: 1rem !important;
-    line-height: 1.5rem !important;
+    font-size: 1em !important;
+    line-height: 1.5 !important;
 }
 
 .cm-heading-6 {
-    font-size: 0.875rem !important;
-    line-height: 1.25rem !important;
+    font-size: 0.875em !important;
+    line-height: 1.429 !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: #64748b;

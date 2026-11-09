@@ -136,7 +136,7 @@ item needs a big refactor of something already shipped:
 | # | Item | Status | Branch |
 |---|------|--------|--------|
 | 2.1 | Editor status bar | ✅ | `feat/editor-status-bar` |
-| 2.2 | Typography settings & zoom | ⬜ | |
+| 2.2 | Typography settings & zoom | ✅ | `feat/typography-zoom` |
 | 2.3 | Paste URL over selection | ⬜ | |
 | 2.4 | Empty state | ⬜ | |
 | 2.5 | File-tree sort | ⬜ | |
@@ -162,6 +162,17 @@ item needs a big refactor of something already shipped:
     since the app cannot tell where the file went.
 - **2.2** Settings → Appearance: editor font size, readable line width toggle/width,
   font family. `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom.
+  - **As built:** Settings → Appearance → "Editor text": font size slider (12–28 px,
+    default 16), font (Sans/Nunito, Serif, Mono, System), readable line width toggle +
+    slider (480–1400 px, 760 when turned on; off by default = full width, as before),
+    and Reset. `Ctrl+=`/`Ctrl+-` change the size by 1 px, `Ctrl+0` resets it; a toast
+    shows the zoom level. Settings are app-wide, stored in `localStorage`.
+  - Code: pure `src/lib/typography.ts` (tests: `test-typography.mjs`);
+    `src/hooks/useTypography.ts` sets `--editor-font-size`, `--editor-font-family` and
+    `--editor-line-width` on `<html>`, read by `style.css` and the note title. To make
+    everything scale, heading sizes/padding in `style.css` and the Tailwind `text-xs`,
+    `text-sm`, `text-[10px]` classes in `livePreview.ts` moved from rem/px to em (so
+    Markdown markers revealed inside a heading are now sized relative to the heading).
 - **2.3** Pasting a URL while text is selected produces `[text](url)`.
 - **2.4** When no note is open: buttons for New note, Daily note (after 4.2), Quick
   Switcher, plus a short list of recent notes and key shortcuts.

@@ -2,7 +2,10 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
 import {useNoteLists} from './hooks/useNoteLists'
 import {useTheme} from './hooks/useTheme'
-import {useI18n} from './i18n'
+import {useTypography} from './hooks/useTypography'
+import {zoomPercent, zoomTypography} from './lib/typography'
+import {toast} from 'sonner'
+import {translate, useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
 import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} from './components/FileTree'
 import {Editor, type EditorStats} from './components/Editor'
@@ -34,6 +37,10 @@ const NAV_SHORTCUT_FORWARD = IS_MAC ? '⌘⌥→' : 'Alt+→'
 function App() {
     const vault = useVault()
     const {theme, setTheme} = useTheme()
+    const {typography, setTypography} = useTypography()
+    // Read by the global keydown handler, which is not re-created on every change.
+    const typographyRef = useRef(typography)
+    typographyRef.current = typography
     const {t, lang} = useI18n()
     const [selectedPath, setSelectedPath] = useState<string | null>(null)
     const [initialContent, setInitialContent] = useState('')
@@ -642,6 +649,13 @@ function App() {
                 e.preventDefault()
                 setSettingsTab('general')
                 setSettingsOpen(true)
+            } else if (ctrlOrCmd && !e.altKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+                // Editor zoom: Ctrl+= / Ctrl+- change the font size by 1px, Ctrl+0 resets.
+                e.preventDefault()
+                const step = e.key === '0' ? 0 : e.key === '-' ? -1 : 1
+                const next = zoomTypography(typographyRef.current, step)
+                setTypography(() => next)
+                toast(`${translate('zoomLevel')} ${zoomPercent(next)}% (${next.fontSize}px)`, {id: 'editor-zoom', duration: 1200})
             }
         }
         window.addEventListener('keydown', onKeyDown)
@@ -708,6 +722,8 @@ function App() {
                         onSetTheme={setTheme}
                         onSwitchVault={handleVaultSwitched}
                         onClose={() => setSettingsOpen(false)}
+                        typography={typography}
+                        onChangeTypography={setTypography}
                     />
                 )}
                 {addingVault && (
@@ -1024,6 +1040,8 @@ function App() {
                     onSetTheme={setTheme}
                     onSwitchVault={handleVaultSwitched}
                     onClose={() => setSettingsOpen(false)}
+                    typography={typography}
+                    onChangeTypography={setTypography}
                 />
             )}
             {quickHelpOpen && <QuickHelpModal onClose={() => setQuickHelpOpen(false)} />}
