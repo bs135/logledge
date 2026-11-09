@@ -137,7 +137,7 @@ item needs a big refactor of something already shipped:
 |---|------|--------|--------|
 | 2.1 | Editor status bar | ✅ | `feat/editor-status-bar` |
 | 2.2 | Typography settings & zoom | ✅ | `feat/typography-zoom` |
-| 2.3 | Paste URL over selection | ⬜ | |
+| 2.3 | Paste URL over selection | ✅ | `feat/paste-url-link` |
 | 2.4 | Empty state | ⬜ | |
 | 2.5 | File-tree sort | ⬜ | |
 
@@ -174,6 +174,16 @@ item needs a big refactor of something already shipped:
     `text-sm`, `text-[10px]` classes in `livePreview.ts` moved from rem/px to em (so
     Markdown markers revealed inside a heading are now sized relative to the heading).
 - **2.3** Pasting a URL while text is selected produces `[text](url)`.
+  - **As built:** applies when the clipboard holds exactly one `http(s)://` or
+    `mailto:` URL and every selection range is non-empty, single-line, not itself a
+    URL and not inside inline code / a code block; otherwise the normal paste runs.
+    Works with multiple cursors. `[`, `]` and `\` in the text are escaped; a URL with
+    parentheses is written as `<url>`. One transaction, so one `Ctrl+Z` restores the
+    text. Code: `src/components/pasteLink.ts` (tests: `test-paste-link.mjs`).
+  - Side fix found while testing: Live Preview showed backslash escapes (`\[`, `\*`)
+    literally in view mode everywhere outside tables. The backslash is now hidden like
+    other markup and revealed (dimmed) when the cursor is on it, or anywhere in the
+    link/emphasis that contains it (`livePreview.ts`, `Escape` nodes).
 - **2.4** When no note is open: buttons for New note, Daily note (after 4.2), Quick
   Switcher, plus a short list of recent notes and key shortcuts.
 - **2.5** Sort by name / modified / created, ascending or descending, folders first

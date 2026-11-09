@@ -622,3 +622,29 @@ test('Table: WikiLinks to missing notes are flagged in the widget data', () => {
     const wikis = found.widget.data.rows[0][0].content.filter((i) => i.t === 'wiki')
     assert.deepStrictEqual(wikis.map((w) => [w.text, Boolean(w.missing)]), [['Existing', false], ['Nope', true]])
 })
+
+function escapeDecos(doc, anchor) {
+    const plugin = new LivePreviewPlugin(createTestView(doc, anchor))
+    const hidden = []
+    const dimmed = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (doc.slice(from, to) !== '\\') return
+        if (val.spec?.class?.includes('cm-formatting')) dimmed.push(from)
+        else if (!val.spec?.class && !val.spec?.widget) hidden.push(from)
+    })
+    return {hidden, dimmed}
+}
+
+test('Escapes: backslashes are hidden in plain text and revealed when the cursor is on them', () => {
+    const doc = String.raw`a \*star\* b`
+    assert.deepStrictEqual(escapeDecos(doc, doc.length), {hidden: [2, 8], dimmed: []})
+    // Cursor right after the first "\*": only that escape is revealed.
+    assert.deepStrictEqual(escapeDecos(doc, 4), {hidden: [8], dimmed: [2]})
+})
+
+test('Escapes: inside a link they are revealed together with the link syntax', () => {
+    const doc = String.raw`x [xem \[m 2\]](https://example.com) y`
+    assert.deepStrictEqual(escapeDecos(doc, 0), {hidden: [7, 12], dimmed: []})
+    // Cursor anywhere in the link reveals both escapes.
+    assert.deepStrictEqual(escapeDecos(doc, doc.indexOf('https')), {hidden: [], dimmed: [7, 12]})
+})

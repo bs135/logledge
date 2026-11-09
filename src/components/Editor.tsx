@@ -16,6 +16,7 @@ import {toggleInlineMarker} from './formatting'
 import {livePreview, notePathFacet, notePathsField, setNotePaths} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
 import {wikiLinkCompletion} from './wikiComplete'
+import {pasteUrlAsLink} from './pasteLink'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -171,6 +172,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 // completion (on "<") switched off, as before.
                 autocompletion({override: [wikiLinkCompletion(readFile)], icons: false}),
                 emoticonToEmoji,
+                pasteUrlAsLink,
                 customKeymap,
                 editorTheme,
                 updateListener,
