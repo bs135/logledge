@@ -42,7 +42,7 @@ item needs a big refactor of something already shipped:
 | # | Item | Status | Branch |
 |---|------|--------|--------|
 | 1.1 | WikiLink navigation | ✅ | `feat/wikilink-navigation` |
-| 1.2 | `[[` autocomplete | ⬜ | |
+| 1.2 | `[[` autocomplete | ✅ | `feat/wikilink-autocomplete` |
 | 1.3 | Back / Forward history | ⬜ | |
 | 1.4 | Recent & pinned notes | ⬜ | |
 
@@ -75,9 +75,24 @@ item needs a big refactor of something already shipped:
   missing just opens the note at the top.
 
 ### 1.2 `[[` autocomplete
-- Typing `[[` opens a CodeMirror completion list of notes (fuzzy, via `quick_switch`).
-- Accepting inserts the shortest unambiguous name and the closing `]]`.
-- Later: `#` after the name completes headings of the target note.
+- Typing `[[` opens a completion list of notes (fuzzy match), notes in the current
+  folder ranked first among equal matches; the current note is left out.
+- Accepting inserts the shortest name that still resolves to that note (`Roadmap`, or
+  `old/Roadmap` when names clash) plus `]]`, unless `]]` already follows the cursor.
+- `[[Note#` lists that note's headings in document order; `[[#` lists the current
+  note's headings. Nothing is suggested after `|` (alias).
+- Headings are linked by their visible text (`headingLinkText`): a heading such as
+  `# See [[README.md]]` is suggested and inserted as `[[#See README.md]]`, since `[[`,
+  `]]`, `|` and `#` would break the link. Heading lookup on Ctrl+Click compares both
+  sides in this form, so the raw heading text still matches too.
+- **As built:** pure helpers in `src/lib/wikilink.ts` (`wikiCompletionContext`,
+  `noteCompletionEntries`, `extractHeadings`); the CodeMirror source in
+  `src/components/wikiComplete.ts` reads notes from `notePathsField` (from 1.1) instead
+  of calling the Rust `quick_switch`, and reads the target note with `readFile` only for
+  heading completion. `Editor.tsx` adds `autocompletion({override: [...]})`, so
+  lang-markdown's HTML tag completion stays off. `@codemirror/autocomplete` is now a
+  direct dependency. Dropdown styled for light/dark in `style.css`. Tests:
+  `test-wikilink.mjs` and `test-wiki-complete.mjs` (runs the real source).
 
 ### 1.3 Back / Forward history
 - Per-session stack of opened notes in `App.tsx`; `Alt+←` / `Alt+→` and mouse

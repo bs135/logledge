@@ -129,11 +129,26 @@ export function collectFilePaths(node: {path: string; isDir: boolean; children?:
 }
 
 /**
+ * The form of a heading used inside a link ("[[Note#<this>]]"): WikiLinks and Markdown
+ * links are reduced to their visible text, and the characters that would break WikiLink
+ * syntax ("[", "]", "|", "#") are dropped. So "# See [[README.md]]" links as "See README.md".
+ */
+export function headingLinkText(text: string): string {
+    return text
+        .replace(/\[\[([^\]]*)\]\]/g, (_, inner: string) => wikiLinkLabel(inner))
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/[[\]|#]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+/**
  * Returns the 1-based line number of the first ATX heading whose text matches `heading`
- * (case-insensitive, ignoring closing #s), skipping fenced code blocks; null if none.
+ * (case-insensitive, compared in headingLinkText form, so "[[Note#See README.md]]" finds
+ * "# See [[README.md]]"), skipping fenced code blocks; null if none.
  */
 export function findHeadingLine(doc: string, heading: string): number | null {
-    const want = heading.trim().toLowerCase()
+    const want = headingLinkText(heading).toLowerCase()
     const lines = doc.split('\n')
     let inFence = false
     for (let i = 0; i < lines.length; i++) {
@@ -143,7 +158,84 @@ export function findHeadingLine(doc: string, heading: string): number | null {
         }
         if (inFence) continue
         const m = /^ {0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$/.exec(lines[i])
-        if (m && m[1].trim().toLowerCase() === want) return i + 1
+        if (m && headingLinkText(m[1]).toLowerCase() === want) return i + 1
     }
     return null
+}
+
+// ---------------------------------------------------------------------------------------
+// Autocomplete helpers for "[[" (used by src/components/wikiComplete.ts).
+
+export interface WikiCompletionContext {
+    /** Offset in `lineBefore` where the text being completed starts. */
+    offset: number
+    /** Text typed so far (the part being completed). */
+    query: string
+    /** "note" after "[[", "heading" after "[[Target#". */
+    kind: 'note' | 'heading'
+    /** For "heading": the note part before "#" (empty for the current note). */
+    target: string
+}
+
+/**
+ * Detects an open WikiLink right before the cursor. `lineBefore` is the current line up
+ * to the cursor. Returns null when the cursor is not inside "[[..." or is past "|".
+ */
+export function wikiCompletionContext(lineBefore: string): WikiCompletionContext | null {
+    const m = /\[\[([^[\]|]*)$/.exec(lineBefore)
+    if (!m) return null
+    const inner = m[1]
+    const start = m.index + 2
+    const hash = inner.indexOf('#')
+    if (hash >= 0) {
+        return {offset: start + hash + 1, query: inner.slice(hash + 1), kind: 'heading', target: inner.slice(0, hash).trim()}
+    }
+    return {offset: start, query: inner, kind: 'note', target: ''}
+}
+
+export interface NoteCompletionEntry {
+    /** Text inserted into the link: the shortest path suffix that resolves to this note. */
+    label: string
+    path: string
+    /** Folder of the note ("" at the vault root). */
+    folder: string
+}
+
+/**
+ * One entry per Markdown note. The label is the note name without extension, extended
+ * with parent folders only as far as needed to tell notes with the same name apart, so
+ * that resolveWikiLink(label) returns exactly this note.
+ */
+export function noteCompletionEntries(paths: string[]): NoteCompletionEntry[] {
+    const notes = paths.filter((p) => stripNoteExt(p) !== p)
+    const segs = notes.map((p) => stripNoteExt(p).split('/'))
+    const suffix = (s: string[], k: number) => s.slice(-k).join('/').toLowerCase()
+    return notes.map((path, i) => {
+        const own = segs[i]
+        let k = 1
+        while (k < own.length && segs.some((o, j) => j !== i && o.length >= k && suffix(o, k) === suffix(own, k))) k++
+        return {label: own.slice(-k).join('/'), path, folder: dirOf(path)}
+    })
+}
+
+export interface HeadingEntry {
+    level: number
+    text: string
+}
+
+/** ATX headings of a document, in order and in headingLinkText form, skipping fenced code blocks. */
+export function extractHeadings(doc: string): HeadingEntry[] {
+    const out: HeadingEntry[] = []
+    let inFence = false
+    for (const line of doc.split('\n')) {
+        if (/^\s*(```|~~~)/.test(line)) {
+            inFence = !inFence
+            continue
+        }
+        if (inFence) continue
+        const m = /^ {0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/.exec(line)
+        const text = m ? headingLinkText(m[2]) : ''
+        if (m && text) out.push({level: m[1].length, text})
+    }
+    return out
 }

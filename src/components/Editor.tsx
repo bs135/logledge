@@ -5,7 +5,8 @@ import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
 import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
 import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {saveAttachment} from '../lib/api'
+import {autocompletion} from '@codemirror/autocomplete'
+import {readFile, saveAttachment} from '../lib/api'
 import {findHeadingLine} from '../lib/wikilink'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
@@ -13,6 +14,7 @@ import {emoticonToEmoji} from './emoji'
 import {toggleInlineMarker} from './formatting'
 import {livePreview, notePathFacet, notePathsField, setNotePaths} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
+import {wikiLinkCompletion} from './wikiComplete'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -138,6 +140,9 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 notePathFacet.of(path),
                 notePathsField.init(() => notePathsRef.current ?? null),
                 livePreview,
+                // Only WikiLink completion: `override` keeps lang-markdown's HTML tag
+                // completion (on "<") switched off, as before.
+                autocompletion({override: [wikiLinkCompletion(readFile)], icons: false}),
                 emoticonToEmoji,
                 customKeymap,
                 editorTheme,
