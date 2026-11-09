@@ -83,6 +83,16 @@ function findNode(node: VaultNode, path: string): VaultNode | null {
     return null
 }
 
+// resolveCreateParent returns the folder where a new note/folder should be created
+// based on the active tree item: the folder itself, or the parent of a file.
+// Falls back to the vault root when nothing is active or the item no longer exists.
+export function resolveCreateParent(root: VaultNode | null | undefined, activePath: string | null): string {
+    if (!root || !activePath) return ''
+    const node = findNode(root, activePath)
+    if (!node) return ''
+    return node.isDir ? node.path : parentOf(node.path)
+}
+
 export interface FileTreeProps {
     root: VaultNode
     selectedPath: string | null
@@ -104,6 +114,7 @@ export interface FileTreeProps {
     onMove: (srcRelPath: string, destParentRelPath: string) => void
     onCommitInlineAction: (action: InlineAction, name: string) => void
     onCancelInlineAction: () => void
+    onActivePathChange?: (path: string | null) => void
 }
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
@@ -114,6 +125,7 @@ export function FileTree({
     inlineAction,
     onCommitInlineAction,
     onCancelInlineAction,
+    onActivePathChange,
     ...props
 }: FileTreeProps) {
     const {t} = useI18n()
@@ -135,6 +147,10 @@ export function FileTree({
             setActivePath(props.selectedPath || null)
         }
     }, [props.root, activePath, props.selectedPath])
+
+    useEffect(() => {
+        onActivePathChange?.(activePath)
+    }, [activePath, onActivePathChange])
 
     function handleKeyDown(e: React.KeyboardEvent) {
         const target = e.target as HTMLElement
