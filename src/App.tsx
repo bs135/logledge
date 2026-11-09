@@ -885,7 +885,6 @@ function App() {
                                             setSettingsOpen(true)
                                         }}
                                         buttonClassName="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
-                                        activeButtonClassName="p-1 rounded bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40"
                                     />
                                     <button
                                         onClick={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}

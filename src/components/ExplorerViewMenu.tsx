@@ -28,10 +28,8 @@ interface ExplorerViewMenuProps {
     onToggleFilter: () => void
     /** Opens Settings › Filter. */
     onEditFilter: () => void
-    /** Class of the toggle button, to match the other explorer header buttons. */
+    /** Class of the menu button, to match the other explorer header buttons. */
     buttonClassName: string
-    /** Used instead when the view differs from the default (sorted or unfiltered). */
-    activeButtonClassName: string
 }
 
 // Gap kept between the menu and the window edges.
@@ -53,7 +51,6 @@ export function ExplorerViewMenu({
     onToggleFilter,
     onEditFilter,
     buttonClassName,
-    activeButtonClassName,
 }: ExplorerViewMenuProps) {
     const {t} = useI18n()
     const [open, setOpen] = useState(false)
@@ -119,13 +116,19 @@ export function ExplorerViewMenu({
             <button
                 ref={buttonRef}
                 onClick={() => setOpen((o) => !o)}
-                title={t('explorerViewOptions')}
-                aria-label={t('explorerViewOptions')}
+                title={isDefault ? t('explorerViewOptions') : t('explorerViewOptionsCustom')}
+                aria-label={isDefault ? t('explorerViewOptions') : t('explorerViewOptionsCustom')}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                className={isDefault ? buttonClassName : activeButtonClassName}
+                // Looks like the other header buttons (it is a menu, not a toggle); the
+                // background only shows while the menu is open.
+                className={`relative ${buttonClassName} ${open ? 'bg-neutral-200 dark:bg-neutral-800' : ''}`}
             >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
+                {/* A non-default view (other sort order, filter off) is marked with a dot. */}
+                {!isDefault && (
+                    <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-blue-500 ring-1 ring-neutral-50 dark:ring-neutral-900" />
+                )}
             </button>
             {open && (
                 <div
