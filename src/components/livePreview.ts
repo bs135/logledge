@@ -44,19 +44,38 @@ class CheckboxWidget extends WidgetType {
         }
         input.className =
             'cm-task-checkbox h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary focus:ring-0 cursor-pointer accent-neutral-800 dark:accent-neutral-200'
-        input.addEventListener('click', (e) => {
-            e.stopPropagation()
-            const change = this.checked ? '[ ]' : '[x]'
-            view.dispatch({
-                changes: { from: this.pos, to: this.pos + 3, insert: change },
-            })
+        // Toggle on mousedown and cancel the default: otherwise CodeMirror moves the
+        // cursor onto the marker first, which swaps this widget for raw `[ ]` text and
+        // the later `click` never reaches the checkbox. Not taking focus also keeps the
+        // editor's cursor where it was.
+        input.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return
+            e.preventDefault()
+            this.toggle(view)
+        })
+        // The mousedown handler owns the state change; stop the native toggle so the
+        // checkbox only reflects the document.
+        input.addEventListener('click', (e) => e.preventDefault())
+        input.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault()
+                this.toggle(view)
+            }
         })
         wrap.appendChild(input)
         return wrap
     }
 
+    private toggle(view: EditorView) {
+        view.dispatch({
+            changes: { from: this.pos, to: this.pos + 3, insert: this.checked ? '[ ]' : '[x]' },
+            userEvent: 'input.toggle',
+        })
+    }
+
+    // Keep CodeMirror from handling events on the checkbox (selection, drag start).
     ignoreEvent() {
-        return false
+        return true
     }
 }
 
