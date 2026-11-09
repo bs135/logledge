@@ -8,6 +8,7 @@ import {
     PanelLeft,
     ArrowLeft,
     ArrowRight,
+    PanelRight,
     ChevronDown,
     Check,
     Plus,
@@ -38,6 +39,8 @@ interface TitleBarProps {
     onOpenHelp: () => void
     onToggleTheme?: () => void
     onVaultSwitched?: (path: string) => void
+    /** Right panel (outline) toggle; hidden when absent. */
+    rightPanel?: {open: boolean; onToggle: () => void; shortcut: string}
     /** Back/Forward through opened notes; the buttons are hidden when absent. */
     nav?: {
         canGoBack: boolean
@@ -61,6 +64,7 @@ export function TitleBar({
     onToggleTheme,
     onVaultSwitched,
     nav,
+    rightPanel,
 }: TitleBarProps) {
     const {t, lang} = useI18n()
     const [isMaximised, setIsMaximised] = useState(false)
@@ -272,6 +276,20 @@ export function TitleBar({
 
             {/* Right section: Theme Switcher, Help, Settings, Window Controls */}
             <div className="flex items-center">
+                {rightPanel && (
+                    <button
+                        onClick={rightPanel.onToggle}
+                        title={`${rightPanel.open ? t('closeRightPanel') : t('openRightPanel')} (${rightPanel.shortcut})`}
+                        aria-pressed={rightPanel.open}
+                        className={`flex h-7 w-7 items-center justify-center rounded transition-colors ${
+                            rightPanel.open
+                                ? 'text-neutral-900 dark:text-neutral-100 bg-neutral-200 dark:bg-neutral-800'
+                                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800'
+                        }`}
+                    >
+                        <PanelRight className="h-4 w-4" />
+                    </button>
+                )}
                 {onToggleTheme && (
                     <button
                         onClick={onToggleTheme}

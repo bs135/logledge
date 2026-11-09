@@ -12,6 +12,8 @@ import {Editor, type EditorStats} from './components/Editor'
 import {EditorStatus, type SaveState} from './components/EditorStatus'
 import {EmptyState} from './components/EmptyState'
 import {TreeSortMenu} from './components/TreeSortMenu'
+import {RightPanel, RIGHT_PANEL_DEFAULT_WIDTH, RIGHT_PANEL_MAX_WIDTH, RIGHT_PANEL_MIN_WIDTH} from './components/RightPanel'
+import {activeHeadingIndex, type OutlineItem} from './lib/outline'
 import {normalizeTreeSort, type TreeSort} from './lib/treeSort'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
@@ -36,6 +38,7 @@ const STARTUP_UPDATE_CHECK_DELAY_MS = 2000
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const NAV_SHORTCUT_BACK = IS_MAC ? '⌘⌥←' : 'Alt+←'
 const NAV_SHORTCUT_FORWARD = IS_MAC ? '⌘⌥→' : 'Alt+→'
+const RIGHT_PANEL_SHORTCUT = IS_MAC ? '⌘⇧\\' : 'Ctrl+Shift+\\'
 
 function App() {
     const vault = useVault()
@@ -120,7 +123,36 @@ function App() {
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
     // Heading to scroll to after following a [[Note#Heading]] link.
-    const [scrollTarget, setScrollTarget] = useState<{heading: string; seq: number} | null>(null)
+    const [scrollTarget, setScrollTarget] = useState<{heading?: string; pos?: number; seq: number} | null>(null)
+    // Right panel (outline): open state and width survive restarts.
+    const [rightPanelOpen, setRightPanelOpen] = useState(() => localStorage.getItem('logledge:rightPanelOpen') === 'true')
+    const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
+        const saved = parseInt(localStorage.getItem('logledge:rightPanelWidth') || '', 10)
+        return saved >= RIGHT_PANEL_MIN_WIDTH && saved <= RIGHT_PANEL_MAX_WIDTH ? saved : RIGHT_PANEL_DEFAULT_WIDTH
+    })
+    const toggleRightPanel = () =>
+        setRightPanelOpen((o) => {
+            localStorage.setItem('logledge:rightPanelOpen', String(!o))
+            return !o
+        })
+    useEffect(() => {
+        localStorage.setItem('logledge:rightPanelWidth', String(rightPanelWidth))
+    }, [rightPanelWidth])
+    // Outline of the open note and the heading being read. Only the index is state, so
+    // scrolling re-renders the app only when the highlighted heading changes.
+    const [outline, setOutlineState] = useState<OutlineItem[]>([])
+    const outlineRef = useRef<OutlineItem[]>([])
+    const readingPosRef = useRef(0)
+    const [activeHeading, setActiveHeading] = useState(-1)
+    const setOutline = useCallback((items: OutlineItem[]) => {
+        outlineRef.current = items
+        setOutlineState(items)
+        setActiveHeading(activeHeadingIndex(items, readingPosRef.current))
+    }, [])
+    const setReadingPos = useCallback((pos: number) => {
+        readingPosRef.current = pos
+        setActiveHeading(activeHeadingIndex(outlineRef.current, pos))
+    }, [])
     // A WikiLink to a missing note waiting for the user to confirm creating it.
     const [pendingNoteCreate, setPendingNoteCreate] = useState<{parent: string; name: string; heading: string | null} | null>(null)
     const notePaths = useMemo(() => collectFilePaths(vault.tree), [vault.tree])
@@ -633,6 +665,20 @@ function App() {
         }
     }, [vault.vaultPath])
 
+    // Ctrl+Shift+\ (Cmd+Shift+\ on macOS) toggles the right panel. Caught in the capture
+    // phase so it wins over CodeMirror, which binds it to cursorMatchingBracket.
+    useEffect(() => {
+        if (!vault.vaultPath) return
+        function onKeyDown(e: globalThis.KeyboardEvent) {
+            if (e.code !== 'Backslash' || !e.shiftKey || e.altKey || !(IS_MAC ? e.metaKey : e.ctrlKey)) return
+            e.preventDefault()
+            e.stopPropagation()
+            toggleRightPanel()
+        }
+        window.addEventListener('keydown', onKeyDown, true)
+        return () => window.removeEventListener('keydown', onKeyDown, true)
+    }, [vault.vaultPath])
+
     // Keyboard shortcuts:
     // Ctrl+P: Quick Switcher
     // Ctrl+Shift+F: Global Search
@@ -760,6 +806,7 @@ function App() {
     return (
         <div className="flex h-full flex-col bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 overflow-hidden">
             <TitleBar
+                rightPanel={{open: rightPanelOpen, onToggle: toggleRightPanel, shortcut: RIGHT_PANEL_SHORTCUT}}
                 nav={{
                     canGoBack:
                         canGoBack(navHistory) ||
@@ -1012,6 +1059,8 @@ function App() {
                                 )
                             }}
                             onStatsChange={setEditorStats}
+                            onOutlineChange={setOutline}
+                            onReadingPosChange={setReadingPos}
                             onChange={(markdown) => {
                                 currentContentRef.current = markdown
                                 queueSave(selectedPath, markdown)
@@ -1045,6 +1094,17 @@ function App() {
                         />
                     )}
                 </main>
+                {rightPanelOpen && (
+                    <RightPanel
+                        width={rightPanelWidth}
+                        onWidthChange={setRightPanelWidth}
+                        onClose={toggleRightPanel}
+                        outline={selectedPath ? outline : null}
+                        activeIndex={selectedPath ? activeHeading : -1}
+                        onSelectHeading={(item) => setScrollTarget({pos: item.from, seq: Date.now()})}
+                        onSelectTop={() => setScrollTarget({pos: 0, seq: Date.now()})}
+                    />
+                )}
             </div>
             <SyncStatusBar
                 onOpenSettings={() => {

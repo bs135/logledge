@@ -215,7 +215,7 @@ item needs a big refactor of something already shipped:
 
 | # | Item | Status | Branch |
 |---|------|--------|--------|
-| 3.1 | Right panel + Outline | ⬜ | |
+| 3.1 | Right panel + Outline | ✅ | `feat/right-panel-outline` |
 | 3.2 | Backlinks & unresolved links | ⬜ | |
 | 3.3 | Tags | ⬜ | |
 | 3.4 | Advanced search & replace | ⬜ | |
@@ -223,6 +223,31 @@ item needs a big refactor of something already shipped:
 - **3.1** Collapsible, resizable right panel (`Ctrl+Shift+\``) with tabs. First tab:
   outline from the CodeMirror syntax tree; click scrolls to the heading, current
   heading highlighted.
+  - **As built:** toggled by `Ctrl+Shift+\` (`⌘⇧\` on macOS; caught in the capture
+    phase ahead of CodeMirror's `cursorMatchingBracket`, which no longer has a key),
+    a title-bar button or the panel's ×. Drag its left edge to resize (180–560 px),
+    double-click to reset to 260; open state and width are remembered. Tab bar with
+    one tab for now (Outline), ready for Backlinks (3.2) and Tags (3.3).
+  - Outline: ATX and setext headings from the syntax tree (headings in code are not
+    included), indented relative to the shallowest level, inline Markdown removed from
+    the text. Click scrolls to the heading and puts the cursor there. The highlighted
+    heading is the section holding the cursor while the cursor's line is on screen
+    (so a clicked heading near the end of the note, which can't scroll to the top, is
+    still the one highlighted, as is the section being edited); otherwise it is the
+    section at the top of the visible area. It is kept in view while scrolling.
+  - A first row "Top of note" (arrow-to-top icon, fixed label) jumps to the top of the note;
+    it is highlighted while reading the part before the first heading, and is shown
+    even when the note has no headings.
+  - ⏸ Deferred: collapse / expand of outline branches (all expanded by default,
+    auto-expand the branch of the highlighted heading, collapse-all button, state kept
+    per note for the session). Not needed for typical notes; revisit if outlines get
+    long.
+  - Code: pure `src/lib/outline.ts` and `src/components/outlineExtract.ts` (tests:
+    `test-outline.mjs`); `RightPanel.tsx`; `Editor.tsx` reports `onOutlineChange`
+    (debounced 200 ms, also when the background parser fills in the tree) and
+    `onReadingPosChange` (once per frame while scrolling); `scrollTarget` now also
+    takes a document `pos`. `App.tsx` stores only the active heading index, so
+    scrolling re-renders the app only when the highlight moves.
 - **3.2** Rust: a `links(src, target)` table in the SQLite index, filled during
   incremental indexing. Panel tab lists linked mentions with context snippet, plus
   unlinked mentions (FTS on the note title). (Dimming unresolved `[[links]]` already
