@@ -138,7 +138,7 @@ item needs a big refactor of something already shipped:
 | 2.1 | Editor status bar | ✅ | `feat/editor-status-bar` |
 | 2.2 | Typography settings & zoom | ✅ | `feat/typography-zoom` |
 | 2.3 | Paste URL over selection | ✅ | `feat/paste-url-link` |
-| 2.4 | Empty state | ⬜ | |
+| 2.4 | Empty state | ✅ | `feat/empty-state` |
 | 2.5 | File-tree sort | ⬜ | |
 
 - **2.1** Word/character count (selection-aware), reading time, and save state
@@ -186,6 +186,12 @@ item needs a big refactor of something already shipped:
     link/emphasis that contains it (`livePreview.ts`, `Escape` nodes).
 - **2.4** When no note is open: buttons for New note, Daily note (after 4.2), Quick
   Switcher, plus a short list of recent notes and key shortcuts.
+  - **As built:** `src/components/EmptyState.tsx` replaces the "Select a note…"
+    placeholder: New note (in the active tree folder), Open a note… (`Ctrl+P`), Search
+    in vault… (`Ctrl+Shift+F`), up to 8 pinned then recent notes (via
+    `switcherSections`, so deleted notes are hidden), four key shortcuts and a link to
+    Quick Help. A vault with no Markdown notes gets "create your first note" with New
+    note as the primary button. The Daily note button is added with 4.2.
 - **2.5** Sort by name / modified / created, ascending or descending, folders first
   toggle. Needs `mtime`/`ctime` on `VaultNode` from `vault.rs`.
 
