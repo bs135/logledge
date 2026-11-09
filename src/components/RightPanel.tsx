@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
-import {ArrowUpToLine, ListTree, X} from 'lucide-react'
+import {ArrowUpToLine, Link2, ListTree, X} from 'lucide-react'
+import {BacklinksView} from './BacklinksView'
 import {useI18n} from '../i18n'
 import {outlineIndents, type OutlineItem} from '../lib/outline'
 
@@ -7,7 +8,7 @@ export const RIGHT_PANEL_DEFAULT_WIDTH = 260
 export const RIGHT_PANEL_MIN_WIDTH = 180
 export const RIGHT_PANEL_MAX_WIDTH = 560
 
-export type RightPanelTab = 'outline'
+export type RightPanelTab = 'outline' | 'backlinks'
 
 interface RightPanelProps {
     width: number
@@ -19,13 +20,24 @@ interface RightPanelProps {
     activeIndex: number
     onSelectHeading: (item: OutlineItem) => void
     onSelectTop: () => void
+    /** Open note (null when none), for the Backlinks tab. */
+    notePath: string | null
+    notePaths: string[]
+    /** Opens a note, optionally at a 1-based line. */
+    onOpenNote: (path: string, line?: number) => void
 }
 
 // RightPanel is the collapsible, resizable panel on the right of the editor. Its tabs
 // hold note-related views; the first one is the outline of the open note.
-export function RightPanel({width, onWidthChange, onClose, outline, activeIndex, onSelectHeading, onSelectTop}: RightPanelProps) {
+export function RightPanel({width, onWidthChange, onClose, outline, activeIndex, onSelectHeading, onSelectTop, notePath, notePaths, onOpenNote}: RightPanelProps) {
     const {t} = useI18n()
-    const [tab, setTab] = useState<RightPanelTab>('outline')
+    const [tab, setTab] = useState<RightPanelTab>(() =>
+        localStorage.getItem('logledge:rightPanelTab') === 'backlinks' ? 'backlinks' : 'outline',
+    )
+    const selectTab = (next: RightPanelTab) => {
+        setTab(next)
+        localStorage.setItem('logledge:rightPanelTab', next)
+    }
     const [resizing, setResizing] = useState(false)
     const listRef = useRef<HTMLUListElement>(null)
 
@@ -89,17 +101,25 @@ export function RightPanel({width, onWidthChange, onClose, outline, activeIndex,
                 aria-label={t('rightPanel')}
             >
                 <div className="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800 px-2 py-1">
-                    <button
-                        onClick={() => setTab('outline')}
-                        className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
-                            tab === 'outline'
-                                ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-medium'
-                                : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60'
-                        }`}
-                    >
-                        <ListTree className="h-3.5 w-3.5" />
-                        {t('outlineTab')}
-                    </button>
+                    {(
+                        [
+                            {id: 'outline', icon: <ListTree className="h-3.5 w-3.5" />, label: t('outlineTab')},
+                            {id: 'backlinks', icon: <Link2 className="h-3.5 w-3.5" />, label: t('backlinksTab')},
+                        ] as const
+                    ).map((tb) => (
+                        <button
+                            key={tb.id}
+                            onClick={() => selectTab(tb.id)}
+                            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
+                                tab === tb.id
+                                    ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-medium'
+                                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60'
+                            }`}
+                        >
+                            {tb.icon}
+                            {tb.label}
+                        </button>
+                    ))}
                     <button
                         onClick={onClose}
                         title={t('closeRightPanel')}
@@ -110,7 +130,13 @@ export function RightPanel({width, onWidthChange, onClose, outline, activeIndex,
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-1.5">
-                    {outline === null ? (
+                    {tab === 'backlinks' ? (
+                        notePath ? (
+                            <BacklinksView path={notePath} notePaths={notePaths} onOpen={onOpenNote} />
+                        ) : (
+                            <p className="px-2 py-3 text-xs text-neutral-400 dark:text-neutral-500">{t('backlinksNoNote')}</p>
+                        )
+                    ) : outline === null ? (
                         <p className="px-2 py-3 text-xs text-neutral-400 dark:text-neutral-500">{t('outlineNoNote')}</p>
                     ) : (
                         <ul ref={listRef}>

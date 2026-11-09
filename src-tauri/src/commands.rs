@@ -14,7 +14,7 @@ use crate::config::{Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, Status};
 use crate::lifecycle;
-use crate::search::SearchResult;
+use crate::search::{LinkRef, SearchResult};
 use crate::state::{AppState, SyncSettings};
 use crate::tray;
 use crate::vault::{clean_path, Node, WriteResult};
@@ -179,7 +179,9 @@ pub async fn create_file(
     name: String,
 ) -> Result<String> {
     blocking(&state, move |s| {
-        s.vault.create_file(&parent_rel_path, &name)
+        let path = s.vault.create_file(&parent_rel_path, &name)?;
+        let _ = s.search.reindex_file(&path);
+        Ok(path)
     })
     .await
 }
@@ -202,7 +204,12 @@ pub async fn rename_entry(
     rel_path: String,
     new_name: String,
 ) -> Result<String> {
-    blocking(&state, move |s| s.vault.rename(&rel_path, &new_name)).await
+    blocking(&state, move |s| {
+        let path = s.vault.rename(&rel_path, &new_name)?;
+        s.reindex_in_background();
+        Ok(path)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -212,19 +219,31 @@ pub async fn move_entry(
     dest_parent_rel_path: String,
 ) -> Result<String> {
     blocking(&state, move |s| {
-        s.vault.move_entry(&src_rel_path, &dest_parent_rel_path)
+        let path = s.vault.move_entry(&src_rel_path, &dest_parent_rel_path)?;
+        s.reindex_in_background();
+        Ok(path)
     })
     .await
 }
 
 #[tauri::command]
 pub async fn delete_entry(state: AppStateRef<'_>, rel_path: String) -> Result<()> {
-    blocking(&state, move |s| s.vault.delete(&rel_path)).await
+    blocking(&state, move |s| {
+        s.vault.delete(&rel_path)?;
+        s.reindex_in_background();
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn duplicate_entry(state: AppStateRef<'_>, rel_path: String) -> Result<String> {
-    blocking(&state, move |s| s.vault.duplicate(&rel_path)).await
+    blocking(&state, move |s| {
+        let path = s.vault.duplicate(&rel_path)?;
+        s.reindex_in_background();
+        Ok(path)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -234,7 +253,9 @@ pub async fn copy_entry(
     dest_parent_rel_path: String,
 ) -> Result<String> {
     blocking(&state, move |s| {
-        s.vault.copy(&src_rel_path, &dest_parent_rel_path)
+        let path = s.vault.copy(&src_rel_path, &dest_parent_rel_path)?;
+        s.reindex_in_background();
+        Ok(path)
     })
     .await
 }
@@ -276,7 +297,13 @@ pub async fn read_file(state: AppStateRef<'_>, rel_path: String) -> Result<Strin
 
 #[tauri::command]
 pub async fn write_file(state: AppStateRef<'_>, rel_path: String, content: String) -> Result<()> {
-    blocking(&state, move |s| s.vault.write_file(&rel_path, &content)).await
+    blocking(&state, move |s| {
+        s.vault.write_file(&rel_path, &content)?;
+        // The app's own saves are hidden from the watcher: index the note now.
+        let _ = s.search.reindex_file(&rel_path);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -287,8 +314,14 @@ pub async fn write_file_if_unchanged(
     expected: String,
 ) -> Result<WriteResult> {
     blocking(&state, move |s| {
-        s.vault
-            .write_file_if_unchanged(&rel_path, &content, &expected)
+        let res = s
+            .vault
+            .write_file_if_unchanged(&rel_path, &content, &expected)?;
+        if res.saved {
+            // The app's own saves are hidden from the watcher: index the note now.
+            let _ = s.search.reindex_file(&rel_path);
+        }
+        Ok(res)
     })
     .await
 }
@@ -325,6 +358,18 @@ pub async fn read_attachment_data_url(
 #[tauri::command]
 pub async fn search_notes(state: AppStateRef<'_>, query: String) -> Result<Vec<SearchResult>> {
     blocking(&state, move |s| s.search.search(&query, SEARCH_LIMIT)).await
+}
+
+/// Links that may point at `path` (same file name); the frontend resolves them.
+#[tauri::command]
+pub async fn backlinks(state: AppStateRef<'_>, path: String) -> Result<Vec<LinkRef>> {
+    blocking(&state, move |s| s.search.backlinks(&path)).await
+}
+
+/// Notes mentioning `phrase` (a note title) in their text.
+#[tauri::command]
+pub async fn mentions(state: AppStateRef<'_>, phrase: String) -> Result<Vec<SearchResult>> {
+    blocking(&state, move |s| s.search.mentions(&phrase, SEARCH_LIMIT)).await
 }
 
 #[tauri::command]

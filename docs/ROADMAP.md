@@ -216,7 +216,7 @@ item needs a big refactor of something already shipped:
 | # | Item | Status | Branch |
 |---|------|--------|--------|
 | 3.1 | Right panel + Outline | ✅ | `feat/right-panel-outline` |
-| 3.2 | Backlinks & unresolved links | ⬜ | |
+| 3.2 | Backlinks & unresolved links | ✅ | `feat/backlinks` |
 | 3.3 | Tags | ⬜ | |
 | 3.4 | Advanced search & replace | ⬜ | |
 
@@ -252,6 +252,24 @@ item needs a big refactor of something already shipped:
   incremental indexing. Panel tab lists linked mentions with context snippet, plus
   unlinked mentions (FTS on the note title). (Dimming unresolved `[[links]]` already
   shipped in 1.1.)
+  - **As built:** right panel tab **Backlinks**: "Linked mentions" groups the notes
+    that link to the open note (wiki links and Markdown links to `.md` files), with
+    the linking lines; click a note to open it, a line to open it at that line.
+    "Unlinked mentions" (collapsed, loaded on demand) lists notes containing the
+    note's title as a phrase without linking to it. Refreshes when the index changes.
+  - Rust: `src-tauri/src/links.rs` extracts links outside code (fences, inline code),
+    with tests. `search.rs` gained a `links` table (target as written + lookup key =
+    file name, lower-case, no extension), filled while indexing; `backlinks(path)`
+    returns candidates by key and the frontend resolves each with the same rules as
+    Ctrl+Click (`src/lib/backlinks.ts`, tests: `test-backlinks.mjs`), so
+    `[[Note]]` from another folder that resolves to a different "Note" is not
+    counted. `mentions(phrase)` is an FTS5 phrase query on the body. `PRAGMA
+    user_version` 1 rebuilds older indexes once.
+  - Side fix: the app's own saves, creates, renames, moves, deletes and copies are
+    hidden from the file watcher, so the index (and Global Search) never saw them
+    until the next external change or restart. Saves/creates now re-index the note
+    right away (`reindex_file`); other file operations start a background reindex.
+    A `search:indexed` event is emitted after every index update.
 - **3.3** `#tag` / `#nested/tag` highlighted in the editor, indexed in a `tags` table,
   tag list in the panel, `tag:foo` filter in Global Search, YAML `tags:` front matter.
 - **3.4** Global Search: filter by folder, case-sensitive and regex modes, replace in

@@ -12,6 +12,7 @@ import type {
     VaultNode,
     WriteResult,
 } from './types'
+import type {LinkRef} from './backlinks'
 
 // Vault list and selection
 
@@ -74,6 +75,10 @@ export const readAttachmentDataURL = (noteRelPath: string, imgRelPath: string) =
 
 export const searchNotes = (query: string) => invoke<SearchResult[]>('search_notes', {query})
 export const quickSwitch = (query: string) => invoke<string[]>('quick_switch', {query})
+/** Links that may point at `path` (same file name); resolve them with groupBacklinks. */
+export const backlinks = (path: string) => invoke<LinkRef[]>('backlinks', {path})
+/** Notes whose text contains `phrase`, e.g. a note title (unlinked mentions). */
+export const mentions = (phrase: string) => invoke<SearchResult[]>('mentions', {phrase})
 
 // Git sync
 
@@ -92,7 +97,7 @@ export const quitApp = () => invoke<void>('quit_app')
 // Events
 
 /** Backend events: `vault:changed` (no payload) and `sync:status` (SyncStatus). */
-export type AppEvent = 'vault:changed' | 'sync:status'
+export type AppEvent = 'vault:changed' | 'sync:status' | 'search:indexed'
 
 /**
  * Subscribes to a backend event and returns a synchronous unsubscribe, so it

@@ -122,6 +122,16 @@ impl AppState {
         (self.vault_changed)();
     }
 
+    /// Brings the search index up to date in the background after the app itself
+    /// renamed, moved, deleted or copied entries: its own changes are hidden from
+    /// the file watcher, which otherwise triggers reindexing.
+    pub fn reindex_in_background(&self) {
+        let search = Arc::clone(&self.search);
+        thread::spawn(move || {
+            let _ = search.reindex();
+        });
+    }
+
     fn is_active_vault(&self, path: &Path) -> bool {
         self.vault
             .root()
