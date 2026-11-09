@@ -139,7 +139,7 @@ item needs a big refactor of something already shipped:
 | 2.2 | Typography settings & zoom | ✅ | `feat/typography-zoom` |
 | 2.3 | Paste URL over selection | ✅ | `feat/paste-url-link` |
 | 2.4 | Empty state | ✅ | `feat/empty-state` |
-| 2.5 | File-tree sort | ⬜ | |
+| 2.5 | File-tree sort | ✅ | `feat/tree-sort` |
 
 - **2.1** Word/character count (selection-aware), reading time, and save state
   ("Saving…", "Saved", "Not saved — conflict") in the existing status bar.
@@ -194,6 +194,22 @@ item needs a big refactor of something already shipped:
     note as the primary button. The Daily note button is added with 4.2.
 - **2.5** Sort by name / modified / created, ascending or descending, folders first
   toggle. Needs `mtime`/`ctime` on `VaultNode` from `vault.rs`.
+  - **As built:** a sort button in the explorer header (highlighted when not the
+    default) opens: File name A→Z / Z→A, Modified new→old / old→new, Created
+    new→old / old→new, and a "Folders first" toggle. Default = previous order (folders
+    first, A→Z). Names sort naturally ("note 2" before "note 10"). A folder's modified
+    time is its most recently modified file (any depth), so the folders you were
+    working in come first; entries without a time go last. App-wide, in
+    `localStorage`.
+  - Code: Rust `Node` gained optional `modified` / `created` (ms since epoch; created
+    is absent where the OS/file system has none) in `vault.rs`, test
+    `tree_reports_modification_times`. Frontend: pure `src/lib/treeSort.ts` (tests:
+    `test-tree-sort.mjs`), `TreeSortMenu.tsx`, applied in `FileTree` (whose filter
+    now keeps all node fields).
+  - Checks: `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean;
+    `cargo test` 70/71 — the one failure,
+    `state::tests::final_sync_runs_once_and_respects_timeout`, also fails on clean
+    `develop` (passes when run alone), so it is pre-existing and tracked separately.
 
 ## Phase 3 — Right panel & knowledge features
 

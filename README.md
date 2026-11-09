@@ -25,6 +25,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Nested Directory Tree**: Arbitrarily deep folder hierarchies with expandable/collapsible nodes.
 - **Drag-and-Drop Organization**: Move files and folders smoothly across the hierarchy.
 - **Inline Creation & Renaming**: Create notes/folders and rename entries directly in the tree without modal interruptions.
+- **Sort Order**: Sort the explorer by file name, modified or created date, in either direction, with or without folders first. Folders sort by their most recently modified note.
 - **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) with quick toggle support.
 - **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.

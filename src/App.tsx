@@ -11,6 +11,8 @@ import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} fr
 import {Editor, type EditorStats} from './components/Editor'
 import {EditorStatus, type SaveState} from './components/EditorStatus'
 import {EmptyState} from './components/EmptyState'
+import {TreeSortMenu} from './components/TreeSortMenu'
+import {normalizeTreeSort, type TreeSort} from './lib/treeSort'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
 import {SyncStatusBar} from './components/SyncStatusBar'
@@ -95,6 +97,21 @@ function App() {
         })
     })
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
+    // File-tree order, app-wide and kept across restarts.
+    const [treeSort, setTreeSort] = useState<TreeSort>(() => {
+        try {
+            return normalizeTreeSort(JSON.parse(localStorage.getItem('logledge:treeSort') || 'null'))
+        } catch {
+            return normalizeTreeSort(null)
+        }
+    })
+    useEffect(() => {
+        try {
+            localStorage.setItem('logledge:treeSort', JSON.stringify(treeSort))
+        } catch {
+            // Storage unavailable: the order applies for this session only.
+        }
+    }, [treeSort])
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
@@ -822,6 +839,12 @@ function App() {
                                             <FilterX className="h-3.5 w-3.5" />
                                         )}
                                     </button>
+                                    <TreeSortMenu
+                                        sort={treeSort}
+                                        onChange={setTreeSort}
+                                        buttonClassName="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                        activeButtonClassName="p-1 rounded bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40"
+                                    />
                                     <button
                                         onClick={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}
                                         title={t('newNote')}
@@ -861,6 +884,7 @@ function App() {
                                         onPaste={handlePaste}
                                         onMove={handleDragMove}
                                         pinnedPaths={noteLists.lists.pinned}
+                                        sort={treeSort}
                                         onTogglePin={(path) => noteLists.update((l) => ({...l, pinned: togglePin(l.pinned, path)}))}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
