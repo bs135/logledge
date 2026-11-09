@@ -605,6 +605,18 @@ mod tests {
         assert!(!t.app.sync.is_configured());
     }
 
+    fn wait_for_sync_state(t: &TestApp, state: &str) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while t.app.sync.status().state != state {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "sync status never became {state}: {:?}",
+                t.app.sync.status()
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     #[test]
     fn final_sync_runs_once_and_respects_timeout() {
         let t = new_app();
@@ -617,6 +629,10 @@ mod tests {
         t.app.switch_vault(&vault).unwrap();
         let remote = path_string(&t.dir.path().join("missing.git"));
         t.app.configure_sync(&remote, "main", "none").unwrap();
+        // configure_sync also starts a background sync. Let it finish first:
+        // otherwise it can queue behind final_sync's run lock and set
+        // "syncing" again right after final_sync returns.
+        wait_for_sync_state(&t, "offline");
 
         let started = std::time::Instant::now();
         t.app.final_sync(Duration::from_secs(20));
