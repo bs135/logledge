@@ -1146,7 +1146,31 @@ function App() {
                 <GlobalSearch
                     // A new tag search while open restarts it with that query.
                     key={globalSearchQuery}
-                    onOpen={(path) => openFile(path)}
+                    onOpen={(path, line) => {
+                        setGlobalSearchOpen(false)
+                        if (path === selectedPath) {
+                            if (line) setScrollTarget({line, seq: Date.now()})
+                        } else {
+                            openFile(path, null, true, line)
+                        }
+                    }}
+                    onBeforeReplace={async () => {
+                        // Write the open note's latest text first, so the replace sees it.
+                        if (selectedPath && !noteDeletedRef.current && currentContentRef.current !== diskRef.current.content) {
+                            queueSave(selectedPath, currentContentRef.current)
+                        }
+                        await saveQueueRef.current
+                    }}
+                    onReplaced={async (paths) => {
+                        // Show the new text of the open note if the replace changed it.
+                        if (selectedPath && paths.includes(selectedPath)) {
+                            try {
+                                loadNote(selectedPath, await readFile(selectedPath))
+                            } catch {
+                                // Reported by the external-change check if the file is gone.
+                            }
+                        }
+                    }}
                     onClose={() => {
                         setGlobalSearchOpen(false)
                         setGlobalSearchQuery('')

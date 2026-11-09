@@ -19,6 +19,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{Error, Result};
 use crate::fuzzy;
+use crate::grep::{build_pattern, grep_text, GrepOptions, LineMatch};
 use crate::links::{extract_links, target_key, LinkKind};
 use crate::tags::{extract_tags, normalize_tag};
 use crate::watcher::OnChange;
@@ -27,6 +28,42 @@ use crate::watcher::OnChange;
 /// table, version 2 the `tags` table; an older index is rebuilt once so every
 /// note gets them indexed.
 const SCHEMA_VERSION: i64 = 2;
+
+/// Matches of an exact (case-sensitive / regex) search in one note.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMatches {
+    pub path: String,
+    /// Lines with matches (possibly fewer than the note has, see `total`).
+    pub lines: Vec<LineMatch>,
+    /// Number of matches in the note.
+    pub total: u32,
+}
+
+/// Result of [`SearchService::grep`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrepResult {
+    pub files: Vec<FileMatches>,
+    /// True when the file or line limit cut the results short.
+    pub truncated: bool,
+}
+
+/// Limits for exact search results sent to the frontend.
+const GREP_MAX_FILES: usize = 200;
+const GREP_MAX_LINES_PER_FILE: usize = 50;
+const GREP_MAX_LINES: usize = 2000;
+
+/// `tag:` / `path:` filters of a search query and the remaining text.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchFilters {
+    /// Normalized tags; a note must have every one (or a tag nested under it).
+    pub tags: Vec<String>,
+    /// Folders (vault-relative, no surrounding "/"); a note must be in one of them.
+    pub folders: Vec<String>,
+    /// The query without the filter tokens, otherwise unchanged (spacing kept for regex).
+    pub text: String,
+}
 
 /// A tag and the number of notes carrying it (exactly, not counting nested tags).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -405,21 +442,19 @@ impl SearchService {
     /// those notes by path, without snippets.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>> {
         let (_, conn) = self.snapshot().ok_or_else(not_open)?;
-        let (tags, text) = split_tag_filters(query);
-        if tags.is_empty() && text.is_empty() {
+        let filters = parse_filters(query);
+        let text = filters
+            .text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if filters.tags.is_empty() && filters.folders.is_empty() && text.is_empty() {
             return Ok(Vec::new());
         }
         let limit = if limit == 0 { 20 } else { limit };
 
         let mut args: Vec<Value> = Vec::new();
-        let mut tag_sql = String::new();
-        for tag in &tags {
-            tag_sql.push_str(
-                " AND f.id IN (SELECT src_id FROM tags WHERE tag = ? OR tag LIKE ? ESCAPE '\\')",
-            );
-            args.push(Value::Text(tag.clone()));
-            args.push(Value::Text(format!("{}/%", escape_like(tag))));
-        }
+        let tag_sql = filter_sql(&filters, &mut args);
         let sql = if text.is_empty() {
             format!(
                 "SELECT f.path, n.title, ''
@@ -451,6 +486,39 @@ impl SearchService {
             })
         })?;
         Ok(rows.flatten().collect())
+    }
+
+    /// Exact search (case-sensitive and/or regex) through the notes matching the
+    /// query's `tag:` / `path:` filters, line by line. Errors on an invalid or
+    /// empty-matching pattern. Results are capped (see `truncated`).
+    pub fn grep(&self, query: &str, opts: GrepOptions) -> Result<GrepResult> {
+        let (root, conn) = self.snapshot().ok_or_else(not_open)?;
+        let filters = parse_filters(query);
+        let re = build_pattern(filters.text.trim(), opts)?;
+        let paths = candidate_paths(&lock(&conn), &filters)?;
+
+        let mut files = Vec::new();
+        let mut lines_left = GREP_MAX_LINES;
+        let mut truncated = false;
+        for path in paths {
+            let Ok(data) = fs::read(root.join(&path)) else {
+                continue;
+            };
+            let text = String::from_utf8_lossy(&data);
+            let max = GREP_MAX_LINES_PER_FILE.min(lines_left);
+            let (lines, total, matching_lines) = grep_text(&re, &text, max);
+            if total == 0 {
+                continue;
+            }
+            if files.len() == GREP_MAX_FILES || lines_left == 0 {
+                truncated = true;
+                break;
+            }
+            truncated |= matching_lines > lines.len();
+            lines_left -= lines.len();
+            files.push(FileMatches { path, lines, total });
+        }
+        Ok(GrepResult { files, truncated })
     }
 
     /// Every tag in the vault with its note count, sorted by tag.
@@ -579,20 +647,71 @@ fn delete_note(conn: &Connection, id: i64) {
     let _ = conn.execute("DELETE FROM files WHERE id = ?1", [id]);
 }
 
-/// Splits a search query into `tag:name` filters (normalized; invalid ones are
-/// dropped) and the remaining full-text words.
-fn split_tag_filters(query: &str) -> (Vec<String>, String) {
-    let mut tags = Vec::new();
-    let mut words = Vec::new();
-    for token in query.split_whitespace() {
+/// Splits a search query into `tag:name` and `path:folder` filters (invalid tags
+/// and empty folders are dropped) and the remaining text, which keeps its spacing.
+pub fn parse_filters(query: &str) -> SearchFilters {
+    let mut filters = SearchFilters::default();
+    let mut text = String::with_capacity(query.len());
+    let mut rest = query;
+    while !rest.is_empty() {
+        // Copy whitespace as is, then look at the next token.
+        let ws = rest.len() - rest.trim_start().len();
+        text.push_str(&rest[..ws]);
+        rest = &rest[ws..];
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let token = &rest[..end];
         let lower = token.to_lowercase();
-        if let Some(rest) = lower.strip_prefix("tag:") {
-            tags.extend(normalize_tag(rest));
+        if let Some(tag) = lower.strip_prefix("tag:") {
+            filters.tags.extend(normalize_tag(tag));
+        } else if token.len() > 5 && token[..5].eq_ignore_ascii_case("path:") {
+            let folder = token[5..].replace('\\', "/").trim_matches('/').to_string();
+            if !folder.is_empty() {
+                filters.folders.push(folder);
+            }
         } else {
-            words.push(token);
+            text.push_str(token);
         }
+        rest = &rest[end..];
     }
-    (tags, words.join(" "))
+    filters.text = text.trim().to_string();
+    filters
+}
+
+/// SQL conditions (" AND ...") for the tag and folder filters, on `files f`, with
+/// their arguments appended to `args`.
+fn filter_sql(filters: &SearchFilters, args: &mut Vec<Value>) -> String {
+    let mut sql = String::new();
+    for tag in &filters.tags {
+        sql.push_str(
+            " AND f.id IN (SELECT src_id FROM tags WHERE tag = ? OR tag LIKE ? ESCAPE '\\')",
+        );
+        args.push(Value::Text(tag.clone()));
+        args.push(Value::Text(format!("{}/%", escape_like(tag))));
+    }
+    if !filters.folders.is_empty() {
+        let parts: Vec<_> = filters
+            .folders
+            .iter()
+            .map(|folder| {
+                args.push(Value::Text(format!("{}/%", escape_like(folder))));
+                "f.path LIKE ? ESCAPE '\\'"
+            })
+            .collect();
+        sql.push_str(&format!(" AND ({})", parts.join(" OR ")));
+    }
+    sql
+}
+
+/// Indexed notes matching the tag and folder filters, sorted by path.
+fn candidate_paths(conn: &Connection, filters: &SearchFilters) -> Result<Vec<String>> {
+    let mut args = Vec::new();
+    let sql = format!(
+        "SELECT f.path FROM files f WHERE 1 = 1{} ORDER BY f.path",
+        filter_sql(filters, &mut args)
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(args.iter()), |r| r.get(0))?;
+    Ok(rows.flatten().collect())
 }
 
 /// Escapes `%`, `_` and `\` for a LIKE pattern used with `ESCAPE '\'`.
@@ -798,6 +917,58 @@ mod tests {
         write_note(root, "c.md", "no tags now");
         t.svc.reindex_file("c.md").unwrap();
         assert_eq!(t.svc.notes_with_tag("home").unwrap(), ["b.md"]);
+    }
+
+    #[test]
+    fn parse_filters_keeps_text_spacing() {
+        let f = parse_filters("tag:Work  a  b path:/notes/2024/ PATH:x\\y tag:123");
+        assert_eq!(f.tags, ["work"]);
+        assert_eq!(f.folders, ["notes/2024", "x/y"]);
+        assert_eq!(f.text, "a  b");
+        assert_eq!(parse_filters("path:").text, "path:");
+    }
+
+    #[test]
+    fn folder_filter_and_grep() {
+        let t = new_search();
+        let root = t.vault.path();
+        write_note(root, "a.md", "Alpha line\nalpha again");
+        write_note(root, "notes/b.md", "ALPHA beta\nnothing");
+        write_note(root, "notes_x/c.md", "alpha in a sibling folder");
+        t.svc.reindex().unwrap();
+
+        let fts: Vec<_> = t
+            .svc
+            .search("alpha path:notes", 10)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.path)
+            .collect();
+        assert_eq!(fts, ["notes/b.md"], "notes_x is not inside notes");
+
+        let opts = GrepOptions {
+            case_sensitive: true,
+            regex: false,
+            whole_word: false,
+        };
+        let res = t.svc.grep("alpha", opts).unwrap();
+        let got: Vec<_> = res
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.total, f.lines.len()))
+            .collect();
+        assert_eq!(got, vec![("a.md", 1, 1), ("notes_x/c.md", 1, 1)]);
+        assert!(!res.truncated);
+
+        let rx = GrepOptions {
+            case_sensitive: false,
+            regex: true,
+            whole_word: false,
+        };
+        let res = t.svc.grep("path:notes al.ha\\s+\\w+", rx).unwrap();
+        assert_eq!(res.files.len(), 1);
+        assert_eq!(res.files[0].lines[0].line, 1);
+        assert!(t.svc.grep("(", rx).is_err());
     }
 
     #[test]

@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod fuzzy;
 mod gitsync;
+mod grep;
 mod lifecycle;
 mod links;
 mod search;
@@ -120,6 +121,8 @@ pub fn run() {
             commands::backlinks,
             commands::mentions,
             commands::all_tags,
+            commands::grep_notes,
+            commands::replace_in_notes,
             commands::notes_with_tag,
             commands::get_sync_settings,
             commands::configure_sync,
