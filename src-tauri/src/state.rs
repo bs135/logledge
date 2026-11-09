@@ -6,12 +6,13 @@ use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{self, Config, FileFilterConfig, VaultEntry};
 use crate::error::{Error, Result};
 use crate::gitsync::{self, AuthMethod, OnStatus, SyncService};
-use crate::search::SearchService;
+use crate::grep::{build_pattern, replace_text, GrepOptions};
+use crate::search::{parse_filters, SearchService};
 use crate::vault::{clean_path, VaultService};
 use crate::watcher::OnChange;
 
@@ -29,6 +30,25 @@ pub struct SyncSettings {
     pub auth_method: String,
     #[serde(rename = "hasPAT")]
     pub has_pat: bool,
+}
+
+/// A note to replace in, with the number of matches the user previewed.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplaceTarget {
+    pub path: String,
+    pub expected: u32,
+}
+
+/// What happened to one note in [`AppState::replace_in_notes`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceOutcome {
+    pub path: String,
+    /// Replacements written (0 when skipped).
+    pub replaced: u32,
+    /// The note changed since the preview (different match count), could not be
+    /// read or written: it was left untouched.
+    pub skipped: bool,
 }
 
 pub struct AppState {
@@ -120,6 +140,59 @@ impl AppState {
 
     fn notify_vault_changed(&self) {
         (self.vault_changed)();
+    }
+
+    /// Replaces the matches of `query` (its text part; `tag:`/`path:` filters are
+    /// ignored here, the targets are already chosen) in each target note. A note
+    /// whose current match count differs from the previewed one is skipped, so a
+    /// change made after the preview is never overwritten blindly. Written notes are
+    /// re-indexed at once.
+    pub fn replace_in_notes(
+        &self,
+        query: &str,
+        opts: GrepOptions,
+        replacement: &str,
+        targets: &[ReplaceTarget],
+    ) -> Result<Vec<ReplaceOutcome>> {
+        let re = build_pattern(parse_filters(query).text.trim(), opts)?;
+        let mut outcomes = Vec::with_capacity(targets.len());
+        for target in targets {
+            let skipped = |path: &str| ReplaceOutcome {
+                path: path.to_string(),
+                replaced: 0,
+                skipped: true,
+            };
+            let Ok(content) = self.vault.read_file(&target.path) else {
+                outcomes.push(skipped(&target.path));
+                continue;
+            };
+            let (updated, count) = replace_text(&re, &content, replacement, opts);
+            if count != target.expected || count == 0 {
+                outcomes.push(skipped(&target.path));
+                continue;
+            }
+            if self.vault.write_file(&target.path, &updated).is_err() {
+                outcomes.push(skipped(&target.path));
+                continue;
+            }
+            let _ = self.search.reindex_file(&target.path);
+            outcomes.push(ReplaceOutcome {
+                path: target.path.clone(),
+                replaced: count,
+                skipped: false,
+            });
+        }
+        Ok(outcomes)
+    }
+
+    /// Brings the search index up to date in the background after the app itself
+    /// renamed, moved, deleted or copied entries: its own changes are hidden from
+    /// the file watcher, which otherwise triggers reindexing.
+    pub fn reindex_in_background(&self) {
+        let search = Arc::clone(&self.search);
+        thread::spawn(move || {
+            let _ = search.reindex();
+        });
     }
 
     fn is_active_vault(&self, path: &Path) -> bool {
@@ -605,6 +678,77 @@ mod tests {
         assert!(!t.app.sync.is_configured());
     }
 
+    fn wait_for_sync_state(t: &TestApp, state: &str) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while t.app.sync.status().state != state {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "sync status never became {state}: {:?}",
+                t.app.sync.status()
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn replace_in_notes_skips_changed_notes() {
+        let t = new_app();
+        let vault = t.vault("v");
+        t.app.switch_vault(&vault).unwrap();
+        fs::write(vault.join("a.md"), "old OLD\nold").unwrap();
+        fs::write(vault.join("b.md"), "old").unwrap();
+        fs::write(vault.join("c.md"), "nothing").unwrap();
+
+        let opts = GrepOptions {
+            case_sensitive: true,
+            regex: false,
+            whole_word: false,
+        };
+        let targets = [
+            ReplaceTarget {
+                path: "a.md".into(),
+                expected: 2,
+            },
+            // Previewed 3 matches, but the note now has 1: skipped.
+            ReplaceTarget {
+                path: "b.md".into(),
+                expected: 3,
+            },
+            ReplaceTarget {
+                path: "missing.md".into(),
+                expected: 1,
+            },
+        ];
+        let out = t
+            .app
+            .replace_in_notes("path:ignored old", opts, "new", &targets)
+            .unwrap();
+        let summary: Vec<_> = out
+            .iter()
+            .map(|o| (o.path.as_str(), o.replaced, o.skipped))
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                ("a.md", 2, false),
+                ("b.md", 0, true),
+                ("missing.md", 0, true)
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(vault.join("a.md")).unwrap(),
+            "new OLD\nnew"
+        );
+        assert_eq!(fs::read_to_string(vault.join("b.md")).unwrap(), "old");
+
+        let rx = GrepOptions {
+            case_sensitive: true,
+            regex: true,
+            whole_word: false,
+        };
+        assert!(t.app.replace_in_notes("(", rx, "x", &[]).is_err());
+    }
+
     #[test]
     fn final_sync_runs_once_and_respects_timeout() {
         let t = new_app();
@@ -617,6 +761,10 @@ mod tests {
         t.app.switch_vault(&vault).unwrap();
         let remote = path_string(&t.dir.path().join("missing.git"));
         t.app.configure_sync(&remote, "main", "none").unwrap();
+        // configure_sync also starts a background sync. Let it finish first:
+        // otherwise it can queue behind final_sync's run lock and set
+        // "syncing" again right after final_sync returns.
+        wait_for_sync_state(&t, "offline");
 
         let started = std::time::Instant::now();
         t.app.final_sync(Duration::from_secs(20));

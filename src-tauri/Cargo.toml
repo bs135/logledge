@@ -20,6 +20,7 @@ chrono = "0.4"
 dirs = "6"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 mime_guess = "2"
+regex = "1"
 notify = "8"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }

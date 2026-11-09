@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {createContext, useContext, useEffect, useMemo, useRef, useState} from 'react'
 import type {DragEvent} from 'react'
 import type {FileFilterConfig, VaultNode} from '../lib/types'
 import {
@@ -17,10 +17,17 @@ import {
     ClipboardPaste,
     ClipboardCopy,
     FolderSearch,
+    Pin,
+    PinOff,
 } from 'lucide-react'
 import {useI18n} from '../i18n'
+import {DEFAULT_TREE_SORT, sortTree, type TreeSort} from '../lib/treeSort'
 
 export type InlineActionType = 'create-file' | 'create-folder' | 'rename'
+
+// Pinned notes reach every TreeEntry through context instead of being threaded through
+// each level's props.
+const PinContext = createContext<{pinned: Set<string>; onTogglePin?: (path: string) => void}>({pinned: new Set()})
 
 // FileClipboard is the app-internal clipboard for the file tree Cut/Copy/Paste actions.
 export interface FileClipboard {
@@ -64,12 +71,7 @@ function filterNode(node: VaultNode, filter?: FileFilterConfig): VaultNode | nul
         .map((child) => filterNode(child, filter))
         .filter((child): child is VaultNode => child !== null)
 
-    return ({
-        name: node.name,
-        path: node.path,
-        isDir: node.isDir,
-        children: filteredChildren,
-    })
+    return {...node, children: filteredChildren}
 }
 
 function findNode(node: VaultNode, path: string): VaultNode | null {
@@ -115,6 +117,11 @@ export interface FileTreeProps {
     onCommitInlineAction: (action: InlineAction, name: string) => void
     onCancelInlineAction: () => void
     onActivePathChange?: (path: string | null) => void
+    /** Notes pinned to the Quick Switcher; shown with a pin icon. */
+    pinnedPaths?: string[]
+    /** Order of entries within each folder (default: folders first, A→Z). */
+    sort?: TreeSort
+    onTogglePin?: (path: string) => void
 }
 
 // FileTree renders an arbitrarily nested file and folder tree, supporting
@@ -126,12 +133,19 @@ export function FileTree({
     onCommitInlineAction,
     onCancelInlineAction,
     onActivePathChange,
+    pinnedPaths,
+    onTogglePin,
+    sort = DEFAULT_TREE_SORT,
     ...props
 }: FileTreeProps) {
     const {t} = useI18n()
+    const pinContext = useMemo(() => ({pinned: new Set(pinnedPaths), onTogglePin}), [pinnedPaths, onTogglePin])
     const containerRef = useRef<HTMLDivElement>(null)
     const [activePath, setActivePath] = useState<string | null>(props.selectedPath)
-    const filteredRoot = filterNode(props.root, filter) || props.root
+    const filteredRoot = useMemo(
+        () => sortTree(filterNode(props.root, filter) || props.root, sort),
+        [props.root, filter, sort],
+    )
     const isCreatingAtRoot = Boolean(
         inlineAction && inlineAction.type !== 'rename' && inlineAction.targetPath === ''
     )
@@ -207,6 +221,7 @@ export function FileTree({
     }
 
     return (
+        <PinContext.Provider value={pinContext}>
         <div
             ref={containerRef}
             tabIndex={0}
@@ -244,6 +259,7 @@ export function FileTree({
                 />
             ))}
         </div>
+        </PinContext.Provider>
     )
 }
 
@@ -281,6 +297,8 @@ function TreeEntry({
     onCancelInlineAction,
 }: TreeEntryProps) {
     const {t} = useI18n()
+    const {pinned} = useContext(PinContext)
+    const isPinned = !node.isDir && pinned.has(node.path)
     const [open, setOpen] = useState(depth < 1)
     const [menuPos, setMenuPos] = useState<{x: number; y: number} | null>(null)
     const [dragOver, setDragOver] = useState(false)
@@ -450,6 +468,11 @@ function TreeEntry({
                     <FileText className="h-4 w-4 shrink-0 text-neutral-400 dark:text-neutral-500" />
                 )}
                 <span className="truncate">{node.name}</span>
+                {isPinned && (
+                    <span className="ml-auto shrink-0 pl-1" title={t('pinnedNoteTitle')}>
+                        <Pin className="h-3 w-3 text-neutral-400 dark:text-neutral-500" />
+                    </span>
+                )}
             </div>
 
             {menuPos && (
@@ -682,6 +705,7 @@ function ContextMenu({
     canPaste,
 }: ContextMenuProps) {
     const {t} = useI18n()
+    const {pinned, onTogglePin} = useContext(PinContext)
     const parent = node.isDir ? node.path : parentOf(node.path)
 
     function act(fn: () => void) {
@@ -691,7 +715,7 @@ function ContextMenu({
 
     // Keep menu within viewport
     const menuWidth = 220
-    const menuHeight = 380
+    const menuHeight = 420
     const left = Math.max(10, Math.min(position.x, window.innerWidth - menuWidth - 10))
     const top = Math.max(10, Math.min(position.y, window.innerHeight - menuHeight - 10))
     const iconClass = 'h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400'
@@ -713,6 +737,16 @@ function ContextMenu({
                     icon={<FolderPlus className={iconClass} />}
                     onClick={() => act(() => onCreateFolder(parent))}
                 />
+                {!node.isDir && onTogglePin && (
+                    <>
+                        <MenuSeparator />
+                        <MenuItem
+                            label={pinned.has(node.path) ? t('unpinNote') : t('pinNote')}
+                            icon={pinned.has(node.path) ? <PinOff className={iconClass} /> : <Pin className={iconClass} />}
+                            onClick={() => act(() => onTogglePin(node.path))}
+                        />
+                    </>
+                )}
                 <MenuSeparator />
                 <MenuItem
                     label={t('cut')}

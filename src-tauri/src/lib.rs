@@ -4,9 +4,12 @@ mod config;
 mod error;
 mod fuzzy;
 mod gitsync;
+mod grep;
 mod lifecycle;
+mod links;
 mod search;
 mod state;
+mod tags;
 mod tray;
 mod vault;
 mod watcher;
@@ -23,6 +26,8 @@ const VAULT_CHANGED_EVENT: &str = "vault:changed";
 
 /// Event carrying GitHub sync status changes for the status bar.
 const SYNC_STATUS_EVENT: &str = "sync:status";
+/// Emitted after the search index changed, so backlinks can refresh.
+const SEARCH_INDEXED_EVENT: &str = "search:indexed";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,9 +46,14 @@ pub fn run() {
             let config_path = config::default_path()?;
             let vault_handle = app.handle().clone();
             let sync_handle = app.handle().clone();
+            let indexed_handle = app.handle().clone();
+            let search = SearchService::new();
+            search.set_on_indexed(Arc::new(move || {
+                let _ = indexed_handle.emit(SEARCH_INDEXED_EVENT, ());
+            }));
             let state = AppState::new(
                 config_path,
-                SearchService::new(),
+                search,
                 Arc::new(move || {
                     let _ = vault_handle.emit(VAULT_CHANGED_EVENT, ());
                 }),
@@ -108,6 +118,12 @@ pub fn run() {
             commands::read_attachment_data_url,
             commands::search_notes,
             commands::quick_switch,
+            commands::backlinks,
+            commands::mentions,
+            commands::all_tags,
+            commands::grep_notes,
+            commands::replace_in_notes,
+            commands::notes_with_tag,
             commands::get_sync_settings,
             commands::configure_sync,
             commands::set_github_pat,

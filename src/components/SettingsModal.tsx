@@ -33,6 +33,17 @@ import {
     GitBranch,
 } from 'lucide-react'
 import {VaultModal} from './VaultModal'
+import {
+    DEFAULT_TYPOGRAPHY,
+    FONT_SIZE_MAX,
+    FONT_SIZE_MIN,
+    FONT_STACKS,
+    LINE_WIDTH_DEFAULT,
+    LINE_WIDTH_MAX,
+    LINE_WIDTH_MIN,
+    type EditorFont,
+    type Typography,
+} from '../lib/typography'
 import {APP_VERSION} from '../version'
 import {checkForUpdateManually} from './updateCheck'
 
@@ -45,6 +56,8 @@ interface SettingsModalProps {
     onSetTheme: (theme: ThemeMode) => void
     onSwitchVault: (newPath: string) => void
     onClose: () => void
+    typography: Typography
+    onChangeTypography: (update: (t: Typography) => Typography) => void
 }
 
 export function SettingsModal({
@@ -56,6 +69,8 @@ export function SettingsModal({
     onSetTheme,
     onSwitchVault,
     onClose,
+    typography,
+    onChangeTypography,
 }: SettingsModalProps) {
     const {lang, setLanguage, t} = useI18n()
     const [tab, setTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>(initialTab)
@@ -695,6 +710,8 @@ export function SettingsModal({
                                         <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">{t('themeSystem')}</span>
                                     </button>
                                 </div>
+
+                                <TypographySettings typography={typography} onChange={onChangeTypography} />
                             </div>
                         )}
 
@@ -857,6 +874,126 @@ function ExtensionTagSection({
                     ))
                 )}
             </div>
+        </div>
+    )
+}
+
+const FONT_OPTIONS: {value: EditorFont; label: 'fontSans' | 'fontSerif' | 'fontMono' | 'fontSystem'}[] = [
+    {value: 'sans', label: 'fontSans'},
+    {value: 'serif', label: 'fontSerif'},
+    {value: 'mono', label: 'fontMono'},
+    {value: 'system', label: 'fontSystem'},
+]
+
+// Editor typography controls (Settings > Appearance). Changes apply immediately.
+function TypographySettings({
+    typography,
+    onChange,
+}: {
+    typography: Typography
+    onChange: (update: (t: Typography) => Typography) => void
+}) {
+    const {t} = useI18n()
+    const isDefault =
+        typography.fontSize === DEFAULT_TYPOGRAPHY.fontSize &&
+        typography.font === DEFAULT_TYPOGRAPHY.font &&
+        typography.lineWidth === DEFAULT_TYPOGRAPHY.lineWidth
+    const label = 'text-xs font-medium text-neutral-700 dark:text-neutral-300'
+    const value = 'w-14 shrink-0 text-right text-xs tabular-nums text-neutral-500 dark:text-neutral-400'
+
+    return (
+        <div className="space-y-4 border-t border-neutral-200 dark:border-neutral-800 pt-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('editorTypography')}</h3>
+                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('editorTypographyDesc')}</p>
+                </div>
+                <button
+                    onClick={() => onChange(() => DEFAULT_TYPOGRAPHY)}
+                    disabled={isDefault}
+                    className="shrink-0 rounded-md border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                    {t('resetDefault')}
+                </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+                <span className={`w-32 shrink-0 ${label}`}>{t('editorFontSize')}</span>
+                <input
+                    type="range"
+                    min={FONT_SIZE_MIN}
+                    max={FONT_SIZE_MAX}
+                    step={1}
+                    value={typography.fontSize}
+                    onChange={(e) => {
+                        const fontSize = Number(e.target.value)
+                        onChange((cur) => ({...cur, fontSize}))
+                    }}
+                    className="flex-1 accent-blue-600"
+                    aria-label={t('editorFontSize')}
+                />
+                <span className={value}>{typography.fontSize}px</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+                <span className={`w-32 shrink-0 ${label}`}>{t('editorFont')}</span>
+                <div className="grid flex-1 grid-cols-4 gap-2">
+                    {FONT_OPTIONS.map((f) => (
+                        <button
+                            key={f.value}
+                            onClick={() => onChange((cur) => ({...cur, font: f.value}))}
+                            style={{fontFamily: FONT_STACKS[f.value]}}
+                            className={`rounded-lg border px-2 py-1.5 text-sm transition-colors ${
+                                typography.font === f.value
+                                    ? 'border-blue-500 ring-2 ring-blue-500/20 bg-neutral-100 dark:bg-neutral-800/90 text-neutral-900 dark:text-neutral-100'
+                                    : 'border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-700'
+                            }`}
+                        >
+                            {t(f.label)}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <span className={label}>{t('readableLineWidth')}</span>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('readableLineWidthDesc')}</p>
+                </div>
+                <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+                    <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={typography.lineWidth !== null}
+                        onChange={(e) => {
+                            const on = e.target.checked
+                            onChange((cur) => ({...cur, lineWidth: on ? LINE_WIDTH_DEFAULT : null}))
+                        }}
+                        aria-label={t('readableLineWidth')}
+                    />
+                    <div className="h-5 w-9 rounded-full bg-neutral-300 dark:bg-neutral-700 transition-colors peer-checked:bg-blue-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-4" />
+                </label>
+            </div>
+
+            {typography.lineWidth !== null && (
+                <div className="flex items-center gap-3">
+                    <span className={`w-32 shrink-0 ${label}`}>{t('lineWidth')}</span>
+                    <input
+                        type="range"
+                        min={LINE_WIDTH_MIN}
+                        max={LINE_WIDTH_MAX}
+                        step={20}
+                        value={typography.lineWidth}
+                        onChange={(e) => {
+                            const lineWidth = Number(e.target.value)
+                            onChange((cur) => ({...cur, lineWidth}))
+                        }}
+                        className="flex-1 accent-blue-600"
+                        aria-label={t('lineWidth')}
+                    />
+                    <span className={value}>{typography.lineWidth}px</span>
+                </div>
+            )}
         </div>
     )
 }

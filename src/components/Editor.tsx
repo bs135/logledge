@@ -4,14 +4,21 @@ import {EditorView, keymap} from '@codemirror/view'
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands'
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
 import {GFM, Strikethrough, Table, TaskList} from '@lezer/markdown'
-import {defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language'
-import {saveAttachment} from '../lib/api'
+import {defaultHighlightStyle, syntaxHighlighting, syntaxTree} from '@codemirror/language'
+import {autocompletion} from '@codemirror/autocomplete'
+import {readFile, saveAttachment} from '../lib/api'
+import {findHeadingLine} from '../lib/wikilink'
+import {textStats, type TextStats} from '../lib/textStats'
 import {openUrl} from '@tauri-apps/plugin-opener'
 import {EditorContextMenu} from './EditorContextMenu'
 import {emoticonToEmoji} from './emoji'
 import {toggleInlineMarker} from './formatting'
-import {livePreview, notePathFacet} from './livePreview'
+import {livePreview, notePathFacet, notePathsField, setNotePaths} from './livePreview'
 import {resolveCodeLanguage, syntaxHighlightExtension} from './syntaxHighlight'
+import {wikiLinkCompletion} from './wikiComplete'
+import {pasteUrlAsLink} from './pasteLink'
+import {outlineFromState} from './outlineExtract'
+import type {OutlineItem} from '../lib/outline'
 
 interface EditorProps {
     /** Relative path (using "/") of the active note, used to compute relative image links. */
@@ -24,6 +31,63 @@ interface EditorProps {
     onChange: (markdown: string) => void
     /** Called when the inline note title is updated to rename the note file. */
     onRename?: (newName: string) => void
+    /** Called with the raw text inside "[[...]]" when a WikiLink is Ctrl/Cmd+Clicked. */
+    onOpenWikiLink?: (raw: string) => void
+    /** Called with the tag (no "#") when a #tag is Ctrl/Cmd+Clicked. */
+    onOpenTag?: (tag: string) => void
+    /** Heading to scroll to (from a [[Note#Heading]] link); `seq` changes on every request. */
+    /**
+     * Where to scroll: a heading by text (from a [[Note#Heading]] link) or a document
+     * position (from the outline). `seq` changes on every request.
+     */
+    scrollTarget?: {heading?: string; pos?: number; line?: number; seq: number} | null
+    /** Headings of the note (for the outline), updated as the note changes. */
+    onOutlineChange?: (items: OutlineItem[]) => void
+    /** Document position at the top of the visible area, updated while scrolling. */
+    onReadingPosChange?: (pos: number) => void
+    /** Every file path in the vault, so links to missing notes can be styled. */
+    notePaths?: string[]
+    /** Word/character counts of the note and of the selection (null when nothing is selected). */
+    onStatsChange?: (stats: EditorStats) => void
+}
+
+export interface EditorStats {
+    doc: TextStats
+    selection: TextStats | null
+}
+
+// Counting walks the whole document, so it is debounced while typing.
+const STATS_DEBOUNCE_MS = 150
+
+// The outline walks the syntax tree; debounced while typing.
+const OUTLINE_DEBOUNCE_MS = 200
+// A heading counts as "being read" once it is this close to the top of the editor.
+const READING_OFFSET_PX = 48
+
+// Reports the position that decides the highlighted outline heading: the cursor while
+// its line is on screen (so the heading just clicked or being edited is highlighted,
+// even near the end of the note where it can't scroll to the top), otherwise the
+// position near the top of the visible area.
+function reportReadingPos(view: EditorView, listener: ((pos: number) => void) | undefined) {
+    if (!listener) return
+    const rect = view.scrollDOM.getBoundingClientRect()
+    // Visible range in document coordinates (heights from the top of the document).
+    const viewTop = rect.top - view.documentTop
+    const viewBottom = rect.bottom - view.documentTop
+    const cursorLine = view.lineBlockAt(view.state.selection.main.head)
+    if (cursorLine.bottom > viewTop && cursorLine.top < viewBottom) {
+        listener(view.state.selection.main.head)
+        return
+    }
+    listener(view.lineBlockAtHeight(viewTop + READING_OFFSET_PX).from)
+}
+
+function computeStats(state: EditorState): EditorStats {
+    const selected = state.selection.ranges
+        .filter((r) => !r.empty)
+        .map((r) => state.sliceDoc(r.from, r.to))
+        .join('\n')
+    return {doc: textStats(state.doc.toString()), selection: selected ? textStats(selected) : null}
 }
 
 function toggleWrap(view: EditorView, marker: string): boolean {
@@ -34,7 +98,7 @@ function toggleWrap(view: EditorView, marker: string): boolean {
 // Editor wraps CodeMirror 6 with Obsidian-style Live Preview (hybrid inline markdown editing),
 // preserving lossless raw text documents, supporting image paste/drag-and-drop into .attachments/,
 // and debounced auto-save at 600ms.
-export function Editor({path, initialContent, onContentChange, onChange, onRename}: EditorProps) {
+export function Editor({path, initialContent, onContentChange, onChange, onRename, onOpenWikiLink, onOpenTag, scrollTarget, notePaths, onStatsChange, onOutlineChange, onReadingPosChange}: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const onChangeRef = useRef(onChange)
@@ -43,6 +107,20 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
     onContentChangeRef.current = onContentChange
     const pathRef = useRef(path)
     pathRef.current = path
+    const onOpenWikiLinkRef = useRef(onOpenWikiLink)
+    onOpenWikiLinkRef.current = onOpenWikiLink
+    const onOpenTagRef = useRef(onOpenTag)
+    onOpenTagRef.current = onOpenTag
+    const notePathsRef = useRef(notePaths)
+    notePathsRef.current = notePaths
+    const onStatsChangeRef = useRef(onStatsChange)
+    onStatsChangeRef.current = onStatsChange
+    const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const onOutlineChangeRef = useRef(onOutlineChange)
+    onOutlineChangeRef.current = onOutlineChange
+    const onReadingPosChangeRef = useRef(onReadingPosChange)
+    onReadingPosChangeRef.current = onReadingPosChange
+    const outlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const initialTitle = path.split('/').pop()?.replace(/\.md$/, '') || ''
@@ -75,7 +153,7 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             },
             '.cm-scroller': {
                 overflow: 'auto',
-                fontFamily: '"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
+                fontFamily: 'inherit',
             },
         })
 
@@ -102,6 +180,20 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
         ])
 
         const updateListener = EditorView.updateListener.of((update) => {
+            // The outline follows edits and the background parser filling in the tree.
+            if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+                if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current)
+                const state = update.state
+                outlineTimerRef.current = setTimeout(() => onOutlineChangeRef.current?.(outlineFromState(state)), OUTLINE_DEBOUNCE_MS)
+            }
+            if (update.docChanged || update.geometryChanged || update.selectionSet) {
+                reportReadingPos(update.view, onReadingPosChangeRef.current)
+            }
+            if (update.docChanged || update.selectionSet) {
+                if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
+                const state = update.state
+                statsTimerRef.current = setTimeout(() => onStatsChangeRef.current?.(computeStats(state)), STATS_DEBOUNCE_MS)
+            }
             if (update.docChanged) {
                 const markdownText = update.state.doc.toString()
                 onContentChangeRef.current?.(markdownText)
@@ -125,8 +217,13 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                 syntaxHighlightExtension,
                 syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
                 notePathFacet.of(path),
+                notePathsField.init(() => notePathsRef.current ?? null),
                 livePreview,
+                // Only WikiLink completion: `override` keeps lang-markdown's HTML tag
+                // completion (on "<") switched off, as before.
+                autocompletion({override: [wikiLinkCompletion(readFile)], icons: false}),
                 emoticonToEmoji,
+                pasteUrlAsLink,
                 customKeymap,
                 editorTheme,
                 updateListener,
@@ -138,6 +235,19 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             parent: containerRef.current,
         })
         viewRef.current = view
+        onStatsChangeRef.current?.(computeStats(view.state))
+        onOutlineChangeRef.current?.(outlineFromState(view.state))
+
+        // Reading position for the outline highlight, at most once per frame while scrolling.
+        let scrollFrame = 0
+        function onScroll() {
+            if (scrollFrame) return
+            scrollFrame = requestAnimationFrame(() => {
+                scrollFrame = 0
+                reportReadingPos(view, onReadingPosChangeRef.current)
+            })
+        }
+        view.scrollDOM.addEventListener('scroll', onScroll, {passive: true})
 
         // Handle image paste into editor
         async function onPaste(e: ClipboardEvent) {
@@ -184,32 +294,80 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
             }
         }
 
-        function onEditorClick(e: MouseEvent) {
-            if (e.ctrlKey || e.metaKey) {
-                const target = (e.target as HTMLElement)?.closest?.('.cm-link') as HTMLElement | null
-                const url = target?.getAttribute('data-url')
-                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                    e.preventDefault()
-                    openUrl(url).catch(() => {})
-                }
+        // Ctrl/Cmd+Click on a link is handled on mousedown, in the capture phase, before
+        // CodeMirror sees the event. Otherwise CodeMirror moves the cursor into the link on
+        // mousedown, Live Preview redraws it as raw markdown, and the later `click` lands on
+        // a replaced element that no longer carries the link data.
+        function onEditorMouseDown(e: MouseEvent) {
+            if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return
+            const el = e.target as HTMLElement | null
+            const raw = el?.closest?.('[data-wiki-target]')?.getAttribute('data-wiki-target')
+            if (raw) {
+                e.preventDefault()
+                e.stopPropagation()
+                onOpenWikiLinkRef.current?.(raw)
+                return
+            }
+            const tag = el?.closest?.('[data-tag]')?.getAttribute('data-tag')
+            if (tag) {
+                e.preventDefault()
+                e.stopPropagation()
+                onOpenTagRef.current?.(tag)
+                return
+            }
+            const url = el?.closest?.('.cm-link')?.getAttribute('data-url')
+            if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                e.preventDefault()
+                e.stopPropagation()
+                openUrl(url).catch(() => {})
             }
         }
 
         const dom = view.dom
         dom.addEventListener('paste', onPaste)
         dom.addEventListener('drop', onDrop)
-        dom.addEventListener('click', onEditorClick)
+        dom.addEventListener('mousedown', onEditorMouseDown, true)
 
         return () => {
             dom.removeEventListener('paste', onPaste)
             dom.removeEventListener('drop', onDrop)
-            dom.removeEventListener('click', onEditorClick)
+            dom.removeEventListener('mousedown', onEditorMouseDown, true)
+            view.scrollDOM.removeEventListener('scroll', onScroll)
+            if (scrollFrame) cancelAnimationFrame(scrollFrame)
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+            if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
+            if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current)
             view.destroy()
             viewRef.current = null
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [path])
+
+    // Restyle WikiLinks when notes are created, renamed or deleted.
+    useEffect(() => {
+        const view = viewRef.current
+        if (!view || !notePaths || view.state.field(notePathsField, false) === notePaths) return
+        view.dispatch({effects: setNotePaths.of(notePaths)})
+    }, [notePaths])
+
+    // Declared after the effect that creates the view, so the view exists on first run.
+    useEffect(() => {
+        const view = viewRef.current
+        if (!view || !scrollTarget) return
+        let pos: number
+        if (scrollTarget.pos !== undefined) {
+            pos = Math.min(Math.max(0, scrollTarget.pos), view.state.doc.length)
+        } else if (scrollTarget.line !== undefined) {
+            pos = view.state.doc.line(Math.min(Math.max(1, scrollTarget.line), view.state.doc.lines)).from
+        } else {
+            const line = scrollTarget.heading ? findHeadingLine(view.state.doc.toString(), scrollTarget.heading) : null
+            if (line === null) return
+            pos = view.state.doc.line(line).from
+        }
+        view.dispatch({selection: {anchor: pos}, effects: EditorView.scrollIntoView(pos, {y: 'start', yMargin: 24})})
+        view.focus()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scrollTarget?.seq])
 
     return (
         <div
@@ -233,7 +391,8 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
                         }
                     }}
                     placeholder="Untitled"
-                    className="w-full bg-transparent text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
+                    style={{fontSize: 'calc(var(--editor-font-size, 16px) * 1.5)', fontFamily: 'var(--editor-font-family)', maxWidth: 'var(--editor-line-width, none)'}}
+                    className="mx-auto block w-full bg-transparent font-bold tracking-tight text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none"
                 />
             </div>
             <div ref={containerRef} className="flex-1 overflow-hidden" />

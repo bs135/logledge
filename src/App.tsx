@@ -1,10 +1,20 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useVault} from './hooks/useVault'
+import {useNoteLists} from './hooks/useNoteLists'
 import {useTheme} from './hooks/useTheme'
-import {useI18n} from './i18n'
+import {useTypography} from './hooks/useTypography'
+import {zoomPercent, zoomTypography} from './lib/typography'
+import {toast} from 'sonner'
+import {translate, useI18n} from './i18n'
 import {TitleBar} from './components/TitleBar'
 import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} from './components/FileTree'
-import {Editor} from './components/Editor'
+import {Editor, type EditorStats} from './components/Editor'
+import {EditorStatus, type SaveState} from './components/EditorStatus'
+import {EmptyState} from './components/EmptyState'
+import {ExplorerViewMenu} from './components/ExplorerViewMenu'
+import {RightPanel, RIGHT_PANEL_DEFAULT_WIDTH, RIGHT_PANEL_MAX_WIDTH, RIGHT_PANEL_MIN_WIDTH} from './components/RightPanel'
+import {activeHeadingIndex, type OutlineItem} from './lib/outline'
+import {normalizeTreeSort, type TreeSort} from './lib/treeSort'
 import {QuickSwitcher} from './components/QuickSwitcher'
 import {GlobalSearch} from './components/GlobalSearch'
 import {SyncStatusBar} from './components/SyncStatusBar'
@@ -14,23 +24,45 @@ import {VaultModal} from './components/VaultModal'
 import {ConfirmModal} from './components/ConfirmModal'
 import {SidebarContextMenu} from './components/SidebarContextMenu'
 import {runStartupUpdateCheck} from './components/updateCheck'
-import {detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
+import {collectFilePaths, newNoteLocation, parseWikiLink, resolveWikiLink} from './lib/wikilink'
+import {addRecent, removeFromList, renameInList, switcherSections, togglePin} from './lib/noteLists'
+import {canGoBack, canGoForward, emptyHistory, NavHistory, pushHistory, removeFromHistory, renameInHistory, stepHistory} from './lib/navHistory'
+import {createFile as apiCreateFile, createFolder as apiCreateFolder, detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
 import type {FileFilterConfig, VaultEntry} from './lib/types'
-import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
+import {FilePlus, FolderPlus} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
 const MIN_SIDEBAR_WIDTH = 180
 const MAX_SIDEBAR_WIDTH = 700
 const STARTUP_UPDATE_CHECK_DELAY_MS = 2000
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+const NAV_SHORTCUT_BACK = IS_MAC ? '⌘⌥←' : 'Alt+←'
+const NAV_SHORTCUT_FORWARD = IS_MAC ? '⌘⌥→' : 'Alt+→'
+const RIGHT_PANEL_SHORTCUT = IS_MAC ? '⌘⇧\\' : 'Ctrl+Shift+\\'
 
 function App() {
     const vault = useVault()
     const {theme, setTheme} = useTheme()
+    const {typography, setTypography} = useTypography()
+    // Read by the global keydown handler, which is not re-created on every change.
+    const typographyRef = useRef(typography)
+    typographyRef.current = typography
     const {t, lang} = useI18n()
     const [selectedPath, setSelectedPath] = useState<string | null>(null)
     const [initialContent, setInitialContent] = useState('')
     const [editorKey, setEditorKey] = useState(0)
     const [externalChangeNotice, setExternalChangeNotice] = useState<string | null>(null)
+    // Status bar: save state of the open note and its word/character counts.
+    const [saveState, setSaveState] = useState<{state: SaveState; error?: string}>({state: 'saved'})
+    const [editorStats, setEditorStats] = useState<EditorStats | null>(null)
+    // The open note's file disappeared from disk (deleted or moved outside the app).
+    // While set, auto-save is paused so the file is not silently recreated.
+    const [noteDeleted, setNoteDeletedState] = useState(false)
+    const noteDeletedRef = useRef(false)
+    const setNoteDeleted = (value: boolean) => {
+        noteDeletedRef.current = value
+        setNoteDeletedState(value)
+    }
     // Latest editor content, including edits not yet auto-saved.
     const currentContentRef = useRef('')
     // Content known to be on disk for the open note (last read or successfully saved).
@@ -68,13 +100,79 @@ function App() {
         })
     })
     const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
+    // File-tree order, app-wide and kept across restarts.
+    const [treeSort, setTreeSort] = useState<TreeSort>(() => {
+        try {
+            return normalizeTreeSort(JSON.parse(localStorage.getItem('logledge:treeSort') || 'null'))
+        } catch {
+            return normalizeTreeSort(null)
+        }
+    })
+    useEffect(() => {
+        try {
+            localStorage.setItem('logledge:treeSort', JSON.stringify(treeSort))
+        } catch {
+            // Storage unavailable: the order applies for this session only.
+        }
+    }, [treeSort])
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+    // Query Global Search opens with (e.g. "tag:work" from a tag); reset on close.
+    const [globalSearchQuery, setGlobalSearchQuery] = useState('')
+    const searchTag = (tag: string) => {
+        setQuickSwitcherOpen(false)
+        setGlobalSearchQuery(`tag:${tag}`)
+        setGlobalSearchOpen(true)
+    }
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>('general')
     const [quickHelpOpen, setQuickHelpOpen] = useState(false)
     const [addingVault, setAddingVault] = useState<VaultEntry | null>(null)
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+    // Heading to scroll to after following a [[Note#Heading]] link.
+    const [scrollTarget, setScrollTarget] = useState<{heading?: string; pos?: number; line?: number; seq: number} | null>(null)
+    // Right panel (outline): open state and width survive restarts.
+    const [rightPanelOpen, setRightPanelOpen] = useState(() => localStorage.getItem('logledge:rightPanelOpen') === 'true')
+    const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
+        const saved = parseInt(localStorage.getItem('logledge:rightPanelWidth') || '', 10)
+        return saved >= RIGHT_PANEL_MIN_WIDTH && saved <= RIGHT_PANEL_MAX_WIDTH ? saved : RIGHT_PANEL_DEFAULT_WIDTH
+    })
+    const toggleRightPanel = () =>
+        setRightPanelOpen((o) => {
+            localStorage.setItem('logledge:rightPanelOpen', String(!o))
+            return !o
+        })
+    useEffect(() => {
+        localStorage.setItem('logledge:rightPanelWidth', String(rightPanelWidth))
+    }, [rightPanelWidth])
+    // Outline of the open note and the heading being read. Only the index is state, so
+    // scrolling re-renders the app only when the highlighted heading changes.
+    const [outline, setOutlineState] = useState<OutlineItem[]>([])
+    const outlineRef = useRef<OutlineItem[]>([])
+    const readingPosRef = useRef(0)
+    const [activeHeading, setActiveHeading] = useState(-1)
+    const setOutline = useCallback((items: OutlineItem[]) => {
+        outlineRef.current = items
+        setOutlineState(items)
+        setActiveHeading(activeHeadingIndex(items, readingPosRef.current))
+    }, [])
+    const setReadingPos = useCallback((pos: number) => {
+        readingPosRef.current = pos
+        setActiveHeading(activeHeadingIndex(outlineRef.current, pos))
+    }, [])
+    // A WikiLink to a missing note waiting for the user to confirm creating it.
+    const [pendingNoteCreate, setPendingNoteCreate] = useState<{parent: string; name: string; heading: string | null} | null>(null)
+    const notePaths = useMemo(() => collectFilePaths(vault.tree), [vault.tree])
+    // Pinned and recently opened notes of this vault (Quick Switcher, file tree pin icon).
+    const noteLists = useNoteLists(vault.vaultPath)
+    // Back/Forward history of opened notes. The ref mirrors the state so handlers that
+    // run outside React's render cycle (keyboard and mouse listeners) see the latest value.
+    const [navHistory, setNavHistoryState] = useState<NavHistory>(emptyHistory)
+    const navHistoryRef = useRef<NavHistory>(emptyHistory)
+    const setNavHistory = (update: (h: NavHistory) => NavHistory) => {
+        navHistoryRef.current = update(navHistoryRef.current)
+        setNavHistoryState(navHistoryRef.current)
+    }
 
     useEffect(() => {
         getFileFilterConfig()
@@ -85,6 +183,21 @@ function App() {
             })
             .catch(() => {})
     }, [])
+
+    // Reopen the last viewed note of a vault once its file tree is loaded: at startup and
+    // after switching vaults. Skipped when a note is already open. Waits for `loading` to
+    // clear, because while a vault switch is in flight `tree` still belongs to the old vault.
+    const restoredVaultRef = useRef<string | null>(null)
+    useEffect(() => {
+        const path = vault.vaultPath
+        if (!path || vault.loading || !vault.tree || restoredVaultRef.current === path) return
+        restoredVaultRef.current = path
+        if (selectedPath) return
+        const existing = new Set(notePaths)
+        const last = noteLists.lists.recent.find((p) => existing.has(p))
+        if (last) openFile(last)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vault.vaultPath, vault.loading, vault.tree])
 
     // Check for a new release once per launch, deferred so it never competes with cold start.
     useEffect(() => {
@@ -127,6 +240,9 @@ function App() {
         currentContentRef.current = text
         diskRef.current = {path, content: text}
         setExternalChangeNotice(null)
+        setNoteDeleted(false)
+        setSaveState({state: 'saved'})
+        if (!path) setEditorStats(null)
         setInitialContent(text)
         setSelectedPath(path)
         setEditorKey((k) => k + 1)
@@ -140,32 +256,94 @@ function App() {
         const run = async () => {
             // The note was closed or renamed while this save was queued.
             if (diskRef.current.path !== path) return
+            // Don't recreate a file that was deleted outside the app; the user decides
+            // with Restore / Close in the banner.
+            if (noteDeletedRef.current) return
+            setSaveState({state: 'saving'})
             try {
                 const res = await writeFileIfUnchanged(path, markdown, diskRef.current.content)
                 if (diskRef.current.path !== path) return
                 if (res.saved) {
                     diskRef.current = {path, content: markdown}
+                    // Typing may have continued while the write was in flight.
+                    setSaveState({state: currentContentRef.current === markdown ? 'saved' : 'unsaved'})
                 } else {
                     setExternalChangeNotice(res.diskContent)
+                    setSaveState({state: 'conflict'})
                 }
             } catch (err) {
                 console.error('Auto-save failed:', err)
+                if (diskRef.current.path === path) setSaveState({state: 'error', error: String(err)})
             }
         }
         saveQueueRef.current = saveQueueRef.current.then(run)
         return saveQueueRef.current
     }
 
+    // flushPendingEdits saves the open note's latest text right away when it differs
+    // from what is on disk. The Editor auto-saves 600 ms after the last keystroke and
+    // drops that pending save when it unmounts, so without this the last keystrokes
+    // were lost when switching notes quickly (Alt+Left, a link, the outline, ...) or
+    // when a rename/move remounted the Editor. A note deleted on disk is left alone
+    // (its banner decides), as in queueSave.
+    function flushPendingEdits() {
+        const {path, content} = diskRef.current
+        if (path && !noteDeletedRef.current && currentContentRef.current !== content) {
+            queueSave(path, currentContentRef.current)
+        }
+    }
+
     // followSelectedPath keeps the open note (and its unsaved edits) when its path
     // changes because the note or one of its parent folders was renamed.
     function followSelectedPath(newPath: string) {
         diskRef.current = {...diskRef.current, path: newPath}
+        // The Editor remounts for the new path: save pending edits there now.
+        flushPendingEdits()
+        // A check that raced with the rename may have read the old, now missing path.
+        if (noteDeletedRef.current) {
+            setNoteDeleted(false)
+            setSaveState({state: currentContentRef.current === diskRef.current.content ? 'saved' : 'unsaved'})
+        }
         setInitialContent(currentContentRef.current)
         setSelectedPath(newPath)
     }
 
-    async function openFile(path: string) {
-        // Let in-flight auto-saves of the current note finish before switching.
+    // A note or folder was renamed or moved from `from` to `to`: keep the open note and the
+    // Back/Forward history pointing at the new location.
+    function handleEntryMoved(from: string, to: string) {
+        if (selectedPath === from) {
+            followSelectedPath(to)
+        } else if (selectedPath && selectedPath.startsWith(from + '/')) {
+            followSelectedPath(to + selectedPath.slice(from.length))
+        }
+        setNavHistory((h) => renameInHistory(h, from, to))
+        noteLists.update((l) => ({pinned: renameInList(l.pinned, from, to), recent: renameInList(l.recent, from, to)}))
+    }
+
+    // Opens the previous (-1) or next (+1) note in the history. Entries for notes that no
+    // longer exist (deleted outside the app, or by sync) are dropped first.
+    async function navigate(step: -1 | 1) {
+        if (vault.tree) {
+            const existing = new Set(notePaths)
+            setNavHistory((h) => removeFromHistory(h, (p) => !existing.has(p)))
+        }
+        const h = navHistoryRef.current
+        // When the current entry is not open (its note was just deleted), Back reopens
+        // that entry instead of skipping past it.
+        const target =
+            step === -1 && h.index >= 0 && h.entries[h.index] !== selectedPath
+                ? {history: h, path: h.entries[h.index]}
+                : stepHistory(h, step)
+        if (!target) return
+        setNavHistory(() => target.history)
+        await openFile(target.path, null, false)
+    }
+    const navigateRef = useRef(navigate)
+    navigateRef.current = navigate
+
+    async function openFile(path: string, heading: string | null = null, recordHistory = true, line?: number) {
+        // Save edits not yet auto-saved, and let in-flight saves finish, before switching.
+        flushPendingEdits()
         await saveQueueRef.current
         let text = ''
         try {
@@ -174,12 +352,56 @@ function App() {
             // Open as empty note if it cannot be read.
         }
         loadNote(path, text)
+        if (recordHistory) setNavHistory((h) => pushHistory(h, path))
+        noteLists.update((l) => ({...l, recent: addRecent(l.recent, path)}))
+        setScrollTarget(heading ? {heading, seq: Date.now()} : line ? {line, seq: Date.now()} : null)
         setQuickSwitcherOpen(false)
         setGlobalSearchOpen(false)
     }
 
+    // Follows a WikiLink: opens the resolved note, or creates it when it does not exist yet.
+    async function handleOpenWikiLink(raw: string) {
+        const {target, heading} = parseWikiLink(raw)
+        if (!target) {
+            // [[#Heading]]: a link inside the open note.
+            if (heading) setScrollTarget({heading, seq: Date.now()})
+            return
+        }
+        const existing = resolveWikiLink(target, notePaths, selectedPath)
+        if (existing) {
+            if (existing === selectedPath) {
+                if (heading) setScrollTarget({heading, seq: Date.now()})
+            } else {
+                await openFile(existing, heading)
+            }
+            return
+        }
+        // Ask first, so a typo in a link does not silently create a stray note.
+        setPendingNoteCreate({...newNoteLocation(target, selectedPath), heading})
+    }
+
+    async function handleConfirmNoteCreate() {
+        if (!pendingNoteCreate) return
+        const {parent, name, heading} = pendingNoteCreate
+        setPendingNoteCreate(null)
+        try {
+            // Create missing parent folders one level at a time; existing ones are fine.
+            let dir = ''
+            for (const part of parent ? parent.split('/') : []) {
+                await apiCreateFolder(dir, part).catch(() => {})
+                dir = dir ? `${dir}/${part}` : part
+            }
+            const newPath = await apiCreateFile(parent, name)
+            vault.refresh()
+            await openFile(newPath, heading)
+        } catch (err) {
+            alert(t('wikiLinkCreateFailed') + String(err))
+        }
+    }
+
     function handleVaultSwitched(_newPath: string) {
         setFileClipboard(null)
+        setNavHistory(() => emptyHistory)
         loadNote(null, '')
         vault.reload()
     }
@@ -226,13 +448,7 @@ function App() {
             }
             try {
                 const newPath = await vault.rename(action.targetPath, trimmed)
-                if (newPath) {
-                    if (selectedPath === action.targetPath) {
-                        followSelectedPath(newPath)
-                    } else if (selectedPath && selectedPath.startsWith(action.targetPath + '/')) {
-                        followSelectedPath(newPath + selectedPath.slice(action.targetPath.length))
-                    }
-                }
+                if (newPath) handleEntryMoved(action.targetPath, newPath)
             } catch (err) {
                 alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
             }
@@ -281,13 +497,21 @@ function App() {
             await saveQueueRef.current
             const newPath = await vault.moveTo(clip.path, destParent)
             setFileClipboard(null)
-            if (selectedPath === clip.path) {
-                followSelectedPath(newPath)
-            } else if (selectedPath && selectedPath.startsWith(clip.path + '/')) {
-                followSelectedPath(newPath + selectedPath.slice(clip.path.length))
-            }
+            handleEntryMoved(clip.path, newPath)
         } catch (err) {
             alert(t('pasteFailed') + String(err))
+        }
+    }
+
+    // Drag-and-drop in the file tree. Goes through moveTo (like Cut + Paste) so the new path
+    // is known: the open note and the history follow the move, and errors are shown.
+    async function handleDragMove(srcPath: string, destParent: string) {
+        try {
+            await saveQueueRef.current
+            const newPath = await vault.moveTo(srcPath, destParent)
+            handleEntryMoved(srcPath, newPath)
+        } catch (err) {
+            alert(t('moveFailed') + String(err))
         }
     }
 
@@ -296,6 +520,8 @@ function App() {
         const pathToDelete = deleteTarget
         setDeleteTarget(null)
         await vault.remove(pathToDelete)
+        setNavHistory((h) => removeFromHistory(h, pathToDelete))
+        noteLists.update((l) => ({pinned: removeFromList(l.pinned, pathToDelete), recent: removeFromList(l.recent, pathToDelete)}))
         if (selectedPath === pathToDelete || (selectedPath && selectedPath.startsWith(pathToDelete + '/'))) {
             diskRef.current = {path: null, content: ''}
             setSelectedPath(null)
@@ -308,27 +534,39 @@ function App() {
 
         async function checkExternalChange() {
             if (!selectedPath) return
+            let diskContent: string
             try {
-                const diskContent = await readFile(selectedPath)
-                const known = diskRef.current
-                if (known.path !== selectedPath || diskContent === known.content) {
-                    // Nothing changed on disk since we last read or saved the note:
-                    // unsaved edits in the editor are not an external change.
-                    return
-                }
-                if (diskContent === currentContentRef.current) {
-                    // Our own in-flight auto-save has already reached the disk.
-                    diskRef.current = {path: selectedPath, content: diskContent}
-                    return
-                }
-                if (currentContentRef.current === known.content) {
-                    // No unsaved edits: silently show the new version.
-                    loadNote(selectedPath, diskContent)
-                } else {
-                    setExternalChangeNotice(diskContent)
-                }
+                diskContent = await readFile(selectedPath)
             } catch {
-                // file may have been moved or removed
+                // The file is gone: deleted, or moved/renamed outside the app. Ignore it
+                // when the app itself moved, renamed or closed the note meanwhile.
+                if (diskRef.current.path !== selectedPath) return
+                setNoteDeleted(true)
+                setExternalChangeNotice(null)
+                setSaveState({state: 'deleted'})
+                return
+            }
+            if (noteDeletedRef.current) {
+                // The file came back (restored from the trash, or by sync).
+                setNoteDeleted(false)
+                setSaveState({state: currentContentRef.current === diskContent ? 'saved' : 'unsaved'})
+            }
+            const known = diskRef.current
+            if (known.path !== selectedPath || diskContent === known.content) {
+                // Nothing changed on disk since we last read or saved the note:
+                // unsaved edits in the editor are not an external change.
+                return
+            }
+            if (diskContent === currentContentRef.current) {
+                // Our own in-flight auto-save has already reached the disk.
+                diskRef.current = {path: selectedPath, content: diskContent}
+                return
+            }
+            if (currentContentRef.current === known.content) {
+                // No unsaved edits: silently show the new version.
+                loadNote(selectedPath, diskContent)
+            } else {
+                setExternalChangeNotice(diskContent)
             }
         }
 
@@ -416,6 +654,54 @@ function App() {
         localStorage.setItem('logledge:sidebarWidth', String(sidebarWidth))
     }, [sidebarWidth])
 
+    // Back/Forward: Alt+Left/Right (Windows/Linux), Cmd+Alt+Left/Right (macOS), and the
+    // mouse back/forward buttons. Keys are caught in the capture phase so they win over
+    // CodeMirror, which binds Alt+Left/Right to cursorSyntaxLeft/Right.
+    useEffect(() => {
+        if (!vault.vaultPath) return
+        function onKeyDown(e: globalThis.KeyboardEvent) {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+            const nav = IS_MAC
+                ? e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey
+                : e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+            if (!nav) return
+            e.preventDefault()
+            e.stopPropagation()
+            navigateRef.current(e.key === 'ArrowLeft' ? -1 : 1)
+        }
+        function onMouseUp(e: MouseEvent) {
+            if (e.button !== 3 && e.button !== 4) return
+            e.preventDefault()
+            navigateRef.current(e.button === 3 ? -1 : 1)
+        }
+        // Stops the webview's own back/forward handling of those buttons.
+        function onMouseDown(e: MouseEvent) {
+            if (e.button === 3 || e.button === 4) e.preventDefault()
+        }
+        window.addEventListener('keydown', onKeyDown, true)
+        window.addEventListener('mouseup', onMouseUp)
+        window.addEventListener('mousedown', onMouseDown)
+        return () => {
+            window.removeEventListener('keydown', onKeyDown, true)
+            window.removeEventListener('mouseup', onMouseUp)
+            window.removeEventListener('mousedown', onMouseDown)
+        }
+    }, [vault.vaultPath])
+
+    // Ctrl+Shift+\ (Cmd+Shift+\ on macOS) toggles the right panel. Caught in the capture
+    // phase so it wins over CodeMirror, which binds it to cursorMatchingBracket.
+    useEffect(() => {
+        if (!vault.vaultPath) return
+        function onKeyDown(e: globalThis.KeyboardEvent) {
+            if (e.code !== 'Backslash' || !e.shiftKey || e.altKey || !(IS_MAC ? e.metaKey : e.ctrlKey)) return
+            e.preventDefault()
+            e.stopPropagation()
+            toggleRightPanel()
+        }
+        window.addEventListener('keydown', onKeyDown, true)
+        return () => window.removeEventListener('keydown', onKeyDown, true)
+    }, [vault.vaultPath])
+
     // Keyboard shortcuts:
     // Ctrl+P: Quick Switcher
     // Ctrl+Shift+F: Global Search
@@ -450,6 +736,13 @@ function App() {
                 e.preventDefault()
                 setSettingsTab('general')
                 setSettingsOpen(true)
+            } else if (ctrlOrCmd && !e.altKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+                // Editor zoom: Ctrl+= / Ctrl+- change the font size by 1px, Ctrl+0 resets.
+                e.preventDefault()
+                const step = e.key === '0' ? 0 : e.key === '-' ? -1 : 1
+                const next = zoomTypography(typographyRef.current, step)
+                setTypography(() => next)
+                toast(`${translate('zoomLevel')} ${zoomPercent(next)}% (${next.fontSize}px)`, {id: 'editor-zoom', duration: 1200})
             }
         }
         window.addEventListener('keydown', onKeyDown)
@@ -516,6 +809,8 @@ function App() {
                         onSetTheme={setTheme}
                         onSwitchVault={handleVaultSwitched}
                         onClose={() => setSettingsOpen(false)}
+                        typography={typography}
+                        onChangeTypography={setTypography}
                     />
                 )}
                 {addingVault && (
@@ -534,6 +829,17 @@ function App() {
     return (
         <div className="flex h-full flex-col bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 overflow-hidden">
             <TitleBar
+                rightPanel={{open: rightPanelOpen, onToggle: toggleRightPanel, shortcut: RIGHT_PANEL_SHORTCUT}}
+                nav={{
+                    canGoBack:
+                        canGoBack(navHistory) ||
+                        (navHistory.index >= 0 && navHistory.entries[navHistory.index] !== selectedPath),
+                    canGoForward: canGoForward(navHistory),
+                    onGoBack: () => navigate(-1),
+                    onGoForward: () => navigate(1),
+                    backShortcut: NAV_SHORTCUT_BACK,
+                    forwardShortcut: NAV_SHORTCUT_FORWARD,
+                }}
                 vaultPath={vault.vaultPath}
                 selectedPath={selectedPath}
                 sidebarOpen={sidebarOpen}
@@ -581,28 +887,21 @@ function App() {
                                         e.stopPropagation()
                                     }}
                                 >
-                                    <button
-                                        onClick={() => {
-                                            const updated = ({
-                                                ...filterConfig,
-                                                enabled: !filterConfig.enabled,
-                                            })
+                                    <ExplorerViewMenu
+                                        sort={treeSort}
+                                        onChangeSort={setTreeSort}
+                                        filter={filterConfig}
+                                        onToggleFilter={() => {
+                                            const updated = {...filterConfig, enabled: !filterConfig.enabled}
                                             setFilterConfig(updated)
                                             saveFileFilterConfig(updated).catch(() => {})
                                         }}
-                                        title={filterConfig.enabled ? t('filterActive') : t('filterInactive')}
-                                        className={`p-1 rounded transition-colors ${
-                                            filterConfig.enabled
-                                                ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
-                                                : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200'
-                                        }`}
-                                    >
-                                        {filterConfig.enabled ? (
-                                            <Filter className="h-3.5 w-3.5" />
-                                        ) : (
-                                            <FilterX className="h-3.5 w-3.5" />
-                                        )}
-                                    </button>
+                                        onEditFilter={() => {
+                                            setSettingsTab('filter')
+                                            setSettingsOpen(true)
+                                        }}
+                                        buttonClassName="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
+                                    />
                                     <button
                                         onClick={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}
                                         title={t('newNote')}
@@ -640,7 +939,10 @@ function App() {
                                         onCopy={(path) => setFileClipboard({mode: 'copy', path})}
                                         onCut={(path) => setFileClipboard({mode: 'cut', path})}
                                         onPaste={handlePaste}
-                                        onMove={vault.move}
+                                        onMove={handleDragMove}
+                                        pinnedPaths={noteLists.lists.pinned}
+                                        sort={treeSort}
+                                        onTogglePin={(path) => noteLists.update((l) => ({...l, pinned: togglePin(l.pinned, path)}))}
                                         onCommitInlineAction={handleCommitInlineAction}
                                         onCancelInlineAction={() => setInlineAction(null)}
                                     />
@@ -697,6 +999,29 @@ function App() {
                 </>
             )}
                 <main className="flex-1 overflow-hidden p-4 flex flex-col bg-white dark:bg-neutral-900">
+                    {noteDeleted && selectedPath && (
+                        <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
+                            <span>{t('noteDeletedNotice')}</span>
+                            <div className="flex shrink-0 gap-2">
+                                <button
+                                    onClick={() => {
+                                        // Write the editor content back to the same path.
+                                        setNoteDeleted(false)
+                                        queueSave(selectedPath, currentContentRef.current)
+                                    }}
+                                    className="rounded bg-amber-600 px-2.5 py-0.5 font-medium text-white hover:bg-amber-500"
+                                >
+                                    {t('restoreNoteBtn')}
+                                </button>
+                                <button
+                                    onClick={() => loadNote(null, '')}
+                                    className="rounded bg-neutral-200 text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600 px-2.5 py-0.5"
+                                >
+                                    {t('closeNoteBtn')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {externalChangeNotice !== null && (
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/80 dark:border-amber-600/50 dark:text-amber-200 px-3 py-1.5 text-xs">
                             <span>{t('externalUpdateNotice')}</span>
@@ -728,9 +1053,25 @@ function App() {
                             key={`${selectedPath}-${editorKey}`}
                             path={selectedPath}
                             initialContent={initialContent}
+                            scrollTarget={scrollTarget}
+                            notePaths={notePaths}
+                            onOpenWikiLink={handleOpenWikiLink}
+                            onOpenTag={searchTag}
                             onContentChange={(markdown) => {
                                 currentContentRef.current = markdown
+                                // Same-value updates are ignored by React, so this only
+                                // re-renders when the state actually flips.
+                                setSaveState((s) =>
+                                    s.state === 'conflict' || s.state === 'saving' || s.state === 'deleted'
+                                        ? s
+                                        : markdown === diskRef.current.content
+                                          ? s.state === 'saved' ? s : {state: 'saved'}
+                                          : s.state === 'unsaved' ? s : {state: 'unsaved'},
+                                )
                             }}
+                            onStatsChange={setEditorStats}
+                            onOutlineChange={setOutline}
+                            onReadingPosChange={setReadingPos}
                             onChange={(markdown) => {
                                 currentContentRef.current = markdown
                                 queueSave(selectedPath, markdown)
@@ -740,30 +1081,103 @@ function App() {
                                 try {
                                     await saveQueueRef.current
                                     const newPath = await vault.rename(selectedPath, newName)
-                                    if (newPath) {
-                                        followSelectedPath(newPath)
-                                    }
+                                    if (newPath) handleEntryMoved(selectedPath, newPath)
                                 } catch (err) {
                                     alert((lang === 'vi' ? 'Không thể đổi tên: ' : 'Failed to rename: ') + String(err))
                                 }
                             }}
                         />
                     ) : (
-                        <div className="flex h-full items-center justify-center text-neutral-400 dark:text-neutral-500">
-                            {t('selectNotePlaceholder')}
-                        </div>
+                        <EmptyState
+                            {...switcherSections(noteLists.lists.pinned, noteLists.lists.recent, new Set(notePaths), null, 8)}
+                            vaultIsEmpty={vault.tree !== null && !notePaths.some((p) => /\.(md|markdown)$/i.test(p))}
+                            onOpen={(path) => openFile(path)}
+                            onNewNote={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}
+                            onQuickSwitcher={() => {
+                                setGlobalSearchOpen(false)
+                                setQuickSwitcherOpen(true)
+                            }}
+                            onSearch={() => {
+                                setQuickSwitcherOpen(false)
+                                setGlobalSearchOpen(true)
+                            }}
+                            onHelp={() => setQuickHelpOpen(true)}
+                        />
                     )}
                 </main>
+                {rightPanelOpen && (
+                    <RightPanel
+                        width={rightPanelWidth}
+                        onWidthChange={setRightPanelWidth}
+                        onClose={toggleRightPanel}
+                        outline={selectedPath ? outline : null}
+                        activeIndex={selectedPath ? activeHeading : -1}
+                        onSelectHeading={(item) => setScrollTarget({pos: item.from, seq: Date.now()})}
+                        onSelectTop={() => setScrollTarget({pos: 0, seq: Date.now()})}
+                        notePath={selectedPath}
+                        notePaths={notePaths}
+                        onSearchTag={searchTag}
+                        onOpenNote={(path, line) => {
+                            if (path === selectedPath) {
+                                if (line) setScrollTarget({line, seq: Date.now()})
+                            } else {
+                                openFile(path, null, true, line)
+                            }
+                        }}
+                    />
+                )}
             </div>
-            <SyncStatusBar onOpenSettings={() => {
-                setSettingsTab('vaults')
-                setSettingsOpen(true)
-            }} />
+            <SyncStatusBar
+                onOpenSettings={() => {
+                    setSettingsTab('vaults')
+                    setSettingsOpen(true)
+                }}
+            >
+                {selectedPath && editorStats && (
+                    <EditorStatus stats={editorStats} saveState={saveState.state} saveError={saveState.error} />
+                )}
+            </SyncStatusBar>
             {quickSwitcherOpen && (
-                <QuickSwitcher onOpen={openFile} onClose={() => setQuickSwitcherOpen(false)} />
+                <QuickSwitcher
+                    onOpen={(path) => openFile(path)}
+                    onClose={() => setQuickSwitcherOpen(false)}
+                    sections={switcherSections(noteLists.lists.pinned, noteLists.lists.recent, new Set(notePaths), selectedPath)}
+                    pinnedPaths={noteLists.lists.pinned}
+                />
             )}
             {globalSearchOpen && (
-                <GlobalSearch onOpen={openFile} onClose={() => setGlobalSearchOpen(false)} />
+                <GlobalSearch
+                    // A new tag search while open restarts it with that query.
+                    key={globalSearchQuery}
+                    onOpen={(path, line) => {
+                        setGlobalSearchOpen(false)
+                        if (path === selectedPath) {
+                            if (line) setScrollTarget({line, seq: Date.now()})
+                        } else {
+                            openFile(path, null, true, line)
+                        }
+                    }}
+                    onBeforeReplace={async () => {
+                        // Write the open note's latest text first, so the replace sees it.
+                        flushPendingEdits()
+                        await saveQueueRef.current
+                    }}
+                    onReplaced={async (paths) => {
+                        // Show the new text of the open note if the replace changed it.
+                        if (selectedPath && paths.includes(selectedPath)) {
+                            try {
+                                loadNote(selectedPath, await readFile(selectedPath))
+                            } catch {
+                                // Reported by the external-change check if the file is gone.
+                            }
+                        }
+                    }}
+                    onClose={() => {
+                        setGlobalSearchOpen(false)
+                        setGlobalSearchQuery('')
+                    }}
+                    initialQuery={globalSearchQuery}
+                />
             )}
             {settingsOpen && (
                 <SettingsModal
@@ -775,6 +1189,8 @@ function App() {
                     onSetTheme={setTheme}
                     onSwitchVault={handleVaultSwitched}
                     onClose={() => setSettingsOpen(false)}
+                    typography={typography}
+                    onChangeTypography={setTypography}
                 />
             )}
             {quickHelpOpen && <QuickHelpModal onClose={() => setQuickHelpOpen(false)} />}
@@ -804,6 +1220,16 @@ function App() {
                 itemName={deleteTarget ? deleteTarget.split('/').pop() : undefined}
                 onConfirm={handleConfirmDelete}
                 onClose={() => setDeleteTarget(null)}
+            />
+            <ConfirmModal
+                isOpen={pendingNoteCreate !== null}
+                isDestructive={false}
+                title={t('wikiLinkCreateTitle')}
+                message={t('wikiLinkCreateDesc')}
+                itemName={pendingNoteCreate ? (pendingNoteCreate.parent ? `${pendingNoteCreate.parent}/` : '') + pendingNoteCreate.name : undefined}
+                confirmLabel={t('createBtn')}
+                onConfirm={handleConfirmNoteCreate}
+                onClose={() => setPendingNoteCreate(null)}
             />
             {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
         </div>

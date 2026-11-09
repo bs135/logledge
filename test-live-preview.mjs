@@ -556,3 +556,105 @@ test('Bullet list: task item hides its marker instead of adding a bullet', () =>
     assert.deepStrictEqual(bullets, [])
     assert.ok(hidden.some(([f, t]) => f === 0 && t === 2), '"- " is hidden for task items')
 })
+
+test('WikiLinks: an alias hides the target and the link carries data-wiki-target', () => {
+    const doc = 'See [[Project Roadmap#Q3|the plan]] now'
+    const plugin = new LivePreviewPlugin(createTestView(doc, 0))
+    const marks = []
+    const hidden = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-wikilink')) marks.push({text: doc.slice(from, to), attrs: val.spec.attributes})
+        else if (!val.spec?.class && !val.spec?.widget && from < to) hidden.push(doc.slice(from, to))
+    })
+    assert.strictEqual(marks.length, 1)
+    assert.strictEqual(marks[0].text, 'the plan')
+    assert.strictEqual(marks[0].attrs['data-wiki-target'], 'Project Roadmap#Q3|the plan')
+    assert.ok(hidden.includes('[[Project Roadmap#Q3|'), 'target and pipe are hidden')
+})
+
+// The bundled livePreview module loads the CommonJS builds of @codemirror/* via require,
+// so a state that includes its fields must be built from those same instances.
+function createViewWithNotes(doc, notePaths, selectionAnchor = 0) {
+    const {notePathsField, notePathFacet} = mod.exports
+    const cm = require('@codemirror/state')
+    const md = require('@codemirror/lang-markdown')
+    const lz = require('@lezer/markdown')
+    const state = cm.EditorState.create({
+        doc,
+        selection: {anchor: selectionAnchor},
+        extensions: [
+            md.markdown({base: md.markdownLanguage, extensions: [lz.GFM, lz.Table, lz.TaskList, lz.Strikethrough]}),
+            notePathFacet.of('notes/current.md'),
+            notePathsField.init(() => notePaths),
+        ],
+    })
+    return {state, visibleRanges: [{from: 0, to: doc.length}]}
+}
+
+function wikiMarks(plugin, docLength, doc) {
+    const out = []
+    plugin.decorations.between(0, docLength, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-wikilink')) out.push({text: doc.slice(from, to), cls: val.spec.class, title: val.spec.attributes?.title})
+    })
+    return out
+}
+
+test('WikiLinks: links to missing notes get the cm-wikilink-missing style', () => {
+    const doc = 'A [[Existing]] B [[Nope]] C [[#Local heading]]'
+    const marks = wikiMarks(new LivePreviewPlugin(createViewWithNotes(doc, ['notes/Existing.md'])), doc.length, doc)
+    assert.deepStrictEqual(
+        marks.map((m) => [m.text, m.cls.includes('cm-wikilink-missing')]),
+        [['Existing', false], ['Nope', true], ['#Local heading', false]],
+    )
+})
+
+test('WikiLinks: nothing is styled as missing before the note list is known', () => {
+    const doc = 'A [[Nope]]'
+    const marks = wikiMarks(new LivePreviewPlugin(createTestView(doc, 0)), doc.length, doc)
+    assert.strictEqual(marks.length, 1)
+    assert.ok(!marks[0].cls.includes('cm-wikilink-missing'))
+})
+
+test('Table: WikiLinks to missing notes are flagged in the widget data', () => {
+    const doc = '| Links |\n|---|\n| [[Existing]] [[Nope]] |\n\nend'
+    const found = findTableWidget(new LivePreviewPlugin(createViewWithNotes(doc, ['Existing.md'], doc.length)), doc.length)
+    assert.ok(found)
+    const wikis = found.widget.data.rows[0][0].content.filter((i) => i.t === 'wiki')
+    assert.deepStrictEqual(wikis.map((w) => [w.text, Boolean(w.missing)]), [['Existing', false], ['Nope', true]])
+})
+
+function escapeDecos(doc, anchor) {
+    const plugin = new LivePreviewPlugin(createTestView(doc, anchor))
+    const hidden = []
+    const dimmed = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (doc.slice(from, to) !== '\\') return
+        if (val.spec?.class?.includes('cm-formatting')) dimmed.push(from)
+        else if (!val.spec?.class && !val.spec?.widget) hidden.push(from)
+    })
+    return {hidden, dimmed}
+}
+
+test('Escapes: backslashes are hidden in plain text and revealed when the cursor is on them', () => {
+    const doc = String.raw`a \*star\* b`
+    assert.deepStrictEqual(escapeDecos(doc, doc.length), {hidden: [2, 8], dimmed: []})
+    // Cursor right after the first "\*": only that escape is revealed.
+    assert.deepStrictEqual(escapeDecos(doc, 4), {hidden: [8], dimmed: [2]})
+})
+
+test('Escapes: inside a link they are revealed together with the link syntax', () => {
+    const doc = String.raw`x [xem \[m 2\]](https://example.com) y`
+    assert.deepStrictEqual(escapeDecos(doc, 0), {hidden: [7, 12], dimmed: []})
+    // Cursor anywhere in the link reveals both escapes.
+    assert.deepStrictEqual(escapeDecos(doc, doc.indexOf('https')), {hidden: [], dimmed: [7, 12]})
+})
+
+test('Tags: #tags are marked with data-tag, but not in code or front matter', () => {
+    const doc = '---\ntags: [x]\n#notInFrontMatter\n---\nPlan #Work and `#code` here\n\n```\n#fenced\n```\nend #a/b'
+    const plugin = new LivePreviewPlugin(createTestView(doc, doc.length))
+    const found = []
+    plugin.decorations.between(0, doc.length, (from, to, val) => {
+        if (val.spec?.class?.includes('cm-tag')) found.push([doc.slice(from, to), val.spec.attributes['data-tag']])
+    })
+    assert.deepStrictEqual(found, [['#Work', 'work'], ['#a/b', 'a/b']])
+})

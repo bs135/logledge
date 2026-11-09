@@ -12,6 +12,9 @@ import type {
     VaultNode,
     WriteResult,
 } from './types'
+import type {LinkRef} from './backlinks'
+import type {TagCount} from './tags'
+import type {GrepResult, ReplaceOutcome} from './grep'
 
 // Vault list and selection
 
@@ -74,6 +77,26 @@ export const readAttachmentDataURL = (noteRelPath: string, imgRelPath: string) =
 
 export const searchNotes = (query: string) => invoke<SearchResult[]>('search_notes', {query})
 export const quickSwitch = (query: string) => invoke<string[]>('quick_switch', {query})
+/** Links that may point at `path` (same file name); resolve them with groupBacklinks. */
+export const backlinks = (path: string) => invoke<LinkRef[]>('backlinks', {path})
+/** Notes whose text contains `phrase`, e.g. a note title (unlinked mentions). */
+export const mentions = (phrase: string) => invoke<SearchResult[]>('mentions', {phrase})
+/** Exact (case-sensitive / regex) line-by-line search; honours tag: and path: filters. */
+export const grepNotes = (query: string, caseSensitive: boolean, regex: boolean, wholeWord: boolean) =>
+    invoke<GrepResult>('grep_notes', {query, caseSensitive, regex, wholeWord})
+/** Replaces matches in the given notes; a note whose match count changed is skipped. */
+export const replaceInNotes = (
+    query: string,
+    caseSensitive: boolean,
+    regex: boolean,
+    wholeWord: boolean,
+    replacement: string,
+    targets: {path: string; expected: number}[],
+) => invoke<ReplaceOutcome[]>('replace_in_notes', {query, caseSensitive, regex, wholeWord, replacement, targets})
+/** Every tag in the vault with its note count. */
+export const allTags = () => invoke<TagCount[]>('all_tags')
+/** Notes with `tag` or a tag nested under it. */
+export const notesWithTag = (tag: string) => invoke<string[]>('notes_with_tag', {tag})
 
 // Git sync
 
@@ -92,7 +115,7 @@ export const quitApp = () => invoke<void>('quit_app')
 // Events
 
 /** Backend events: `vault:changed` (no payload) and `sync:status` (SyncStatus). */
-export type AppEvent = 'vault:changed' | 'sync:status'
+export type AppEvent = 'vault:changed' | 'sync:status' | 'search:indexed'
 
 /**
  * Subscribes to a backend event and returns a synchronous unsubscribe, so it

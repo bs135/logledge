@@ -25,29 +25,42 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Nested Directory Tree**: Arbitrarily deep folder hierarchies with expandable/collapsible nodes.
 - **Drag-and-Drop Organization**: Move files and folders smoothly across the hierarchy.
 - **Inline Creation & Renaming**: Create notes/folders and rename entries directly in the tree without modal interruptions.
-- **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) with quick toggle support.
+- **Sort Order**: Sort the explorer by file name, modified or created date, in either direction, with or without folders first. Folders sort by their most recently modified note. Sorting and the file filter live in one View options menu in the explorer header.
+- **File Type Filtering**: Configurable whitelist/blacklist filter modes (defaults to markdown notes: `.md`, `.markdown`, `.txt`) toggled from the explorer's View options menu.
 - **Context Menus**: Context-aware menus on files, folders, and empty sidebar areas (New note, New folder, Cut, Copy, Paste, Make a copy, Copy path, Copy relative path, Show in system explorer, Rename, Delete).
 - **Safe Deletion**: Moves items directly to the operating system's Recycle Bin / Trash via the `trash` crate, preserving undo capabilities.
 - **Resizable & Collapsible Sidebar**: Draggable resize handle (double-click to reset) and shortcut (`Ctrl+\`; `Ctrl+B` also works outside the editor, where it does not mean bold) to toggle visibility.
+- **Back / Forward Navigation**: `Alt+←` / `Alt+→` (`⌘⌥←` / `⌘⌥→` on macOS), the mouse back/forward buttons, or the arrows in the title bar move through the notes opened in this session. Renames, moves and deletes keep the history in sync.
+- **Start Screen**: With no note open, the editor area offers New note, Quick Switcher and vault search, lists pinned and recent notes, and shows the main shortcuts.
+- **Recent & Pinned Notes**: Pin notes from the file-tree context menu. With an empty query, the Quick Switcher (`Ctrl+P`) lists pinned notes first, then recently opened ones, then the rest. Stored per vault and kept in sync with renames, moves and deletes. On startup (and when switching vaults) the last viewed note is reopened.
 - **Real-Time Filesystem Watcher**: Two-way sync with external disk changes via `notify` with debounce (300ms) and self-write suppression.
 
 ### Markdown Live Preview Editor (Obsidian-Style)
 - **CodeMirror 6 Live Preview**: Seamless hybrid editing supporting CommonMark and GitHub Flavored Markdown (GFM: tables, task lists, strikethrough, links, WikiLinks `[[note]]`). Delimiters hide when viewing and reveal in-place on cursor focus.
+- **WikiLink Navigation**: `Ctrl+Click` a `[[Note]]` to open it. Supports `[[Note|Alias]]` (shows the alias), `[[Note#Heading]]` (scrolls to the heading), `[[folder/Note]]` and `[[#Heading]]`. Bare names resolve to a note in the current folder first, then the shortest path in the vault. Links to missing notes are dimmed with a wavy underline; clicking one asks before creating the note next to the current one.
+- **WikiLink Autocomplete**: Typing `[[` suggests notes (fuzzy match, notes in the current folder first); accepting inserts the shortest name that still points at that note and closes the link with `]]`. After `[[Note#` (or `[[#` for the current note) it suggests that note's headings.
 - **Formatting Shortcuts**: `Ctrl+B` (bold), `Ctrl+I` (italic) and `Ctrl+Shift+X` (strikethrough) and `Ctrl+E` (inline code) toggle the markers around the selection; pressing again removes them.
 - **Emoticon to Emoji**: Typing an emoticon such as `:)`, `:D`, `;)` or `<3` followed by a space or Enter turns it into an emoji (🙂 😃 😉 ❤️). Press `Ctrl+Z` right after to keep the text. Code spans and code blocks are left untouched.
 - **Typographic Symbols**: The same way, `(c)` `(r)` `(tm)` (any case), `+-`, `--` and `---` become © ® ™ ± – —. Dashes are only converted after other text on a line without `|`, so horizontal rules, setext headings, front matter and table delimiter rows stay intact.
 - **Code Syntax Highlighting**: Multi-language syntax highlighting powered by CodeMirror.
 - **Sans-Serif Typography**: Clean, modern `Nunito` sans-serif typography across all headings and editor body.
+- **Typography Settings & Zoom**: Settings → Appearance sets the editor font size, font (Sans, Serif, Mono, System) and an optional readable line width. `Ctrl+=` / `Ctrl+-` zoom the editor text, `Ctrl+0` resets it.
 - **Interactive Widgets**: Interactive task list checkboxes (`- [ ]`), horizontal rules (`---`), and image previews.
 - **Dedicated Inline Title Bar**: Synchronizes note filename with input on blur/Enter, with automatic sanitization of invalid OS characters.
 - **Debounced Auto-Save**: Background auto-save (600ms debounce) with no manual `Ctrl+S` required.
+- **Editor Status Bar**: Shows whether the note is saved (Saved / Unsaved / Saving… / changed on disk / failed), plus word and character counts (of the selection too) and an estimated reading time.
+- **Paste URL as Link**: Select text and paste a URL to turn the selection into `[text](url)` (not inside code; one `Ctrl+Z` undoes it).
 - **Attachment Handling**: Paste images from clipboard or drag-and-drop into notes; saved automatically to `.attachments/` at the Vault root with relative markdown links.
 - **Editor Context Menu**: Right-click menu for Cut, Copy, Paste, Select All, Undo, and Redo.
+- **Outline Panel**: `Ctrl+Shift+\` (or the title-bar button) shows a resizable right panel with the note's headings; click one to jump to it, and the heading you are reading stays highlighted.
+- **Backlinks**: The right panel's Backlinks tab lists the notes that link to the open note (`[[WikiLinks]]` and Markdown links), with the linking lines, plus notes that mention its title without a link.
+- **Tags**: `#tag` and `#nested/tag` (or `tags:` in front matter) are highlighted in the editor and indexed. The right panel's Tags tab shows the tag tree with note counts; `tag:name` filters Global Search; Ctrl+Click a tag to search it.
 - **Remote Update Detection**: Alerts user when an active note is modified externally (via Git pull or external editor) with options to reload or preserve draft.
 
 ### Full-Text & Fuzzy Search
 - **Quick Switcher (`Ctrl+P`)**: Instant fuzzy search by filename (a port of the `sahilm/fuzzy` ranking).
 - **Global Search (`Ctrl+Shift+F`)**: Full-text search across all notes in the vault using SQLite FTS5 (`rusqlite`, bundled SQLite), displaying contextual snippets with highlighted search terms.
+- **Advanced Search & Replace**: Filter with `tag:name` and `path:folder` (`path:"My Notes"` for names with spaces); toggle match case (Alt+C), whole word (Alt+W) or regular expressions (Alt+R) for exact, line-by-line results; replace across notes with a per-note selection, a confirmation and `$1` groups in regex mode. Notes changed since the preview are skipped.
 - **Background Indexing**: Incremental reindexing runs asynchronously on background threads without blocking cold-start or user typing.
 - **Isolated Index Database**: SQLite index database is stored outside the Vault in the user's OS cache directory, preventing repo pollution.
 

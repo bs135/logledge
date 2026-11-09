@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react'
+import type {ReactNode} from 'react'
 import {getSyncStatus, onEvent, syncNow} from '../lib/api'
 import type {SyncStatus} from '../lib/types'
 import {Settings, CheckCircle2, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
@@ -6,6 +7,8 @@ import {useI18n} from '../i18n'
 
 interface SyncStatusBarProps {
     onOpenSettings: () => void
+    /** Shown on the right side of the bar (the open note's status). */
+    children?: ReactNode
 }
 
 function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
@@ -31,7 +34,7 @@ function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
 
 // SyncStatusBar displays GitHub sync status (Phase 4) at the bottom of the screen,
 // allowing users to click to sync immediately or open settings.
-export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
+export function SyncStatusBar({onOpenSettings, children}: SyncStatusBarProps) {
     const {t} = useI18n()
     const [status, setStatus] = useState<SyncStatus>({state: 'not_configured', message: ''})
     const [syncing, setSyncing] = useState(false)
@@ -86,6 +89,7 @@ export function SyncStatusBar({onOpenSettings}: SyncStatusBarProps) {
                 <StatusIcon state={status.state} syncing={syncing} />
                 <span>{syncing ? t('syncSyncing') : getStateLabel(status.state)}</span>
             </button>
+            {children && <div className="ml-auto flex min-w-0 items-center">{children}</div>}
         </div>
     )
 }

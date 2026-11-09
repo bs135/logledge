@@ -4,11 +4,25 @@ import {
     EditorView,
     WidgetType,
 } from '@codemirror/view'
-import { EditorState, Facet, Range, StateField } from '@codemirror/state'
+import { EditorState, Facet, Range, StateEffect, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import { readAttachmentDataURL } from '../lib/api'
 import { translate } from '../i18n'
+import { parseWikiLink, resolveWikiLink, wikiLinkLabel } from '../lib/wikilink'
+import { findInlineTags, frontMatterLength } from '../lib/tags'
+
+// All file paths in the vault, used to tell WikiLinks to existing notes apart from links
+// to missing ones. `null` until the editor has been given the list: nothing is styled
+// as missing then. Updated with the setNotePaths effect whenever the file tree changes.
+export const setNotePaths = StateEffect.define<string[]>()
+export const notePathsField = StateField.define<string[] | null>({
+    create: () => null,
+    update(value, tr) {
+        for (const e of tr.effects) if (e.is(setNotePaths)) value = e.value
+        return value
+    },
+})
 
 // Carries the active note's Vault-relative path into the StateField so the Image
 // decoration can resolve local attachment sources (see ImageWidget/resolveAttachmentSrc).
@@ -198,7 +212,7 @@ class ImageWidget extends WidgetType {
 type TableInline =
     | { t: 'text'; text: string }
     | { t: 'code'; text: string }
-    | { t: 'wiki'; text: string }
+    | { t: 'wiki'; text: string; missing?: boolean }
     | { t: 'strong' | 'em' | 'strike'; children: TableInline[] }
     | { t: 'link'; url: string; children: TableInline[] }
 
@@ -216,6 +230,10 @@ interface TableData {
     header: TableCellData[]
     rows: TableCellData[][]
 }
+
+// Inline elements whose markup is revealed as a whole when the cursor is inside them; an
+// escape inside one is revealed at the same time.
+const INLINE_SCOPE_NODES = new Set(['Link', 'Image', 'Emphasis', 'StrongEmphasis', 'Strikethrough'])
 
 // Syntax nodes that are pure markup inside inline formatting and never shown as text.
 const INLINE_MARK_NODES = new Set(['EmphasisMark', 'StrikethroughMark', 'CodeMark', 'LinkMark'])
@@ -354,6 +372,27 @@ function buildTableData(doc: EditorState['doc'], table: SyntaxNode): TableData |
     return { aligns: header.map((_, i) => aligns[i] ?? null), header, rows }
 }
 
+const WIKILINK_CLASS =
+    'cm-wikilink text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded cursor-pointer font-medium'
+// A link to a note that does not exist yet: same box as WIKILINK_CLASS (padding, radius,
+// weight) so both kinds take the same space, but dimmed, no background, wavy underline.
+const WIKILINK_MISSING_CLASS =
+    'cm-wikilink cm-wikilink-missing text-purple-500/70 dark:text-purple-400/60 px-1.5 py-0.5 rounded cursor-pointer font-medium underline decoration-wavy underline-offset-4 decoration-purple-400/60'
+
+// Flags table-cell WikiLinks that point at missing notes. The flag is part of the widget
+// data, so the table is redrawn when a note is created or deleted.
+function markMissingWikiLinks(data: TableData, isMissing: (raw: string) => boolean) {
+    const walk = (items: TableInline[]) => {
+        for (const item of items) {
+            if (item.t === 'wiki') {
+                if (isMissing(item.text)) item.missing = true
+            } else if ('children' in item) walk(item.children)
+        }
+    }
+    for (const cell of data.header) walk(cell.content)
+    for (const row of data.rows) for (const cell of row) walk(cell.content)
+}
+
 function appendTableInlines(parent: HTMLElement, items: TableInline[]) {
     for (const item of items) {
         switch (item.t) {
@@ -370,9 +409,10 @@ function appendTableInlines(parent: HTMLElement, items: TableInline[]) {
             }
             case 'wiki': {
                 const el = document.createElement('span')
-                el.className =
-                    'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded font-medium'
-                el.textContent = item.text
+                el.className = item.missing ? WIKILINK_MISSING_CLASS : WIKILINK_CLASS
+                el.setAttribute('data-wiki-target', item.text)
+                el.title = translate(item.missing ? 'wikiLinkMissingTitle' : 'wikiLinkTitle')
+                el.textContent = wikiLinkLabel(item.text)
                 parent.appendChild(el)
                 break
             }
@@ -451,7 +491,7 @@ export class TableWidget extends WidgetType {
         // clicks on links are left alone so Editor's link handler can open them.
         wrap.addEventListener('mousedown', (e) => {
             const target = e.target as HTMLElement | null
-            if ((e.ctrlKey || e.metaKey) && target?.closest('.cm-link')) return
+            if ((e.ctrlKey || e.metaKey) && target?.closest('.cm-link, .cm-wikilink')) return
             e.preventDefault()
             const cellEl = target?.closest('[data-from]')
             const pos = cellEl ? Number(cellEl.getAttribute('data-from')) : this.tableFrom
@@ -519,7 +559,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
         if (this.lang) {
             const langBadge = document.createElement('span')
             langBadge.className =
-                'font-mono text-[10px] font-medium tracking-wider uppercase text-neutral-400 dark:text-neutral-500 leading-none select-none'
+                'font-mono text-[0.625em] font-medium tracking-wider uppercase text-neutral-400 dark:text-neutral-500 leading-none select-none'
             langBadge.textContent = this.lang
             leftWrap.appendChild(langBadge)
         }
@@ -529,7 +569,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
         const copyBtn = document.createElement('button')
         copyBtn.type = 'button'
         copyBtn.className =
-            'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[10px] leading-none'
+            'cm-codeblock-copy-btn flex items-center gap-1 px-1 py-[1px] rounded transition-colors duration-150 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 cursor-pointer font-sans text-[0.625em] leading-none'
         copyBtn.title = translate('codeCopyTitle')
 
         copyBtn.innerHTML = `
@@ -598,7 +638,7 @@ export class CodeBlockHeaderWidget extends WidgetType {
 // in font size, line height, padding or margin makes the block change height on toggle.
 function codeblockLineClass(first: boolean, last: boolean, footer: boolean): string {
     let cls =
-        'cm-codeblock-line font-mono text-sm bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5'
+        'cm-codeblock-line font-mono text-[0.875em] bg-neutral-100/70 dark:bg-neutral-800/50 py-0.5'
     if (first) cls += ' cm-codeblock-first'
     if (last) cls += ' cm-codeblock-last'
     if (footer) cls += ' cm-codeblock-footer'
@@ -644,6 +684,14 @@ function buildDecorations(state: EditorState): BuildResult {
     const selFrom = selection.from
     const selTo = selection.to
     const notePath = state.facet(notePathFacet)
+    const notePaths = state.field(notePathsField, false) ?? null
+    // True when the link points at a note that does not exist. Same-note links
+    // ([[#Heading]]) and an unknown file list never count as missing.
+    const isMissingLink = (raw: string): boolean => {
+        if (!notePaths) return false
+        const { target } = parseWikiLink(raw)
+        return target !== '' && resolveWikiLink(target, notePaths, notePath || null) === null
+    }
 
     const decorations: Range<Decoration>[] = []
     const interactiveRanges: InteractiveRange[] = []
@@ -707,6 +755,22 @@ function buildDecorations(state: EditorState): BuildResult {
                         }
                     }
                 }
+                return
+            }
+
+            // Backslash escapes (\[ \* \# ...): the backslash is hidden like other markup.
+            // It is revealed together with the inline element it belongs to (a link's
+            // syntax is revealed as a whole), or on its own in plain text.
+            if (name === 'Escape') {
+                const parent = node.node.parent
+                const scope = parent && INLINE_SCOPE_NODES.has(parent.name) ? parent : node.node
+                const isCursorInside = selFrom <= scope.to && selTo >= scope.from
+                interactiveRanges.push({ from: scope.from, to: scope.to })
+                decorations.push(
+                    isCursorInside
+                        ? Decoration.mark({ class: 'cm-formatting text-neutral-400 dark:text-neutral-500' }).range(nodeFrom, nodeFrom + 1)
+                        : Decoration.replace({}).range(nodeFrom, nodeFrom + 1)
+                )
                 return
             }
 
@@ -855,7 +919,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeFrom, nodeFrom + openLen)
                         )
                         decorations.push(
@@ -865,7 +929,7 @@ function buildDecorations(state: EditorState): BuildResult {
                         )
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeTo - closeLen, nodeTo)
                         )
                     }
@@ -952,7 +1016,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(nodeFrom, nodeFrom + 1)
                         )
                         decorations.push(
@@ -962,7 +1026,7 @@ function buildDecorations(state: EditorState): BuildResult {
                         )
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                                class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                             }).range(labelEnd, nodeTo)
                         )
                     }
@@ -997,7 +1061,7 @@ function buildDecorations(state: EditorState): BuildResult {
                     } else {
                         decorations.push(
                             Decoration.mark({
-                                class: 'cm-formatting font-mono text-xs text-neutral-400 dark:text-neutral-500',
+                                class: 'cm-formatting font-mono text-[0.75em] text-neutral-400 dark:text-neutral-500',
                             }).range(nodeFrom, nodeTo)
                         )
                     }
@@ -1020,6 +1084,7 @@ function buildDecorations(state: EditorState): BuildResult {
                 if (isActive || !isTopLevel) return
                 const data = buildTableData(doc, node.node)
                 if (!data) return
+                markMissingWikiLinks(data, isMissingLink)
                 renderedTableRanges.push({ from: startLine.from, to: endLine.to })
                 decorations.push(
                     Decoration.replace({
@@ -1197,7 +1262,7 @@ function buildDecorations(state: EditorState): BuildResult {
                             const fenceMarkLen = fenceMatch[2].length
                             decorations.push(
                                 Decoration.mark({
-                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs select-none',
+                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em] select-none',
                                 }).range(
                                     startLine.from + indentLen,
                                     startLine.from + indentLen + fenceMarkLen
@@ -1211,7 +1276,7 @@ function buildDecorations(state: EditorState): BuildResult {
                                 if (langStart !== -1) {
                                     decorations.push(
                                         Decoration.mark({
-                                            class: 'cm-formatting text-purple-600 dark:text-purple-400 font-mono text-xs font-semibold',
+                                            class: 'cm-formatting text-purple-600 dark:text-purple-400 font-mono text-[0.75em] font-semibold',
                                         }).range(
                                             startLine.from + langStart,
                                             startLine.from + langStart + fenceMatch[3].length
@@ -1262,7 +1327,7 @@ function buildDecorations(state: EditorState): BuildResult {
                             const fenceMarkLen = endMatch[2].length
                             decorations.push(
                                 Decoration.mark({
-                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs select-none',
+                                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em] select-none',
                                 }).range(
                                     endLine.from + indentLen,
                                     endLine.from + indentLen + fenceMarkLen
@@ -1290,14 +1355,24 @@ function buildDecorations(state: EditorState): BuildResult {
         if (rangesOverlap(renderedTableRanges, matchFrom, matchTo)) continue
         interactiveRanges.push({ from: matchFrom, to: matchTo })
         const isCursorInside = selFrom <= matchTo && selTo >= matchFrom
+        // Editor's Ctrl+Click handler reads the raw link text from data-wiki-target.
+        const missing = isMissingLink(wikiMatch[1])
+        const wikiAttrs = {
+            'data-wiki-target': wikiMatch[1],
+            title: translate(missing ? 'wikiLinkMissingTitle' : 'wikiLinkTitle'),
+        }
         if (!isCursorInside) {
+            // With an alias ([[Note|Alias]]) only the alias stays visible.
+            const pipe = wikiMatch[1].indexOf('|')
+            const labelFrom = pipe >= 0 && wikiMatch[1].slice(pipe + 1).trim() ? matchFrom + 2 + pipe + 1 : matchFrom + 2
             decorations.push(
-                Decoration.replace({}).range(matchFrom, matchFrom + 2)
+                Decoration.replace({}).range(matchFrom, labelFrom)
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-wikilink text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded cursor-pointer font-medium hover:underline',
-                }).range(matchFrom + 2, matchTo - 2)
+                    class: missing ? WIKILINK_MISSING_CLASS : WIKILINK_CLASS + ' hover:underline',
+                    attributes: wikiAttrs,
+                }).range(labelFrom, matchTo - 2)
             )
             decorations.push(
                 Decoration.replace({}).range(matchTo - 2, matchTo)
@@ -1305,19 +1380,45 @@ function buildDecorations(state: EditorState): BuildResult {
         } else {
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                 }).range(matchFrom, matchFrom + 2)
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-wikilink text-purple-600 dark:text-purple-400 font-medium',
+                    class: missing
+                        ? 'cm-wikilink cm-wikilink-missing text-purple-500/70 dark:text-purple-400/60 font-medium'
+                        : 'cm-wikilink text-purple-600 dark:text-purple-400 font-medium',
+                    attributes: wikiAttrs,
                 }).range(matchFrom + 2, matchTo - 2)
             )
             decorations.push(
                 Decoration.mark({
-                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-xs',
+                    class: 'cm-formatting text-neutral-400 dark:text-neutral-500 font-mono text-[0.75em]',
                 }).range(matchTo - 2, matchTo)
             )
+        }
+    }
+
+    // 13. Tags (#tag, #nested/tag): same rules as the indexer (lib/tags.ts). Not in
+    // code, rendered tables or YAML front matter. Ctrl+Click searches the tag.
+    {
+        const bodyStart = frontMatterLength(fullText)
+        let lineStart = 0
+        for (const lineText of fullText.split('\n')) {
+            const lineFrom = lineStart
+            lineStart += lineText.length + 1
+            if (lineFrom < bodyStart || !lineText.includes('#')) continue
+            for (const m of findInlineTags(lineText)) {
+                const from = lineFrom + m.from
+                const to = lineFrom + m.to
+                if (rangesOverlap(codeRanges, from, to) || rangesOverlap(renderedTableRanges, from, to)) continue
+                decorations.push(
+                    Decoration.mark({
+                        class: 'cm-tag text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/50 rounded px-1 py-0.5 cursor-pointer',
+                        attributes: { 'data-tag': m.tag, title: translate('tagTitle') },
+                    }).range(from, to)
+                )
+            }
         }
     }
 
@@ -1371,7 +1472,7 @@ export const livePreview = StateField.define<LivePreviewState>({
         return buildState(state)
     },
     update(value, tr) {
-        if (tr.docChanged) {
+        if (tr.docChanged || tr.effects.some((e) => e.is(setNotePaths))) {
             return buildState(tr.state)
         }
         if (tr.selection) {
