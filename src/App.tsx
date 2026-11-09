@@ -123,7 +123,7 @@ function App() {
     const [inlineAction, setInlineAction] = useState<InlineAction | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
     // Heading to scroll to after following a [[Note#Heading]] link.
-    const [scrollTarget, setScrollTarget] = useState<{heading?: string; pos?: number; seq: number} | null>(null)
+    const [scrollTarget, setScrollTarget] = useState<{heading?: string; pos?: number; line?: number; seq: number} | null>(null)
     // Right panel (outline): open state and width survive restarts.
     const [rightPanelOpen, setRightPanelOpen] = useState(() => localStorage.getItem('logledge:rightPanelOpen') === 'true')
     const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
@@ -319,7 +319,7 @@ function App() {
     const navigateRef = useRef(navigate)
     navigateRef.current = navigate
 
-    async function openFile(path: string, heading: string | null = null, recordHistory = true) {
+    async function openFile(path: string, heading: string | null = null, recordHistory = true, line?: number) {
         // Let in-flight auto-saves of the current note finish before switching.
         await saveQueueRef.current
         let text = ''
@@ -331,7 +331,7 @@ function App() {
         loadNote(path, text)
         if (recordHistory) setNavHistory((h) => pushHistory(h, path))
         noteLists.update((l) => ({...l, recent: addRecent(l.recent, path)}))
-        setScrollTarget(heading ? {heading, seq: Date.now()} : null)
+        setScrollTarget(heading ? {heading, seq: Date.now()} : line ? {line, seq: Date.now()} : null)
         setQuickSwitcherOpen(false)
         setGlobalSearchOpen(false)
     }
@@ -1103,6 +1103,15 @@ function App() {
                         activeIndex={selectedPath ? activeHeading : -1}
                         onSelectHeading={(item) => setScrollTarget({pos: item.from, seq: Date.now()})}
                         onSelectTop={() => setScrollTarget({pos: 0, seq: Date.now()})}
+                        notePath={selectedPath}
+                        notePaths={notePaths}
+                        onOpenNote={(path, line) => {
+                            if (path === selectedPath) {
+                                if (line) setScrollTarget({line, seq: Date.now()})
+                            } else {
+                                openFile(path, null, true, line)
+                            }
+                        }}
                     />
                 )}
             </div>

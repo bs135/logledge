@@ -38,7 +38,7 @@ interface EditorProps {
      * Where to scroll: a heading by text (from a [[Note#Heading]] link) or a document
      * position (from the outline). `seq` changes on every request.
      */
-    scrollTarget?: {heading?: string; pos?: number; seq: number} | null
+    scrollTarget?: {heading?: string; pos?: number; line?: number; seq: number} | null
     /** Headings of the note (for the outline), updated as the note changes. */
     onOutlineChange?: (items: OutlineItem[]) => void
     /** Document position at the top of the visible area, updated while scrolling. */
@@ -346,6 +346,8 @@ export function Editor({path, initialContent, onContentChange, onChange, onRenam
         let pos: number
         if (scrollTarget.pos !== undefined) {
             pos = Math.min(Math.max(0, scrollTarget.pos), view.state.doc.length)
+        } else if (scrollTarget.line !== undefined) {
+            pos = view.state.doc.line(Math.min(Math.max(1, scrollTarget.line), view.state.doc.lines)).from
         } else {
             const line = scrollTarget.heading ? findHeadingLine(view.state.doc.toString(), scrollTarget.heading) : null
             if (line === null) return

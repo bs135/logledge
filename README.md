@@ -53,6 +53,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **Attachment Handling**: Paste images from clipboard or drag-and-drop into notes; saved automatically to `.attachments/` at the Vault root with relative markdown links.
 - **Editor Context Menu**: Right-click menu for Cut, Copy, Paste, Select All, Undo, and Redo.
 - **Outline Panel**: `Ctrl+Shift+\` (or the title-bar button) shows a resizable right panel with the note's headings; click one to jump to it, and the heading you are reading stays highlighted.
+- **Backlinks**: The right panel's Backlinks tab lists the notes that link to the open note (`[[WikiLinks]]` and Markdown links), with the linking lines, plus notes that mention its title without a link.
 - **Remote Update Detection**: Alerts user when an active note is modified externally (via Git pull or external editor) with options to reload or preserve draft.
 
 ### Full-Text & Fuzzy Search
