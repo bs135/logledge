@@ -1,6 +1,6 @@
 [package]
 name = "logledge"
-version = "0.8.0"
+version = "0.8.1"
 description = "Local-first Markdown note-taking app synced via GitHub"
 authors = ["bs135"]
 edition = "2021"
