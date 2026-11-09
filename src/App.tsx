@@ -11,7 +11,7 @@ import {FileClipboard, FileTree, InlineAction, parentOf, resolveCreateParent} fr
 import {Editor, type EditorStats} from './components/Editor'
 import {EditorStatus, type SaveState} from './components/EditorStatus'
 import {EmptyState} from './components/EmptyState'
-import {TreeSortMenu} from './components/TreeSortMenu'
+import {ExplorerViewMenu} from './components/ExplorerViewMenu'
 import {RightPanel, RIGHT_PANEL_DEFAULT_WIDTH, RIGHT_PANEL_MAX_WIDTH, RIGHT_PANEL_MIN_WIDTH} from './components/RightPanel'
 import {activeHeadingIndex, type OutlineItem} from './lib/outline'
 import {normalizeTreeSort, type TreeSort} from './lib/treeSort'
@@ -29,7 +29,7 @@ import {addRecent, removeFromList, renameInList, switcherSections, togglePin} fr
 import {canGoBack, canGoForward, emptyHistory, NavHistory, pushHistory, removeFromHistory, renameInHistory, stepHistory} from './lib/navHistory'
 import {createFile as apiCreateFile, createFolder as apiCreateFolder, detectVaultInfo, getAbsolutePath, getFileFilterConfig, getNativeRelativePath, onEvent, pickVaultFolder, readFile, revealInExplorer, saveFileFilterConfig, saveVault, setGitHubPAT, writeFileIfUnchanged} from './lib/api'
 import type {FileFilterConfig, VaultEntry} from './lib/types'
-import {FilePlus, FolderPlus, Filter, FilterX} from 'lucide-react'
+import {FilePlus, FolderPlus} from 'lucide-react'
 
 const DEFAULT_SIDEBAR_WIDTH = 256
 const MIN_SIDEBAR_WIDTH = 180
@@ -871,33 +871,20 @@ function App() {
                                         e.stopPropagation()
                                     }}
                                 >
-                                    <button
-                                        onClick={() => {
-                                            const updated = ({
-                                                ...filterConfig,
-                                                enabled: !filterConfig.enabled,
-                                            })
+                                    <ExplorerViewMenu
+                                        sort={treeSort}
+                                        onChangeSort={setTreeSort}
+                                        filter={filterConfig}
+                                        onToggleFilter={() => {
+                                            const updated = {...filterConfig, enabled: !filterConfig.enabled}
                                             setFilterConfig(updated)
                                             saveFileFilterConfig(updated).catch(() => {})
                                         }}
-                                        title={filterConfig.enabled ? t('filterActive') : t('filterInactive')}
-                                        className={`p-1 rounded transition-colors ${
-                                            filterConfig.enabled
-                                                ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40'
-                                                : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200'
-                                        }`}
-                                    >
-                                        {filterConfig.enabled ? (
-                                            <Filter className="h-3.5 w-3.5" />
-                                        ) : (
-                                            <FilterX className="h-3.5 w-3.5" />
-                                        )}
-                                    </button>
-                                    <TreeSortMenu
-                                        sort={treeSort}
-                                        onChange={setTreeSort}
+                                        onEditFilter={() => {
+                                            setSettingsTab('filter')
+                                            setSettingsOpen(true)
+                                        }}
                                         buttonClassName="p-1 rounded text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-200"
-                                        activeButtonClassName="p-1 rounded bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40"
                                     />
                                     <button
                                         onClick={() => handleCreateNote(resolveCreateParent(vault.tree, treeActivePath))}

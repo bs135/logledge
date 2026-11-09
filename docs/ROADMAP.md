@@ -206,6 +206,17 @@ item needs a big refactor of something already shipped:
     `tree_reports_modification_times`. Frontend: pure `src/lib/treeSort.ts` (tests:
     `test-tree-sort.mjs`), `TreeSortMenu.tsx`, applied in `FileTree` (whose filter
     now keeps all node fields).
+  - Later refined: the separate file-filter toggle and the sort button were merged
+    into one **View options** button (sliders icon, `ExplorerViewMenu.tsx`, formerly
+    `TreeSortMenu.tsx`): sort options, "Folders first", "Apply file filter" (with the
+    extensions it shows/hides) and "Edit file filter…" (opens Settings › Filter). The
+    button looks like the other header buttons (it is a menu, not a toggle); a small
+    blue dot on the icon and a "(customized)" tooltip mark a non-default view (sort
+    not the default, or the filter off). The explorer
+    header now holds View options plus the two actions (new note, new folder).
+    The menu is `position: fixed`, placed from the button and kept inside the window
+    (the old sort menu was `absolute` and got cut off by the sidebar's
+    `overflow: hidden` when the sidebar was narrow).
   - Checks: `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` clean;
     `cargo test` 70/71 — the one failure,
     `state::tests::final_sync_runs_once_and_respects_timeout`, also fails on clean
