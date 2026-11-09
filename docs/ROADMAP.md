@@ -37,6 +37,27 @@ item needs a big refactor of something already shipped:
 
 ---
 
+## Release 0.9.0 (Phases 1–3) — pre-release review
+
+Findings of the review of `main...develop` before the first release of this roadmap
+(release PR #64), and what was done with them:
+
+| # | Finding | Status |
+|---|---------|--------|
+| 1 | Last ~600 ms of typing lost when switching notes quickly (the Editor's pending auto-save was dropped on unmount) or after a rename/move remounted it | ✅ fixed: `App.tsx#flushPendingEdits` saves pending edits in `openFile`, `followSelectedPath` and before a replace |
+| 2 | Opening a note already gone on disk shows an empty editable note; typing recreates it | ⬜ follow-up |
+| 3 | Tag rules differ for combining marks (NFD Vietnamese): TS accepts `\p{M}`, Rust does not | ⬜ follow-up |
+| 4 | Replace with a regex that matches empty text at some positions (e.g. `\bx?`) replaces more than previewed | ⬜ follow-up |
+| 5 | `reindex_file` and a background `reindex` are not serialized (index can miss a note until the next update) | ⬜ follow-up |
+| 6 | Alt+←/→ also fires while a text field or dialog has focus | ⬜ follow-up |
+
+Notes on #1: flushing from the Editor's unmount cleanup was considered and rejected —
+its `onChange` also sets the shared `currentContentRef`, which by then belongs to the
+newly opened note, so a later save could write the old note's text into the new one.
+Not covered (pre-existing, unchanged): switching vaults with unsaved edits, and
+switching notes while the "changed on disk" conflict banner is shown.
+
+
 ## Phase 1 — Linking & navigation
 
 | # | Item | Status | Branch |

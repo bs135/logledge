@@ -280,10 +280,25 @@ function App() {
         return saveQueueRef.current
     }
 
+    // flushPendingEdits saves the open note's latest text right away when it differs
+    // from what is on disk. The Editor auto-saves 600 ms after the last keystroke and
+    // drops that pending save when it unmounts, so without this the last keystrokes
+    // were lost when switching notes quickly (Alt+Left, a link, the outline, ...) or
+    // when a rename/move remounted the Editor. A note deleted on disk is left alone
+    // (its banner decides), as in queueSave.
+    function flushPendingEdits() {
+        const {path, content} = diskRef.current
+        if (path && !noteDeletedRef.current && currentContentRef.current !== content) {
+            queueSave(path, currentContentRef.current)
+        }
+    }
+
     // followSelectedPath keeps the open note (and its unsaved edits) when its path
     // changes because the note or one of its parent folders was renamed.
     function followSelectedPath(newPath: string) {
         diskRef.current = {...diskRef.current, path: newPath}
+        // The Editor remounts for the new path: save pending edits there now.
+        flushPendingEdits()
         // A check that raced with the rename may have read the old, now missing path.
         if (noteDeletedRef.current) {
             setNoteDeleted(false)
@@ -327,7 +342,8 @@ function App() {
     navigateRef.current = navigate
 
     async function openFile(path: string, heading: string | null = null, recordHistory = true, line?: number) {
-        // Let in-flight auto-saves of the current note finish before switching.
+        // Save edits not yet auto-saved, and let in-flight saves finish, before switching.
+        flushPendingEdits()
         await saveQueueRef.current
         let text = ''
         try {
@@ -1143,9 +1159,7 @@ function App() {
                     }}
                     onBeforeReplace={async () => {
                         // Write the open note's latest text first, so the replace sees it.
-                        if (selectedPath && !noteDeletedRef.current && currentContentRef.current !== diskRef.current.content) {
-                            queueSave(selectedPath, currentContentRef.current)
-                        }
+                        flushPendingEdits()
                         await saveQueueRef.current
                     }}
                     onReplaced={async (paths) => {
