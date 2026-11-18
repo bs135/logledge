@@ -49,6 +49,7 @@ import {checkForUpdateManually} from './updateCheck'
 
 interface SettingsModalProps {
     initialTab?: 'general' | 'filter' | 'vaults' | 'appearance' | 'about'
+    onTabChange?: (tab: 'general' | 'filter' | 'vaults' | 'appearance' | 'about') => void
     currentVaultPath: string | null
     currentTheme: ThemeMode
     filterConfig: FileFilterConfig
@@ -62,6 +63,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({
     initialTab = 'general',
+    onTabChange,
     currentVaultPath,
     currentTheme,
     filterConfig,
@@ -73,7 +75,14 @@ export function SettingsModal({
     onChangeTypography,
 }: SettingsModalProps) {
     const {lang, setLanguage, t} = useI18n()
-    const [tab, setTab] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>(initialTab)
+    const [tab, setTabState] = useState<'general' | 'filter' | 'vaults' | 'appearance' | 'about'>(initialTab)
+
+    // Keep the parent in sync so the active tab survives a remount
+    // (e.g. App re-renders in a different branch while the vault reloads).
+    function setTab(next: typeof tab) {
+        setTabState(next)
+        onTabChange?.(next)
+    }
 
     // Multi-Vault state
     const [vaults, setVaults] = useState<VaultEntry[]>([])
