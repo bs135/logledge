@@ -445,16 +445,24 @@ impl SyncService {
     /// as "Name.conflict.<timestamp>.md" and takes the remote version, per the
     /// conflict policy.
     fn merge_with_conflict_rename(&self, s: &Settings, remote_ref: &str) -> Result<()> {
-        let base = self.run(s, &["merge-base", "HEAD", remote_ref], None)?;
-        let base = base.trim();
-        let local_changed = self.changed_files(s, base, "HEAD")?;
-        let remote_changed = self.changed_files(s, base, remote_ref)?;
+        // `merge-base` exits 1 when the histories share no commit (e.g. a local
+        // Vault initialised separately from a remote that already has content).
+        // Then every file counts as added on both sides, measured against the
+        // empty tree, and the merge must allow unrelated histories.
+        const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+        let (base, unrelated) = match self.run(s, &["merge-base", "HEAD", remote_ref], None) {
+            Ok(out) => (out.trim().to_string(), false),
+            Err(_) => (EMPTY_TREE.to_string(), true),
+        };
+        let local_changed = self.changed_files(s, &base, "HEAD")?;
+        let remote_changed = self.changed_files(s, &base, remote_ref)?;
 
-        if let Err(e) = self.run(
-            s,
-            &["merge", "--no-commit", "--no-ff", "-X", "ours", remote_ref],
-            None,
-        ) {
+        let mut merge_args = vec!["merge", "--no-commit", "--no-ff", "-X", "ours"];
+        if unrelated {
+            merge_args.push("--allow-unrelated-histories");
+        }
+        merge_args.push(remote_ref);
+        if let Err(e) = self.run(s, &merge_args, None) {
             // "-X ours" resolves content conflicts, but structural ones (e.g.
             // modified locally, deleted remotely) still stop the merge. Those are
             // handled below as long as every unmerged path changed on both
@@ -473,6 +481,15 @@ impl SyncService {
 
         let ts = now("%Y-%m-%dT%H-%M-%S");
         for path in remote_changed.intersection(&local_changed) {
+            // Both sides ended with identical content (common when adopting an
+            // existing remote): nothing to preserve.
+            let local_blob = self.run(s, &["rev-parse", &format!("HEAD:{path}")], None);
+            let remote_blob = self.run(s, &["rev-parse", &format!("{remote_ref}:{path}")], None);
+            if let (Ok(l), Ok(r)) = (&local_blob, &remote_blob) {
+                if l.trim() == r.trim() {
+                    continue;
+                }
+            }
             let abs = s.root.join(path);
             // Only a path present in the local commit has a local version worth
             // keeping. When it was deleted locally and modified remotely, the
