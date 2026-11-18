@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "node --test test-live-preview.mjs test-updater.mjs test-formatting.mjs test-emoji.mjs test-wikilink.mjs test-wiki-complete.mjs test-nav-history.mjs test-note-lists.mjs test-text-stats.mjs test-typography.mjs test-paste-link.mjs test-tree-sort.mjs test-outline.mjs test-backlinks.mjs test-tags.mjs test-grep.mjs"
+    "test": "node --test \"tests/**/*.test.mjs\""
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -34,6 +34,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.6.3",
     "vite": "^7.0.0"
