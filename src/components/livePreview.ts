@@ -1441,7 +1441,7 @@ function buildDecorations(state: EditorState): BuildResult {
 }
 
 // Test-only seam: exposes buildDecorations behind a small plugin-shaped wrapper so
-// test-live-preview.mjs can exercise the real decoration logic without depending on
+// tests/live-preview.test.mjs can exercise the real decoration logic without depending on
 // the StateField/view machinery (see test harness for usage).
 export class LivePreviewPlugin {
     decorations: DecorationSet

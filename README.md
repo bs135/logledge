@@ -5,7 +5,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 [![Release](https://github.com/bs135/logledge/actions/workflows/release.yml/badge.svg)](https://github.com/bs135/logledge/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![Logledge Preview](docs/assets/screenshot.png)
+![Logledge Preview](docs/assets/screenshot-v0.9.0.png)
 
 ---
 

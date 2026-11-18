@@ -346,7 +346,7 @@ No blocker found. Plan changes going into Phase 1:
 - Update check ported to `src/lib/updater.ts` with the Go behaviour: drafts
   and pre-releases are ignored, pre-release-aware version comparison, and the
   release link falls back to the releases page unless it points at this repo.
-  `test-updater.mjs` ports `updater_test.go` and runs in `npm test`.
+  `tests/updater.test.mjs` ports `updater_test.go` and runs in `npm test`.
 - `src/lib/disableWebviewDefaults.ts` (from xmark) blocks the native context
   menu and reload shortcuts (F5, Ctrl/Cmd+R), which would drop unsaved editor
   content; the app's own context menus are unaffected.

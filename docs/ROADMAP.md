@@ -80,7 +80,7 @@ switching notes while the "changed on disk" conflict banner is shown.
   note is created (in the current note's folder, or at the given path) and opened.
 - Works inside rendered tables too.
 - **As built:** resolver and heading lookup in `src/lib/wikilink.ts` (unit tests in
-  `test-wikilink.mjs`); `livePreview.ts` hides `Target|` for aliased links and puts the
+  `tests/wikilink.test.mjs`); `livePreview.ts` hides `Target|` for aliased links and puts the
   raw link text in `data-wiki-target`; `Editor.tsx` handles Ctrl/Cmd+Click on
   `mousedown` in the capture phase (a `click` handler misses it: CodeMirror moves the
   cursor into the link on mousedown and Live Preview replaces the clicked element),
@@ -113,7 +113,7 @@ switching notes while the "changed on disk" conflict banner is shown.
   heading completion. `Editor.tsx` adds `autocompletion({override: [...]})`, so
   lang-markdown's HTML tag completion stays off. `@codemirror/autocomplete` is now a
   direct dependency. Dropdown styled for light/dark in `style.css`. Tests:
-  `test-wikilink.mjs` and `test-wiki-complete.mjs` (runs the real source).
+  `tests/wikilink.test.mjs` and `tests/wiki-complete.test.mjs` (runs the real source).
 
 ### 1.3 Back / Forward history
 - Per-session history of opened notes (max 100); re-opening the current note adds
@@ -124,7 +124,7 @@ switching notes while the "changed on disk" conflict banner is shown.
   entries, folders included; deletes drop them. Entries whose note vanished outside the
   app (sync, file manager) are dropped when navigating. Switching vault clears it.
 - After deleting the open note, Back reopens the note you were on before it.
-- **As built:** pure, immutable `src/lib/navHistory.ts` (tests: `test-nav-history.mjs`);
+- **As built:** pure, immutable `src/lib/navHistory.ts` (tests: `tests/nav-history.test.mjs`);
   `App.tsx` keeps it in state plus a ref (`navigate`, `handleEntryMoved`). Keys are
   caught on `window` in the capture phase, ahead of CodeMirror's `Alt+←/→`
   (`cursorSyntaxLeft/Right`, which is therefore no longer reachable on Windows/Linux).
@@ -145,7 +145,7 @@ switching notes while the "changed on disk" conflict banner is shown.
   hidden. Every opened note counts as recent, including via Back/Forward.
 - On startup and after switching vaults, the vault's last viewed note is reopened (the
   most recent one that still exists), once its file tree has loaded.
-- **As built:** pure `src/lib/noteLists.ts` (tests: `test-note-lists.mjs`); stored per
+- **As built:** pure `src/lib/noteLists.ts` (tests: `tests/note-lists.test.mjs`); stored per
   vault in `localStorage` by `src/hooks/useNoteLists.ts` (key
   `logledge:noteLists:<vault path>`) instead of the Rust config planned above: no
   backend change needed, same approach as the sidebar width. Up to 30 recent notes are
@@ -170,7 +170,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     selection: `selected / total`. Words are letter/digit runs (so Markdown markers and
     link URLs don't count; Vietnamese works); characters exclude line breaks. Counts
     and reading time hide progressively on narrow windows.
-  - Code: pure `src/lib/textStats.ts` (tests: `test-text-stats.mjs`);
+  - Code: pure `src/lib/textStats.ts` (tests: `tests/text-stats.test.mjs`);
     `Editor.tsx#onStatsChange` (debounced 150 ms); save state set from `queueSave` and
     `onContentChange` in `App.tsx`; `src/components/EditorStatus.tsx` rendered through a
     new `children` slot of `SyncStatusBar`.
@@ -188,7 +188,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     slider (480–1400 px, 760 when turned on; off by default = full width, as before),
     and Reset. `Ctrl+=`/`Ctrl+-` change the size by 1 px, `Ctrl+0` resets it; a toast
     shows the zoom level. Settings are app-wide, stored in `localStorage`.
-  - Code: pure `src/lib/typography.ts` (tests: `test-typography.mjs`);
+  - Code: pure `src/lib/typography.ts` (tests: `tests/typography.test.mjs`);
     `src/hooks/useTypography.ts` sets `--editor-font-size`, `--editor-font-family` and
     `--editor-line-width` on `<html>`, read by `style.css` and the note title. To make
     everything scale, heading sizes/padding in `style.css` and the Tailwind `text-xs`,
@@ -200,7 +200,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     URL and not inside inline code / a code block; otherwise the normal paste runs.
     Works with multiple cursors. `[`, `]` and `\` in the text are escaped; a URL with
     parentheses is written as `<url>`. One transaction, so one `Ctrl+Z` restores the
-    text. Code: `src/components/pasteLink.ts` (tests: `test-paste-link.mjs`).
+    text. Code: `src/components/pasteLink.ts` (tests: `tests/paste-link.test.mjs`).
   - Side fix found while testing: Live Preview showed backslash escapes (`\[`, `\*`)
     literally in view mode everywhere outside tables. The backslash is now hidden like
     other markup and revealed (dimmed) when the cursor is on it, or anywhere in the
@@ -225,7 +225,7 @@ switching notes while the "changed on disk" conflict banner is shown.
   - Code: Rust `Node` gained optional `modified` / `created` (ms since epoch; created
     is absent where the OS/file system has none) in `vault.rs`, test
     `tree_reports_modification_times`. Frontend: pure `src/lib/treeSort.ts` (tests:
-    `test-tree-sort.mjs`), `TreeSortMenu.tsx`, applied in `FileTree` (whose filter
+    `tests/tree-sort.test.mjs`), `TreeSortMenu.tsx`, applied in `FileTree` (whose filter
     now keeps all node fields).
   - Later refined: the separate file-filter toggle and the sort button were merged
     into one **View options** button (sliders icon, `ExplorerViewMenu.tsx`, formerly
@@ -277,7 +277,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     per note for the session). Not needed for typical notes; revisit if outlines get
     long.
   - Code: pure `src/lib/outline.ts` and `src/components/outlineExtract.ts` (tests:
-    `test-outline.mjs`); `RightPanel.tsx`; `Editor.tsx` reports `onOutlineChange`
+    `tests/outline.test.mjs`); `RightPanel.tsx`; `Editor.tsx` reports `onOutlineChange`
     (debounced 200 ms, also when the background parser fills in the tree) and
     `onReadingPosChange` (once per frame while scrolling); `scrollTarget` now also
     takes a document `pos`. `App.tsx` stores only the active heading index, so
@@ -295,7 +295,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     with tests. `search.rs` gained a `links` table (target as written + lookup key =
     file name, lower-case, no extension), filled while indexing; `backlinks(path)`
     returns candidates by key and the frontend resolves each with the same rules as
-    Ctrl+Click (`src/lib/backlinks.ts`, tests: `test-backlinks.mjs`), so
+    Ctrl+Click (`src/lib/backlinks.ts`, tests: `tests/backlinks.test.mjs`), so
     `[[Note]]` from another folder that resolves to a different "Note" is not
     counted. `mentions(phrase)` is an FTS5 phrase query on the body. `PRAGMA
     user_version` 1 rebuilds older indexes once.
@@ -349,7 +349,7 @@ switching notes while the "changed on disk" conflict banner is shown.
     empty-matching patterns; UTF-16 match ranges; tests), `search.rs`
     (`parse_filters`, folder filter, `grep`), `state.rs#replace_in_notes` (test),
     commands `grep_notes` / `replace_in_notes`. `regex` crate added (already in the
-    dependency tree). Frontend `src/lib/grep.ts` (tests: `test-grep.mjs`),
+    dependency tree). Frontend `src/lib/grep.ts` (tests: `tests/grep.test.mjs`),
     `GlobalSearch.tsx` rewritten.
 
 ## Phase 4 — Workflow
