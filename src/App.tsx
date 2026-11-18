@@ -802,6 +802,7 @@ function App() {
                 {settingsOpen && (
                     <SettingsModal
                         initialTab={settingsTab}
+                        onTabChange={setSettingsTab}
                         currentVaultPath={vault.vaultPath}
                         currentTheme={theme}
                         filterConfig={filterConfig}
@@ -1182,6 +1183,7 @@ function App() {
             {settingsOpen && (
                 <SettingsModal
                     initialTab={settingsTab}
+                    onTabChange={setSettingsTab}
                     currentVaultPath={vault.vaultPath}
                     currentTheme={theme}
                     filterConfig={filterConfig}
