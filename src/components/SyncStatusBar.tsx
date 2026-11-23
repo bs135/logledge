@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react'
 import type {ReactNode} from 'react'
 import {getSyncStatus, onEvent, syncNow} from '../lib/api'
 import type {SyncStatus} from '../lib/types'
-import {Settings, CheckCircle2, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
+import {Settings, CheckCircle2, CloudUpload, RefreshCw, AlertTriangle, WifiOff, XCircle} from 'lucide-react'
 import {useI18n} from '../i18n'
 
 interface SyncStatusBarProps {
@@ -18,6 +18,8 @@ function StatusIcon({state, syncing}: {state: string; syncing: boolean}) {
     switch (state) {
         case 'idle':
             return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        case 'pending':
+            return <CloudUpload className="h-3.5 w-3.5 text-amber-500" />
         case 'syncing':
             return <RefreshCw className="h-3.5 w-3.5 text-blue-500 animate-spin" />
         case 'conflict':
@@ -66,6 +68,8 @@ export function SyncStatusBar({onOpenSettings, children}: SyncStatusBarProps) {
                 return t('syncNotConfigured')
             case 'idle':
                 return t('syncIdle')
+            case 'pending':
+                return t('syncPending')
             case 'syncing':
                 return t('syncSyncing')
             case 'conflict':

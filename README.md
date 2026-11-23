@@ -70,7 +70,7 @@ A desktop, local-first note-taking application based on plain `.md` files — sy
 - **System Git CLI Integration**: Invokes the native `git` CLI via `std::process::Command` with silent background process creation on Windows (`CREATE_NO_WINDOW`).
 - **Zero Plaintext Credentials**: Personal Access Tokens (PAT) are stored exclusively in the OS Keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service via the `keyring` crate). Also supports system SSH keys.
 - **Non-Destructive Conflict Resolution**: Employs `git fetch` and `git merge --no-commit --no-ff -X ours`, detecting divergent changes and renaming conflicting local files to `<Name>.conflict.<timestamp>.md`. Never injects raw git conflict markers (`<<<<<<<`).
-- **Real-Time Status Indicator**: Dynamic status bar showing Synced, Syncing, Conflict, Offline, or Error states.
+- **Real-Time Status Indicator**: Dynamic status bar showing Synced, Unsynced changes (edits not yet committed, pushed, or pulled), Syncing, Conflict, Offline, or Error states.
 
 ### Desktop Shell & Ergonomics
 - **Custom Frameless Title Bar**: Draggable header, active vault & note indicator, centered search trigger, and custom window controls (minimize, maximize/restore, close to tray).

@@ -386,3 +386,111 @@ fn helpers() {
     );
     assert_eq!(AuthMethod::parse("bogus"), AuthMethod::None);
 }
+
+#[test]
+fn pending_follows_uncommitted_edits_and_clears_after_sync() {
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    assert_eq!(v.svc.status().state, "idle");
+
+    // Clean tree: stays idle.
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "idle");
+
+    write(v.root(), "a.md", "edited");
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "pending");
+
+    // Reverting the edit returns to idle.
+    write(v.root(), "a.md", "a");
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "idle");
+
+    write(v.root(), "a.md", "edited again");
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "pending");
+    v.svc.sync().unwrap();
+    assert_eq!(v.svc.status().state, "idle");
+}
+
+#[test]
+fn pending_when_local_commit_is_unpushed() {
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    write(v.root(), "b.md", "b");
+    git(v.root(), &["add", "-A"]);
+    git(v.root(), &["commit", "-m", "local"]);
+
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "pending");
+}
+
+#[test]
+fn pending_when_remote_is_ahead_of_last_fetch() {
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    push_remote_change(&remote, |d| write(d, "b.md", "b"));
+    // Fetch without merging: the tracking ref moves ahead of HEAD.
+    let s = v.svc.settings();
+    v.svc.fetch_remote(&s).unwrap();
+
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "pending");
+    v.svc.sync().unwrap();
+    assert_eq!(v.svc.status().state, "idle");
+}
+
+#[test]
+fn pending_check_never_masks_other_states() {
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    write(v.root(), "a.md", "edited");
+    for state in ["error", "offline", "conflict", "syncing", "not_configured"] {
+        v.svc.set_status(state, "kept");
+        v.svc.refresh_pending();
+        let st = v.svc.status();
+        assert_eq!((st.state.as_str(), st.message.as_str()), (state, "kept"));
+    }
+}
+
+#[test]
+fn pending_check_skips_while_sync_runs() {
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    write(v.root(), "a.md", "edited");
+
+    let running = lock(&v.svc.run);
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "idle");
+    drop(running);
+
+    v.svc.refresh_pending();
+    assert_eq!(v.svc.status().state, "pending");
+}
+
+#[test]
+fn push_updates_tracking_ref_even_when_url_differs_from_origin() {
+    // A PAT-injected URL never matches the configured `origin`, so git leaves
+    // the tracking ref behind; the pending check relies on it being current.
+    let remote = bare_remote_with_seed(&[("a.md", "a")]);
+    let v = synced_vault(&remote);
+    git(
+        v.root(),
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "https://example.invalid/x.git",
+        ],
+    );
+    write(v.root(), "b.md", "b");
+    git(v.root(), &["add", "-A"]);
+    git(v.root(), &["commit", "-m", "local"]);
+
+    let s = v.svc.settings();
+    v.svc.push(&s).unwrap();
+    assert_eq!(
+        git(v.root(), &["rev-parse", "HEAD"]),
+        git(v.root(), &["rev-parse", "refs/remotes/origin/main"])
+    );
+}

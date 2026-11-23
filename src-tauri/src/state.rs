@@ -100,17 +100,25 @@ impl AppState {
     ) -> Arc<Self> {
         let search = Arc::new(search);
         let reindex_search = Arc::clone(&search);
+        let sync = Arc::new(SyncService::new(on_status));
+        let check_sync = Arc::clone(&sync);
         let vault_changed: OnChange = Arc::new(move || {
             emit_vault_changed();
             let search = Arc::clone(&reindex_search);
             thread::spawn(move || {
                 let _ = search.reindex();
             });
+            // Debounced; flips the status bar to "pending" when the edit makes
+            // the Vault differ from the remote.
+            check_sync.schedule_pending_check();
         });
 
         let vault = VaultService::new(Arc::clone(&vault_changed));
-        let sync = Arc::new(SyncService::new(on_status));
         sync.set_worktree_lock(vault.worktree_lock());
+        // The app's own writes are hidden from the watcher, so they need their
+        // own trigger for the debounced pending check.
+        let write_sync = Arc::clone(&sync);
+        vault.set_on_local_write(Arc::new(move || write_sync.schedule_pending_check()));
 
         let language = config::load_from(&config_path)
             .map(|c| c.language)
@@ -688,6 +696,61 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    /// Bare repo with one commit on `main`, standing in for GitHub.
+    fn seeded_remote(dir: &Path) -> PathBuf {
+        let git = |cwd: &Path, args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .env("GIT_AUTHOR_NAME", "T")
+                .env("GIT_AUTHOR_EMAIL", "t@example.com")
+                .env("GIT_COMMITTER_NAME", "T")
+                .env("GIT_COMMITTER_EMAIL", "t@example.com")
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {out:?}");
+        };
+        let bare = dir.join("remote.git");
+        let seed = dir.join("seed");
+        fs::create_dir_all(&seed).unwrap();
+        git(
+            dir,
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        git(&seed, &["init", "-b", "main"]);
+        fs::write(seed.join("a.md"), "a").unwrap();
+        git(&seed, &["add", "-A"]);
+        git(&seed, &["commit", "-m", "seed"]);
+        git(&seed, &["remote", "add", "origin", bare.to_str().unwrap()]);
+        git(&seed, &["push", "origin", "main"]);
+        bare
+    }
+
+    #[test]
+    fn editing_a_note_in_the_app_marks_sync_pending() {
+        let t = new_app();
+        let remote = seeded_remote(t.dir.path());
+        let vault = t.vault("v");
+        t.app.switch_vault(&vault).unwrap();
+        t.app
+            .configure_sync(&path_string(&remote), "main", "none")
+            .unwrap();
+        // configure_sync starts a background sync that may still be queued on
+        // the run lock. Run syncs until a pause shows none is left: otherwise it
+        // would commit the edit below before the pending check sees it.
+        t.app.sync.sync().unwrap();
+        thread::sleep(Duration::from_millis(500));
+        t.app.sync.sync().unwrap();
+        assert_eq!(t.app.sync.status().state, "idle");
+
+        // Saved by the app itself, so the watcher never reports it.
+        t.app.vault.write_file("a.md", "edited in app").unwrap();
+        wait_for_sync_state(&t, "pending");
+
+        t.app.sync.sync().unwrap();
+        assert_eq!(t.app.sync.status().state, "idle");
     }
 
     #[test]
