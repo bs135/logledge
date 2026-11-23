@@ -11,8 +11,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::thread;
 use std::time::Duration;
 
@@ -20,6 +21,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::vault::WorktreeLock;
+
+/// Quiet period after the last vault change before checking git status.
+const PENDING_DEBOUNCE: Duration = Duration::from_millis(1500);
 
 pub use credentials::{get_pat, set_pat};
 pub use detect::detect_git_info;
@@ -68,7 +72,9 @@ impl AuthMethod {
 /// Sync state shown in the status bar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Status {
-    /// not_configured | idle | syncing | conflict | offline | error
+    /// not_configured | idle | pending | syncing | conflict | offline | error.
+    /// `pending` means the Vault differs from the last fetched remote state
+    /// (uncommitted edits, unpushed commits or commits not yet pulled).
     pub state: String,
     pub message: String,
 }
@@ -93,6 +99,10 @@ pub struct SyncService {
     /// Serializes whole sync runs: startup, periodic, manual and shutdown syncs
     /// never run git concurrently.
     run: Mutex<()>,
+    /// Serializes pending-changes checks so only one `git status` runs at a time.
+    check: Mutex<()>,
+    /// Bumped on every vault change; only the latest debounced check runs.
+    pending_gen: AtomicU64,
     /// Held (when set) while committing local changes and merging, so app
     /// writes (auto-save, renames, ...) cannot interleave with git.
     worktree: Mutex<Option<WorktreeLock>>,
@@ -136,6 +146,8 @@ impl SyncService {
             on_status,
             periodic: Mutex::new(None),
             run: Mutex::new(()),
+            check: Mutex::new(()),
+            pending_gen: AtomicU64::new(0),
             worktree: Mutex::new(None),
             #[cfg(test)]
             before_worktree_lock: Mutex::new(None),
@@ -226,6 +238,104 @@ impl SyncService {
             }
         });
         *lock(&self.periodic) = Some(tx);
+    }
+
+    /// Schedules a debounced check of whether the Vault differs from the
+    /// remote. Cheap to call on every vault change: bursts collapse into one
+    /// check that runs [`PENDING_DEBOUNCE`] after the last call.
+    pub fn schedule_pending_check(self: &Arc<Self>) {
+        if !self.is_configured() {
+            return;
+        }
+        let generation = self.pending_gen.fetch_add(1, Ordering::SeqCst) + 1;
+        let service = Arc::downgrade(self);
+        thread::spawn(move || {
+            thread::sleep(PENDING_DEBOUNCE);
+            if let Some(s) = service.upgrade() {
+                if s.pending_gen.load(Ordering::SeqCst) == generation {
+                    s.refresh_pending();
+                }
+            }
+        });
+    }
+
+    /// Re-evaluates `idle` vs `pending` from git. Does nothing while a sync is
+    /// running (it ends with its own check) or when the status is anything
+    /// other than idle/pending, so conflict/error/offline are never masked.
+    pub fn refresh_pending(&self) {
+        let _check = lock(&self.check);
+        let _run = match self.run.try_lock() {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(TryLockError::WouldBlock) => return,
+        };
+        self.refresh_pending_locked();
+    }
+
+    /// Body of [`refresh_pending`](Self::refresh_pending); the caller holds
+    /// `run` so no sync can interleave.
+    fn refresh_pending_locked(&self) {
+        let s = self.settings();
+        if !s.configured {
+            return;
+        }
+        let current = self.status();
+        if current.state != "idle" && current.state != "pending" {
+            return;
+        }
+        // Same lock as the editor's writes: never read a half-written tree.
+        let worktree = self.worktree_lock();
+        let guard = worktree.as_deref().map(lock);
+        let pending = self.pending_message(&s);
+        drop(guard);
+
+        // A git failure means "unknown": keep whatever is shown now.
+        let (state, message) = match pending {
+            Ok(Some(message)) => ("pending", message),
+            Ok(None) if current.state == "pending" => ("idle", "Đã đồng bộ"),
+            _ => return,
+        };
+        if current.state != state || current.message != message {
+            self.set_status(state, message);
+        }
+    }
+
+    /// Why the Vault is not in sync with the last fetched remote state, or
+    /// `None` when it is. Uses only local git data: never fetches.
+    fn pending_message(&self, s: &Settings) -> Result<Option<&'static str>> {
+        let dirty = !self
+            .run(s, &["status", "--porcelain"], None)?
+            .trim()
+            .is_empty();
+        let (ahead, behind) = if !self.ref_exists(s, "HEAD") {
+            (0, 0)
+        } else {
+            let remote_ref = Self::remote_ref(s);
+            if self.ref_exists(s, &remote_ref) {
+                (
+                    self.count_commits(s, &format!("{remote_ref}..HEAD"))?,
+                    self.count_commits(s, &format!("HEAD..{remote_ref}"))?,
+                )
+            } else {
+                // Committed but the remote branch does not exist yet.
+                (1, 0)
+            }
+        };
+        Ok(if dirty || ahead > 0 {
+            Some("Có thay đổi chưa đồng bộ")
+        } else if behind > 0 {
+            Some("Remote có thay đổi mới chưa lấy về")
+        } else {
+            None
+        })
+    }
+
+    /// Like `rev_count` but reports git failures instead of returning 0.
+    fn count_commits(&self, s: &Settings, range: &str) -> Result<u64> {
+        self.run(s, &["rev-list", "--count", range], None)?
+            .trim()
+            .parse()
+            .map_err(|_| Error::msg(format!("git rev-list --count {range}: unexpected output")))
     }
 
     /// Stops the periodic sync loop, if running.
@@ -326,7 +436,16 @@ impl SyncService {
     fn push(&self, s: &Settings) -> Result<()> {
         let (url, secret) = self.authed_url(s)?;
         let target = format!("HEAD:{}", s.branch);
+        let pushed = self
+            .run(s, &["rev-parse", "HEAD"], None)?
+            .trim()
+            .to_string();
         self.run(s, &["push", &url, &target], secret.as_deref())?;
+        // Git only moves the tracking ref when the pushed URL matches a
+        // configured remote. With a PAT the URL carries credentials and never
+        // does, so record the push ourselves: otherwise the pending check would
+        // see the pushed commits as "ahead" until the next fetch.
+        let _ = self.run(s, &["update-ref", &Self::remote_ref(s), &pushed], None);
         Ok(())
     }
 
@@ -388,6 +507,9 @@ impl SyncService {
             return Err(e);
         }
         self.set_status("idle", &format!("Đã đồng bộ lúc {}", now("%H:%M:%S")));
+        // Edits made during fetch/push were skipped by the debounced checks
+        // (sync was running), so look once more.
+        self.refresh_pending_locked();
         Ok(())
     }
 

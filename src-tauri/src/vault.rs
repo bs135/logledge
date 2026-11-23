@@ -68,6 +68,10 @@ struct OpenVault {
 pub struct VaultService {
     state: RwLock<OpenVault>,
     on_change: OnChange,
+    /// Called on every write the app makes itself. Those are hidden from the
+    /// watcher (so `on_change` never fires for them), yet they still change the
+    /// Vault relative to its Git remote.
+    on_local_write: RwLock<Option<OnChange>>,
     worktree: WorktreeLock,
 }
 
@@ -78,8 +82,15 @@ impl VaultService {
         VaultService {
             state: RwLock::default(),
             on_change,
+            on_local_write: RwLock::default(),
             worktree: WorktreeLock::default(),
         }
+    }
+
+    /// Registers the callback run whenever the app itself writes to the Vault.
+    /// It runs while the worktree lock may be held, so it must not block on it.
+    pub fn set_on_local_write(&self, callback: OnChange) {
+        *self.on_local_write.write().unwrap() = Some(callback);
     }
 
     /// Sets `root` as the current Vault and (re)starts the file watcher.
@@ -127,6 +138,9 @@ impl VaultService {
     fn suppress(&self, abs: &Path) {
         if let Some(w) = &self.state.read().unwrap().watcher {
             w.suppress(abs, SUPPRESS_WINDOW);
+        }
+        if let Some(callback) = &*self.on_local_write.read().unwrap() {
+            callback();
         }
     }
 
@@ -863,6 +877,26 @@ mod tests {
             .svc
             .read_attachment_data_url("note.md", "../../etc/passwd")
             .is_err());
+    }
+
+    #[test]
+    fn app_writes_invoke_local_write_hook() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let v = new_vault();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c = Arc::clone(&calls);
+        v.svc.set_on_local_write(Arc::new(move || {
+            c.fetch_add(1, Ordering::SeqCst);
+        }));
+        fs::write(v.root().join("a.md"), "1").unwrap();
+
+        v.svc.write_file("a.md", "2").unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        v.svc.write_file_if_unchanged("a.md", "3", "2").unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        // Content already on disk: nothing is written, so no hook.
+        v.svc.write_file_if_unchanged("a.md", "3", "x").unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     #[test]
